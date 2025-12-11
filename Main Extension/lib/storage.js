@@ -94,10 +94,6 @@
       },
       dateSpecificSchedule: {}, // 'YYYY-MM-DD' -> array of timeblocks
     },
-    eventColoring: {
-      enabled: true, // Event coloring enabled by default
-      showGoogleColors: true, // Show Google's built-in colors
-    },
   };
 
   function deepMerge(base, partial) {
