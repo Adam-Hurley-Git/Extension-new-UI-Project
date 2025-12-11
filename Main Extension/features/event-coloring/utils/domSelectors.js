@@ -28,11 +28,15 @@
       EDITOR: '[role="dialog"] [data-event-color-picker]',
       LIST: '[role="menu"][aria-label*="color" i]',
       FALLBACK: '[role="dialog"] div[aria-label*="color" i]',
+      // Additional fallback selectors
+      DIALOG_WITH_COLORS: '[role="dialog"] div[data-color]',
     },
 
-    // Google's built-in color group
+    // Google's built-in color group - multiple possible selectors
     BUILT_IN_COLOR_GROUP: '.vbVGZb', // Google's class for color container
+    BUILT_IN_COLOR_GROUP_ALT: 'div[jsname][jsaction*="color"]', // Alternative selector
     GOOGLE_COLOR_BUTTON: 'div[data-color]', // Individual color buttons
+    GOOGLE_COLOR_BUTTON_ALT: '[role="button"][data-color]', // Alternative
 
     // Custom classes (we add these)
     CUSTOM_CLASSES: {
@@ -117,25 +121,63 @@
    * @returns {HTMLElement|null}
    */
   function findColorPickerContainer(scenario) {
+    console.log('[Event Coloring Selectors] Finding color picker for scenario:', scenario);
+
     switch (scenario) {
       case Scenario.EVENTEDIT:
       case Scenario.EVENTCREATE:
         // Try specific editor selector first
         let container = document.querySelector(COLOR_PICKER_SELECTORS.CONTROLLERS.EDITOR);
-        if (container) return container;
-
-        // Fallback: Find any color picker in dialog
-        const dialog = document.querySelector(EVENT_SELECTORS.DIALOG);
-        if (dialog) {
-          container = dialog.querySelector(COLOR_PICKER_SELECTORS.BUILT_IN_COLOR_GROUP);
-          if (container) return container.parentElement;
+        if (container) {
+          console.log('[Event Coloring Selectors] Found via EDITOR selector');
+          return container;
         }
+
+        // Try finding dialog first
+        const dialog = document.querySelector(EVENT_SELECTORS.DIALOG);
+        if (!dialog) {
+          console.log('[Event Coloring Selectors] No dialog found');
+          return null;
+        }
+
+        // Look for color buttons in dialog (this means color picker is open)
+        const colorButtons = dialog.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
+        if (colorButtons.length > 0) {
+          console.log('[Event Coloring Selectors] Found', colorButtons.length, 'color buttons');
+          // Find the container of the first color button
+          container = colorButtons[0].parentElement;
+          if (container) {
+            console.log('[Event Coloring Selectors] Found container via color buttons');
+            return container;
+          }
+        }
+
+        // Try finding built-in color group
+        container = dialog.querySelector(COLOR_PICKER_SELECTORS.BUILT_IN_COLOR_GROUP);
+        if (container) {
+          console.log('[Event Coloring Selectors] Found via BUILT_IN_COLOR_GROUP');
+          return container.parentElement;
+        }
+
+        // Try alternative selector
+        container = dialog.querySelector(COLOR_PICKER_SELECTORS.BUILT_IN_COLOR_GROUP_ALT);
+        if (container) {
+          console.log('[Event Coloring Selectors] Found via BUILT_IN_COLOR_GROUP_ALT');
+          return container.parentElement;
+        }
+
+        console.log('[Event Coloring Selectors] No color picker container found in dialog');
         break;
 
       case Scenario.LISTVIEW:
-        return document.querySelector(COLOR_PICKER_SELECTORS.CONTROLLERS.LIST);
+        container = document.querySelector(COLOR_PICKER_SELECTORS.CONTROLLERS.LIST);
+        if (container) {
+          console.log('[Event Coloring Selectors] Found LIST container');
+        }
+        return container;
 
       default:
+        console.log('[Event Coloring Selectors] Unknown scenario');
         return null;
     }
 

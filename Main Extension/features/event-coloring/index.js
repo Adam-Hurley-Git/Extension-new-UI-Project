@@ -29,9 +29,10 @@
      * @param {Object} settings - Feature settings
      */
     init: async function (settings) {
-      console.log('[Event Coloring] Initializing...');
+      console.log('[Event Coloring] Initializing with settings:', settings);
 
       this.state.settings = settings || { enabled: true };
+      console.log('[Event Coloring] Final settings:', this.state.settings);
 
       // Register message handler first (needed even when disabled)
       if (!this.state.messageHandler) {
@@ -49,28 +50,34 @@
       }
 
       if (!this.state.settings.enabled) {
-        console.log('[Event Coloring] Feature disabled');
+        console.log('[Event Coloring] Feature disabled, skipping initialization');
         this.cleanup();
         return;
       }
 
+      console.log('[Event Coloring] Feature enabled, proceeding with initialization');
+
       try {
         // Initialize default palette
+        console.log('[Event Coloring] Initializing default palette...');
         await window.eventColoringStorage.initializeDefaultPalette();
 
         // Load core modules
+        console.log('[Event Coloring] Loading core modules...');
         await this.loadCoreModules();
 
         // Start DOM observation
+        console.log('[Event Coloring] Starting DOM observer...');
         this.startObserver();
 
         // Apply existing colors
+        console.log('[Event Coloring] Applying existing colors...');
         await this.applyExistingColors();
 
         this.state.initialized = true;
-        console.log('[Event Coloring] Initialized successfully');
+        console.log('[Event Coloring] ✅ Initialized successfully');
       } catch (error) {
-        console.error('[Event Coloring] Initialization error:', error);
+        console.error('[Event Coloring] ❌ Initialization error:', error);
       }
     },
 
