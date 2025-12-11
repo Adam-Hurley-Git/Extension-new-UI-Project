@@ -94,6 +94,13 @@
       },
       dateSpecificSchedule: {}, // 'YYYY-MM-DD' -> array of timeblocks
     },
+    eventColoring: {
+      enabled: true, // Event coloring enabled by default
+      categories: {}, // User-defined color categories
+      googleColorLabels: {}, // Custom labels for Google's built-in colors
+      quickAccessColors: [], // Recently used colors
+      disableCustomColors: false, // Hide custom categories, show only Google colors
+    },
   };
 
   function deepMerge(base, partial) {
@@ -801,6 +808,206 @@
     return settings.taskListColoring?.completedStyling?.[listId] || null;
   }
 
+  // ========================================
+  // EVENT COLORING FUNCTIONS
+  // ========================================
+
+  /**
+   * Enable/disable event coloring feature
+   * @param {boolean} enabled - Enable event coloring
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setEventColoringEnabled(enabled) {
+    return setSettings({
+      eventColoring: { enabled },
+    });
+  }
+
+  /**
+   * Get event coloring settings
+   * @returns {Promise<Object>} Event coloring settings
+   */
+  async function getEventColoringSettings() {
+    const all = await getSettings();
+    return all.eventColoring || {};
+  }
+
+  /**
+   * Add or update an event color category
+   * @param {Object} category - Category object { id, name, colors, order }
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setEventColorCategory(category) {
+    if (!category || !category.id) return;
+
+    const current = await getSettings();
+    const categories = current.eventColoring?.categories || {};
+    categories[category.id] = category;
+
+    return setSettings({
+      eventColoring: { categories },
+    });
+  }
+
+  /**
+   * Delete an event color category
+   * @param {string} categoryId - Category ID to delete
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function deleteEventColorCategory(categoryId) {
+    if (!categoryId) return;
+
+    const current = await getSettings();
+    const categories = { ...(current.eventColoring?.categories || {}) };
+    delete categories[categoryId];
+
+    return setSettings({
+      eventColoring: { categories },
+    });
+  }
+
+  /**
+   * Get all event color categories
+   * @returns {Promise<Object>} All categories
+   */
+  async function getEventColorCategories() {
+    const settings = await getSettings();
+    return settings.eventColoring?.categories || {};
+  }
+
+  /**
+   * Set custom label for a Google color
+   * @param {string} colorHex - Color hex code
+   * @param {string} label - Custom label
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setGoogleColorLabel(colorHex, label) {
+    if (!colorHex) return;
+
+    const current = await getSettings();
+    const labels = current.eventColoring?.googleColorLabels || {};
+    labels[colorHex] = label;
+
+    return setSettings({
+      eventColoring: { googleColorLabels: labels },
+    });
+  }
+
+  /**
+   * Get all Google color labels
+   * @returns {Promise<Object>} Google color labels
+   */
+  async function getGoogleColorLabels() {
+    const settings = await getSettings();
+    return settings.eventColoring?.googleColorLabels || {};
+  }
+
+  /**
+   * Save event color
+   * @param {string} eventId - Calendar event ID
+   * @param {string} colorHex - Color hex code
+   * @param {boolean} isRecurring - Whether event is recurring
+   * @returns {Promise<void>}
+   */
+  async function saveEventColor(eventId, colorHex, isRecurring = false) {
+    if (!eventId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        const eventColors = result['cf.eventColors'] || {};
+
+        eventColors[eventId] = {
+          hex: colorHex,
+          isRecurring,
+          appliedAt: Date.now(),
+        };
+
+        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+          resolve();
+        });
+      });
+    });
+  }
+
+  /**
+   * Get event color
+   * @param {string} eventId - Calendar event ID
+   * @returns {Promise<Object|null>} Event color object or null
+   */
+  async function getEventColor(eventId) {
+    if (!eventId) return null;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        const eventColors = result['cf.eventColors'] || {};
+        resolve(eventColors[eventId] || null);
+      });
+    });
+  }
+
+  /**
+   * Get all event colors
+   * @returns {Promise<Object>} All event colors
+   */
+  async function getAllEventColors() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        resolve(result['cf.eventColors'] || {});
+      });
+    });
+  }
+
+  /**
+   * Remove event color
+   * @param {string} eventId - Calendar event ID
+   * @returns {Promise<void>}
+   */
+  async function removeEventColor(eventId) {
+    if (!eventId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        const eventColors = result['cf.eventColors'] || {};
+        delete eventColors[eventId];
+
+        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+          resolve();
+        });
+      });
+    });
+  }
+
+  /**
+   * Set disable custom colors flag
+   * @param {boolean} disabled - Disable custom colors
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setDisableCustomColors(disabled) {
+    return setSettings({
+      eventColoring: { disableCustomColors: disabled },
+    });
+  }
+
+  /**
+   * Add color to quick access
+   * @param {string} colorHex - Color hex code
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function addQuickAccessColor(colorHex) {
+    if (!colorHex) return;
+
+    const current = await getSettings();
+    const quickAccess = current.eventColoring?.quickAccessColors || [];
+
+    // Remove if already exists, then add to front
+    const filtered = quickAccess.filter(c => c !== colorHex);
+    const updated = [colorHex, ...filtered].slice(0, 10); // Keep max 10
+
+    return setSettings({
+      eventColoring: { quickAccessColors: updated },
+    });
+  }
+
   // Time Blocking functions
   async function setTimeBlockingEnabled(enabled) {
     return setSettings({ timeBlocking: { enabled } });
@@ -1090,6 +1297,20 @@
     setCompletedTextOpacity,
     clearCompletedStyling,
     getCompletedStyling,
+    // Event coloring functions
+    setEventColoringEnabled,
+    getEventColoringSettings,
+    setEventColorCategory,
+    deleteEventColorCategory,
+    getEventColorCategories,
+    setGoogleColorLabel,
+    getGoogleColorLabels,
+    saveEventColor,
+    getEventColor,
+    getAllEventColors,
+    removeEventColor,
+    setDisableCustomColors,
+    addQuickAccessColor,
     // Time blocking functions
     setTimeBlockingEnabled,
     setTimeBlockingGlobalColor,
