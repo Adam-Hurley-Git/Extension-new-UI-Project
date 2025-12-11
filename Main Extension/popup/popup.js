@@ -8244,6 +8244,23 @@ Would you like to refresh all Google Calendar tabs?`;
     });
   }
 
+  // Info toggle for event coloring
+  const eventColoringInfoToggle = qs('eventColoringInfoToggle');
+  if (eventColoringInfoToggle) {
+    eventColoringInfoToggle.addEventListener('click', () => {
+      const expanded = qs('eventColoringInfoExpanded');
+      if (expanded) {
+        const isHidden = expanded.style.display === 'none';
+        expanded.style.display = isHidden ? 'block' : 'none';
+
+        const chevron = eventColoringInfoToggle.querySelector('svg');
+        if (chevron) {
+          chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+      }
+    });
+  }
+
   // Load event coloring settings on popup open
   loadEventColoringSettings().catch(err => {
     console.error('Failed to load event coloring settings:', err);
