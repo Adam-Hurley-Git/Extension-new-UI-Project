@@ -340,10 +340,34 @@
       console.warn('[EventColoring] ⚠️ No Google color buttons found! Picker may not be correct element.');
       console.log('[EventColoring] Picker element:', pickerElement);
       console.log('[EventColoring] Picker HTML:', pickerElement.innerHTML.substring(0, 500));
+      return;
     }
+
+    // FIX #7: EXTRACT ACTUAL GOOGLE COLORS
+    // Capture ALL colors Google Calendar actually uses for popup array
+    const actualGoogleColors = [];
+    colorButtons.forEach((button, index) => {
+      const dataColor = button.getAttribute('data-color');
+      if (dataColor) {
+        const labelElement = button.querySelector('.oMnJrf');
+        const defaultLabel = labelElement?.getAttribute('data-text') ||
+                            button.getAttribute('aria-label') ||
+                            `Color ${index + 1}`;
+        actualGoogleColors.push({
+          hex: dataColor.toLowerCase(),
+          default: defaultLabel
+        });
+      }
+    });
+
+    console.log('[EventColoring] 🎨 ACTUAL GOOGLE COLORS DETECTED:');
+    console.log('[EventColoring] Copy this array to popup.js GOOGLE_COLORS:');
+    console.log(JSON.stringify(actualGoogleColors, null, 2));
+    console.log('[EventColoring] ==========================================');
 
     let updatedCount = 0;
     let skippedCount = 0;
+    const missingColors = [];
 
     colorButtons.forEach((button, index) => {
       // Get the color from the data-color attribute (this is set by Google)
@@ -378,11 +402,20 @@
           console.log('[EventColoring] Button HTML:', button.innerHTML);
         }
       } else {
-        console.log(`[EventColoring] No custom label for ${normalizedColor} (using Google default)`);
+        console.log(`[EventColoring] ❌ No custom label for ${normalizedColor} (using Google default)`);
+        missingColors.push(normalizedColor);
       }
     });
 
-    console.log(`[EventColoring] Summary: ${updatedCount} labels updated, ${skippedCount} skipped`);
+    if (missingColors.length > 0) {
+      console.warn('[EventColoring] ⚠️ MISMATCH DETECTED!');
+      console.warn('[EventColoring] These colors are in Google Calendar but not in your custom labels:');
+      console.warn(missingColors);
+      console.warn('[EventColoring] This means the GOOGLE_COLORS array in popup.js has WRONG hex values!');
+      console.warn('[EventColoring] Copy the array logged above to fix this.');
+    }
+
+    console.log(`[EventColoring] Summary: ${updatedCount} labels updated, ${skippedCount} skipped, ${missingColors.length} missing`);
     console.log('[EventColoring] ========== updateGoogleColorLabels END ==========');
   }
 
