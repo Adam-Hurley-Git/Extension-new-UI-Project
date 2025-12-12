@@ -7900,6 +7900,8 @@ Would you like to refresh all Google Calendar tabs?`;
   // ========================================
 
   let eventColoringSettings = {};
+  // Google Calendar's 11 standard event colors
+  // These match the actual colors shown in Google Calendar's event color picker
   const GOOGLE_COLORS = [
     { hex: '#a4bdfc', default: 'Lavender' },
     { hex: '#7ae7bf', default: 'Sage' },
@@ -7911,20 +7913,7 @@ Would you like to refresh all Google Calendar tabs?`;
     { hex: '#e1e1e1', default: 'Graphite' },
     { hex: '#5484ed', default: 'Blueberry' },
     { hex: '#51b749', default: 'Basil' },
-    { hex: '#dc2127', default: 'Tomato' },
-    { hex: '#ff6d00', default: 'Mango' },
-    { hex: '#fb00ff', default: 'Fuchsia' },
-    { hex: '#0bd904', default: 'Lime' },
-    { hex: '#8c5e00', default: 'Cocoa' },
-    { hex: '#a37d00', default: 'Mustard' },
-    { hex: '#e18700', default: 'Amber' },
-    { hex: '#b73800', default: 'Rust' },
-    { hex: '#f4c20d', default: 'Gold' },
-    { hex: '#3f51b5', default: 'Indigo' },
-    { hex: '#7986cb', default: 'Periwinkle' },
-    { hex: '#039be5', default: 'Azure' },
-    { hex: '#616161', default: 'Charcoal' },
-    { hex: '#33b679', default: 'Emerald' }
+    { hex: '#dc2127', default: 'Tomato' }
   ];
 
   // Helper to escape HTML
