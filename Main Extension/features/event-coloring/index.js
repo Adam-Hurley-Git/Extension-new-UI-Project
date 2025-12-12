@@ -299,40 +299,38 @@
     const customLabels = settings.googleColorLabels || {};
     console.log('[EventColoring] Updating Google color labels with:', customLabels);
 
-    // Find all Google color buttons - look for color palette menu items
-    const colorButtons = pickerElement.querySelectorAll('div[role="menuitemradio"]');
-    console.log('[EventColoring] Found', colorButtons.length, 'color buttons');
+    // Use Google Calendar's stable jsname attribute to find color buttons
+    // This is the same selector used by the Color Extension
+    const colorButtons = pickerElement.querySelectorAll('div[jsname="Ly0WL"]');
+    console.log('[EventColoring] Found', colorButtons.length, 'Google color buttons');
 
     colorButtons.forEach((button) => {
-      const bgColor = button.style.backgroundColor;
-      if (!bgColor) return;
+      // Get the color from the data-color attribute (this is set by Google)
+      const dataColor = button.getAttribute('data-color');
+      if (!dataColor) {
+        console.log('[EventColoring] Button has no data-color, skipping');
+        return;
+      }
 
-      // Convert rgb to hex and normalize to lowercase to match storage format
-      const hex = rgbToHex(bgColor);
-      if (hex) {
-        const normalizedHex = hex.toLowerCase();
+      // Normalize the color to lowercase for lookup
+      const normalizedColor = dataColor.toLowerCase();
 
-        // Check if we have a custom label for this color
-        if (customLabels[normalizedHex]) {
-          console.log('[EventColoring] Applying custom label to', normalizedHex, ':', customLabels[normalizedHex]);
+      // Check if we have a custom label for this color
+      if (customLabels[normalizedColor]) {
+        const customLabel = customLabels[normalizedColor];
+        console.log('[EventColoring] Applying custom label to', normalizedColor, ':', customLabel);
 
-          // Update both aria-label and title for better accessibility
-          button.setAttribute('aria-label', customLabels[normalizedHex]);
-          button.title = customLabels[normalizedHex];
+        // Update the aria-label on the button itself (for accessibility)
+        button.setAttribute('aria-label', customLabel);
 
-          // Also update the text content if there's a label span inside
-          const labelSpan = button.querySelector('span[class*="label"], span[style*="font"]');
-          if (labelSpan) {
-            labelSpan.textContent = customLabels[normalizedHex];
-          }
-
-          // Try to find and update any text nodes directly
-          const textNodes = Array.from(button.childNodes).filter(
-            (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()
-          );
-          if (textNodes.length > 0) {
-            textNodes[0].textContent = customLabels[normalizedHex];
-          }
+        // Find the label text element - Google uses class .oMnJrf for the visible label
+        const labelElement = button.querySelector('.oMnJrf');
+        if (labelElement) {
+          // Set the data-text attribute which Google Calendar uses to display the label
+          labelElement.setAttribute('data-text', customLabel);
+          console.log('[EventColoring] Updated .oMnJrf element with data-text:', customLabel);
+        } else {
+          console.log('[EventColoring] No .oMnJrf element found in button');
         }
       }
     });
