@@ -978,6 +978,185 @@
   }
 
   /**
+   * Save event color with recurring event support
+   * When saving a recurring event with applyToAll=true, stores under base event ID
+   * and cleans up individual instance colors
+   * @param {string} eventId - Calendar event ID
+   * @param {string} colorHex - Color hex code
+   * @param {Object} options - Options { applyToAll: boolean }
+   * @returns {Promise<void>}
+   */
+  async function saveEventColorAdvanced(eventId, colorHex, options = {}) {
+    if (!eventId || !colorHex) return;
+
+    const { applyToAll = false } = options;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        const eventColors = result['cf.eventColors'] || {};
+
+        // Parse the event ID to check if recurring
+        const parsed = parseEventId(eventId);
+
+        if (applyToAll && parsed.isRecurring) {
+          // Store under base ID for recurring events
+          const baseStorageId = encodeEventId(parsed.decodedId, parsed.emailSuffix);
+
+          console.log('[Storage] Storing recurring event:', {
+            baseId: parsed.decodedId,
+            emailSuffix: parsed.emailSuffix,
+            storageId: baseStorageId,
+            color: colorHex,
+          });
+
+          // Save with recurring flag
+          eventColors[baseStorageId] = {
+            hex: colorHex,
+            isRecurring: true,
+            appliedAt: Date.now(),
+          };
+
+          // Clean up any individual instance colors for this recurring event
+          Object.keys(eventColors).forEach((storedId) => {
+            try {
+              const storedParsed = parseEventId(storedId);
+              if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
+                delete eventColors[storedId];
+              }
+            } catch (e) {
+              // Skip invalid IDs
+            }
+          });
+        } else {
+          // Single event or single instance
+          eventColors[eventId] = {
+            hex: colorHex,
+            isRecurring: false,
+            appliedAt: Date.now(),
+          };
+        }
+
+        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+          resolve();
+        });
+      });
+    });
+  }
+
+  /**
+   * Find event color considering recurring events
+   * @param {string} eventId - Calendar event ID
+   * @returns {Promise<{hex: string, isRecurring: boolean}|null>}
+   */
+  async function findEventColor(eventId) {
+    if (!eventId) return null;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        const eventColors = result['cf.eventColors'] || {};
+
+        // Direct match first
+        if (eventColors[eventId]) {
+          resolve(eventColors[eventId]);
+          return;
+        }
+
+        // Check for recurring event match
+        const parsed = parseEventId(eventId);
+        if (parsed.type !== 'calendar') {
+          resolve(null);
+          return;
+        }
+
+        // Look for matching recurring event by base ID
+        for (const [storedId, colorData] of Object.entries(eventColors)) {
+          if (typeof colorData === 'object' && colorData.isRecurring) {
+            const storedParsed = parseEventId(storedId);
+            if (storedParsed.decodedId === parsed.decodedId) {
+              resolve(colorData);
+              return;
+            }
+          }
+        }
+
+        resolve(null);
+      });
+    });
+  }
+
+  /**
+   * Parse a Google Calendar event ID
+   * @param {string} encodedId - Base64 encoded event ID
+   * @returns {Object} Parsed event info
+   */
+  function parseEventId(encodedId) {
+    try {
+      if (!encodedId) {
+        return { type: 'invalid', isRecurring: false };
+      }
+
+      let decoded;
+      try {
+        decoded = atob(encodedId);
+      } catch (e) {
+        return {
+          type: 'calendar',
+          encodedId,
+          decodedId: encodedId,
+          isRecurring: false,
+          emailSuffix: '',
+        };
+      }
+
+      const emailMatch = decoded.match(/\s+(\S+@\S+)$/);
+      const emailSuffix = emailMatch ? emailMatch[1] : '';
+      const eventPart = emailSuffix
+        ? decoded.substring(0, decoded.length - emailSuffix.length).trim()
+        : decoded;
+
+      const recurringMatch = eventPart.match(/^(.+?)(_\d{8}T\d{6}Z)?$/);
+      const baseId = recurringMatch ? recurringMatch[1] : eventPart;
+      const instanceDate = recurringMatch && recurringMatch[2] ? recurringMatch[2] : null;
+
+      return {
+        type: 'calendar',
+        encodedId,
+        decodedId: baseId,
+        instanceDate,
+        isRecurring: !!instanceDate,
+        emailSuffix,
+        fullDecoded: decoded,
+      };
+    } catch (error) {
+      return { type: 'invalid', encodedId, isRecurring: false };
+    }
+  }
+
+  /**
+   * Encode an event ID
+   * @param {string} decodedId - Base event ID
+   * @param {string} emailSuffix - Email suffix
+   * @returns {string} Base64 encoded event ID
+   */
+  function encodeEventId(decodedId, emailSuffix) {
+    try {
+      const combined = emailSuffix ? `${decodedId} ${emailSuffix}` : decodedId;
+      return btoa(combined);
+    } catch (error) {
+      return decodedId;
+    }
+  }
+
+  /**
+   * Check if custom colors are disabled
+   * @returns {Promise<boolean>}
+   */
+  async function getIsCustomColorsDisabled() {
+    const settings = await getSettings();
+    return settings.eventColoring?.disableCustomColors || false;
+  }
+
+  /**
    * Set disable custom colors flag
    * @param {boolean} disabled - Disable custom colors
    * @returns {Promise<Object>} Updated settings
@@ -1309,6 +1488,11 @@
     getEventColor,
     getAllEventColors,
     removeEventColor,
+    saveEventColorAdvanced,
+    findEventColor,
+    parseEventId,
+    encodeEventId,
+    getIsCustomColorsDisabled,
     setDisableCustomColors,
     addQuickAccessColor,
     // Time blocking functions
