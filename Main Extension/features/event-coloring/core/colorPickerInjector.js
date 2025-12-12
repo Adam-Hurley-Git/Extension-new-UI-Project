@@ -1,0 +1,520 @@
+// features/event-coloring/core/colorPickerInjector.js
+// Injects custom color picker UI into Google Calendar's color menus
+
+import {
+  COLOR_PICKER_SELECTORS,
+  DATA_ATTRIBUTES,
+  EVENT_SELECTORS,
+  Scenario,
+} from '../selectors.js';
+import EventIdUtils from '../utils/eventIdUtils.js';
+import ScenarioDetector from '../utils/scenarioDetector.js';
+import { showRecurringEventDialog } from '../components/RecurringEventDialog.js';
+
+/**
+ * ColorPickerInjector - Handles injection of custom colors into Google Calendar
+ */
+export class ColorPickerInjector {
+  constructor(storageService) {
+    this.storageService = storageService;
+    this.observerId = 'colorPickerInjector';
+    this.isInjecting = false;
+  }
+
+  /**
+   * Initialize the injector
+   */
+  init() {
+    console.log('[CF] ColorPickerInjector initialized');
+  }
+
+  /**
+   * Main injection method - called when DOM changes detected
+   */
+  async injectColorPicker() {
+    if (this.isInjecting) return;
+    this.isInjecting = true;
+
+    try {
+      // Check if custom colors are disabled
+      const isDisabled = await this.storageService.getIsCustomColorsDisabled?.();
+      if (isDisabled) {
+        await this.modifyGoogleColorLabels();
+        this.isInjecting = false;
+        return;
+      }
+
+      // Check if already injected
+      const existingCustomSection = document.querySelector(
+        '.' + COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.COLOR_DIV_GROUP
+      );
+      const existingSeparator = document.querySelector(
+        '.' + COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.SEPARATOR
+      );
+
+      if (existingCustomSection || existingSeparator) {
+        this.isInjecting = false;
+        return;
+      }
+
+      // Get categories from storage
+      const categories = await this.storageService.getEventColorCategories?.();
+      if (!categories || Object.keys(categories).length === 0) {
+        console.log('[CF] No color categories found');
+        this.isInjecting = false;
+        return;
+      }
+
+      // Inject categories
+      this.injectColorCategories(Object.values(categories));
+
+      // Update checkmarks and Google color labels
+      await this.hideCheckmarkAndModifyBuiltInColors();
+    } catch (error) {
+      console.error('[CF] Error injecting color picker:', error);
+    }
+
+    this.isInjecting = false;
+  }
+
+  /**
+   * Inject color categories into the color picker
+   */
+  injectColorCategories(categories) {
+    console.log('[CF] Injecting categories:', categories.length);
+
+    const scenario = ScenarioDetector.findColorPickerScenario();
+    if (scenario !== Scenario.EVENTEDIT && scenario !== Scenario.LISTVIEW) {
+      console.log('[CF] Not injecting for scenario:', scenario);
+      return;
+    }
+
+    // Find the color picker container
+    const editorContainer = document.querySelector(
+      COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR
+    );
+    const listContainer = document.querySelector(
+      COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
+    );
+    const container = listContainer || editorContainer;
+
+    if (!container) {
+      console.log('[CF] No color picker container found');
+      return;
+    }
+
+    // Find the built-in color group
+    const builtInColorGroup = container.querySelector(
+      COLOR_PICKER_SELECTORS.BUILT_IN_COLOR_GROUP
+    );
+    console.log('[CF] Found built-in color group:', !!builtInColorGroup);
+
+    // Find the scrollable wrapper
+    const wrapper = container.querySelector('div');
+    if (!wrapper) {
+      console.log('[CF] No wrapper found');
+      return;
+    }
+
+    // Style the wrapper for scrolling
+    const innerGroup = wrapper.querySelector(COLOR_PICKER_SELECTORS.BUILT_IN_COLOR_GROUP);
+    if (innerGroup) {
+      innerGroup.style.marginBottom = '8px';
+    }
+
+    wrapper.style.cssText = `
+      max-height: ${scenario === Scenario.EVENTEDIT ? '600px' : '500px'} !important;
+      max-width: ${scenario === Scenario.EVENTEDIT ? '200px' : '300px'} !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      padding-bottom: 12px !important;
+      scrollbar-width: none !important;
+      -ms-overflow-style: none !important;
+    `;
+
+    // Add separator
+    const separator = this.createSeparator();
+    separator.classList.add(COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.SEPARATOR);
+    wrapper.appendChild(separator);
+
+    // Add each category
+    categories.forEach((category) => {
+      const categorySection = this.createCategorySection(category, container, scenario);
+      if (categorySection) {
+        wrapper.appendChild(categorySection);
+      }
+    });
+
+    // Update checkmarks
+    this.hideCheckmarkAndModifyBuiltInColors();
+  }
+
+  /**
+   * Create a separator line
+   */
+  createSeparator() {
+    const separator = document.createElement('div');
+    separator.style.cssText = `
+      border-top: 1px solid #dadce0;
+      margin: 8px 0;
+    `;
+    return separator;
+  }
+
+  /**
+   * Create a category section with color buttons
+   */
+  createCategorySection(category, container, scenario) {
+    console.log('[CF] Creating category section:', category.name);
+
+    const section = document.createElement('div');
+    section.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.CATEGORY_SECTION;
+    section.style.marginTop = '16px';
+
+    // Category label
+    const label = document.createElement('div');
+    label.className = 'color-category-label';
+    label.textContent = category.name;
+    label.style.cssText = `
+      font-size: 12px;
+      font-weight: 500;
+      color: #202124;
+      margin: 0 12px 12px 0;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    `;
+
+    // Colors container
+    const colorsContainer = document.createElement('div');
+    colorsContainer.className = `vbVGZb ${COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.COLOR_DIV_GROUP}`;
+    colorsContainer.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+      padding: 0 12px 0 0;
+      width: 100%;
+      box-sizing: border-box;
+    `;
+
+    // Add color buttons
+    if (Array.isArray(category.colors)) {
+      console.log('[CF] Adding', category.colors.length, 'colors for', category.name);
+
+      category.colors.forEach((colorObj) => {
+        const colorButton = this.createColorButton(colorObj, container, scenario);
+        colorsContainer.appendChild(colorButton);
+      });
+    }
+
+    section.appendChild(label);
+    section.appendChild(colorsContainer);
+
+    return section;
+  }
+
+  /**
+   * Create a single color button
+   */
+  createColorButton(colorObj, container, scenario) {
+    const hex = typeof colorObj === 'string' ? colorObj : colorObj.hex;
+    const name = typeof colorObj === 'object' ? colorObj.name : hex;
+
+    const button = document.createElement('div');
+    button.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.CUSTOM_COLOR_BUTTON;
+    button.setAttribute('data-color', hex);
+    button.setAttribute('role', 'button');
+    button.setAttribute('tabindex', '0');
+    button.setAttribute('aria-label', name || hex);
+
+    button.style.cssText = `
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background-color: ${hex};
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.1s, box-shadow 0.1s;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    `;
+
+    // Hover effects
+    button.addEventListener('mouseenter', () => {
+      button.style.transform = 'scale(1.1)';
+      button.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+    });
+
+    button.addEventListener('mouseleave', () => {
+      button.style.transform = 'scale(1)';
+      button.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.1)';
+    });
+
+    // Click handler
+    button.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+      if (eventId) {
+        await this.handleColorSelect(eventId, hex);
+      }
+
+      // Close menus
+      this.closeMenus();
+    });
+
+    // Keyboard support
+    button.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        button.click();
+      }
+    });
+
+    // Add checkmark (hidden by default)
+    const checkmark = document.createElement('i');
+    checkmark.className = 'google-material-icons';
+    checkmark.textContent = 'check';
+    checkmark.style.cssText = `
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 16px;
+      color: white;
+      display: none;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    `;
+    button.appendChild(checkmark);
+
+    return button;
+  }
+
+  /**
+   * Handle color selection
+   */
+  async handleColorSelect(eventId, color) {
+    try {
+      const scenario = ScenarioDetector.findColorPickerScenario();
+      console.log('[CF] handleColorSelect:', { scenario, eventId, color });
+
+      // Check if this is a recurring event
+      const parsed = EventIdUtils.fromEncoded(eventId);
+
+      if (parsed.isRecurring) {
+        // Show recurring event dialog
+        showRecurringEventDialog({
+          eventId,
+          color,
+          onConfirm: async (applyToAll) => {
+            console.log('[CF] Recurring dialog confirmed, applyToAll:', applyToAll);
+
+            // Save with appropriate storage method
+            if (this.storageService.saveEventColorAdvanced) {
+              await this.storageService.saveEventColorAdvanced(eventId, color, { applyToAll });
+            } else {
+              await this.storageService.saveEventColor(eventId, color, applyToAll);
+            }
+
+            // Trigger re-render
+            this.triggerColorUpdate();
+          },
+          onClose: () => {
+            console.log('[CF] Recurring dialog closed');
+          },
+        });
+      } else {
+        // Single event - save directly
+        await this.storageService.saveEventColor(eventId, color, false);
+
+        // Close menus
+        this.closeMenus();
+
+        // Trigger re-render
+        this.triggerColorUpdate();
+      }
+    } catch (error) {
+      console.error('[CF] Error handling color select:', error);
+    }
+  }
+
+  /**
+   * Close color picker menus
+   */
+  closeMenus() {
+    document.querySelectorAll('[role="menu"], [role="dialog"]').forEach((el) => {
+      // Don't close our recurring dialog
+      if (!el.closest('.' + COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.RECURRING_DIALOG)) {
+        el.remove();
+      }
+    });
+  }
+
+  /**
+   * Trigger a color update event
+   */
+  triggerColorUpdate() {
+    // Dispatch custom event for color renderer to pick up
+    window.dispatchEvent(new CustomEvent('cf-event-color-changed'));
+  }
+
+  /**
+   * Hide checkmarks on Google colors and show on custom when appropriate
+   */
+  async hideCheckmarkAndModifyBuiltInColors() {
+    const listContainer = document.querySelector(
+      COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
+    );
+    const editorContainer = document.querySelector(
+      COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR
+    );
+    const container = listContainer || editorContainer;
+
+    if (!container) return;
+
+    const scenario = ScenarioDetector.findColorPickerScenario();
+    const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+
+    if (!eventId) return;
+
+    // Get the current color for this event
+    let currentColor = null;
+    if (this.storageService.findEventColor) {
+      const colorData = await this.storageService.findEventColor(eventId);
+      currentColor = colorData?.hex;
+    } else if (this.storageService.getEventColor) {
+      const colorData = await this.storageService.getEventColor(eventId);
+      currentColor = typeof colorData === 'string' ? colorData : colorData?.hex;
+    }
+
+    // Add click handlers to Google color buttons
+    const googleButtons = document.querySelectorAll(
+      COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
+    );
+
+    googleButtons.forEach((button) => {
+      // Only add handler once
+      if (!button.hasAttribute('data-cf-handler')) {
+        button.setAttribute('data-cf-handler', 'true');
+
+        button.addEventListener('click', async () => {
+          const clickedEventId = ScenarioDetector.findEventIdByScenario(button, scenario);
+          if (clickedEventId) {
+            // When clicking a Google color, remove custom color
+            await this.storageService.removeEventColor(clickedEventId);
+            this.triggerColorUpdate();
+          }
+        });
+      }
+    });
+
+    // Update checkmarks
+    this.updateCheckmarks(currentColor);
+
+    // Modify Google color labels
+    await this.modifyGoogleColorLabels();
+  }
+
+  /**
+   * Update checkmark visibility based on selected color
+   */
+  updateCheckmarks(selectedColor) {
+    // Wait a bit for DOM to settle
+    setTimeout(() => {
+      // Remove checkmarks from Google colors if we have a custom color
+      if (selectedColor) {
+        const googleButtons = document.querySelectorAll(
+          COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
+        );
+        googleButtons.forEach((button) => {
+          this.toggleCheckmark(button, false);
+        });
+      }
+
+      // Update custom color button checkmarks
+      const customButtons = document.querySelectorAll(
+        '.' + COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.CUSTOM_COLOR_BUTTON
+      );
+
+      customButtons.forEach((button) => {
+        const buttonColor = button.getAttribute('data-color');
+        const isSelected =
+          selectedColor &&
+          buttonColor &&
+          buttonColor.toLowerCase() === selectedColor.toLowerCase();
+        this.toggleCheckmark(button, isSelected);
+      });
+    }, 50);
+  }
+
+  /**
+   * Toggle checkmark visibility on a button
+   */
+  toggleCheckmark(button, show) {
+    if (!button) return;
+
+    const checkmark = button.querySelector(COLOR_PICKER_SELECTORS.CHECKMARK_SELECTOR);
+    if (checkmark) {
+      checkmark.style.display = show ? 'block' : 'none';
+    }
+  }
+
+  /**
+   * Modify Google's built-in color labels with custom names
+   */
+  async modifyGoogleColorLabels() {
+    console.log('[CF] Modifying Google color labels');
+
+    // Check if we have any custom labels
+    const hasCustomLabels = await this.storageService.hasAnyCustomLabelsForGoogleColors?.();
+    if (!hasCustomLabels) {
+      console.log('[CF] No custom labels found for Google colors');
+      return;
+    }
+
+    const googleButtons = document.querySelectorAll(
+      COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
+    );
+
+    console.log('[CF] Found', googleButtons.length, 'Google color buttons');
+
+    for (const button of googleButtons) {
+      const labelElement = button.querySelector(COLOR_PICKER_SELECTORS.LABEL_ELEMENT);
+      if (!labelElement) continue;
+
+      const colorAttr = button.getAttribute('data-color');
+      if (!colorAttr) continue;
+
+      const customName = await this.storageService.getGoogleColorLabels?.()[colorAttr];
+      if (!customName) continue;
+
+      button.setAttribute('aria-label', customName);
+      labelElement.setAttribute('data-text', customName);
+      console.log('[CF] Modified label for', colorAttr, 'to', customName);
+    }
+  }
+
+  /**
+   * Clean up
+   */
+  destroy() {
+    this.isInjecting = false;
+  }
+}
+
+/**
+ * Factory function
+ */
+export function createColorPickerInjector(storageService) {
+  return new ColorPickerInjector(storageService);
+}
+
+// Make available globally
+if (typeof window !== 'undefined') {
+  window.cfColorPickerInjector = {
+    ColorPickerInjector,
+    createColorPickerInjector,
+  };
+}
+
+export default ColorPickerInjector;
