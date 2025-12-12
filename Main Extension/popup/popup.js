@@ -8178,8 +8178,10 @@ Would you like to refresh all Google Calendar tabs?`;
 
   // Update Google color label
   async function updateGoogleColorLabel(colorHex, label) {
-    await window.cc3Storage.setGoogleColorLabel(colorHex, label);
-    debugLog('Google color label updated:', colorHex, label);
+    // FIX #5: Ensure hex is always lowercase for consistency
+    const normalizedHex = colorHex.toLowerCase();
+    await window.cc3Storage.setGoogleColorLabel(normalizedHex, label);
+    debugLog('Google color label updated:', normalizedHex, label);
   }
 
   // Event Coloring event listeners
