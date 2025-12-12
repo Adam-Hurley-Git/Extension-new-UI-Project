@@ -297,19 +297,43 @@
 
   function updateGoogleColorLabels(pickerElement) {
     const customLabels = settings.googleColorLabels || {};
+    console.log('[EventColoring] Updating Google color labels with:', customLabels);
 
-    // Find all Google color buttons
-    const colorButtons = pickerElement.querySelectorAll('div[style*="background"], div[data-color]');
+    // Find all Google color buttons - look for color palette menu items
+    const colorButtons = pickerElement.querySelectorAll('div[role="menuitemradio"]');
+    console.log('[EventColoring] Found', colorButtons.length, 'color buttons');
 
     colorButtons.forEach((button) => {
       const bgColor = button.style.backgroundColor;
       if (!bgColor) return;
 
-      // Convert rgb to hex
+      // Convert rgb to hex and normalize to lowercase to match storage format
       const hex = rgbToHex(bgColor);
-      if (hex && customLabels[hex]) {
-        button.setAttribute('aria-label', customLabels[hex]);
-        button.title = customLabels[hex];
+      if (hex) {
+        const normalizedHex = hex.toLowerCase();
+
+        // Check if we have a custom label for this color
+        if (customLabels[normalizedHex]) {
+          console.log('[EventColoring] Applying custom label to', normalizedHex, ':', customLabels[normalizedHex]);
+
+          // Update both aria-label and title for better accessibility
+          button.setAttribute('aria-label', customLabels[normalizedHex]);
+          button.title = customLabels[normalizedHex];
+
+          // Also update the text content if there's a label span inside
+          const labelSpan = button.querySelector('span[class*="label"], span[style*="font"]');
+          if (labelSpan) {
+            labelSpan.textContent = customLabels[normalizedHex];
+          }
+
+          // Try to find and update any text nodes directly
+          const textNodes = Array.from(button.childNodes).filter(
+            (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()
+          );
+          if (textNodes.length > 0) {
+            textNodes[0].textContent = customLabels[normalizedHex];
+          }
+        }
       }
     });
   }

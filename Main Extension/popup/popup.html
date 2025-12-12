@@ -2908,9 +2908,9 @@
       /* Google Colors Grid */
       .google-colors-grid {
         display: grid;
-        grid-template-columns: repeat(8, 1fr);
-        gap: 6px;
-        padding: 8px;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 3px;
+        padding: 6px;
         background: #f8f9fa;
         border-radius: 6px;
       }
@@ -2918,32 +2918,36 @@
       .google-color-item {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 2px;
+        align-items: center;
       }
 
       .google-color-preview {
-        width: 100%;
-        aspect-ratio: 1;
-        border-radius: 4px;
-        border: 1.5px solid #dadce0;
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        border: 1px solid #dadce0;
         cursor: pointer;
         transition: all 0.15s ease;
+        flex-shrink: 0;
       }
 
       .google-color-preview:hover {
-        transform: scale(1.08);
+        transform: scale(1.2);
         border-color: #f59e0b;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
       }
 
       .google-color-label-input {
-        font-size: 9px;
-        padding: 2px 4px;
+        font-size: 8px;
+        padding: 1px 2px;
         border: 1px solid #dadce0;
-        border-radius: 3px;
+        border-radius: 2px;
         text-align: center;
         background: white;
         transition: all 0.15s ease;
+        width: 100%;
+        max-width: 60px;
       }
 
       .google-color-label-input:focus {
