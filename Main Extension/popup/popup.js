@@ -7894,5 +7894,365 @@ Would you like to refresh all Google Calendar tabs?`;
       }
     }
   }
+
+  // ========================================
+  // EVENT COLORING LOGIC
+  // ========================================
+
+  let eventColoringSettings = {};
+  // Google Calendar's 11 standard event colors
+  // These match the actual colors shown in Google Calendar's event color picker
+  const GOOGLE_COLORS = [
+    { hex: '#a4bdfc', default: 'Lavender' },
+    { hex: '#7ae7bf', default: 'Sage' },
+    { hex: '#dbadff', default: 'Grape' },
+    { hex: '#ff887c', default: 'Flamingo' },
+    { hex: '#fbd75b', default: 'Banana' },
+    { hex: '#ffb878', default: 'Tangerine' },
+    { hex: '#46d6db', default: 'Peacock' },
+    { hex: '#e1e1e1', default: 'Graphite' },
+    { hex: '#5484ed', default: 'Blueberry' },
+    { hex: '#51b749', default: 'Basil' },
+    { hex: '#dc2127', default: 'Tomato' }
+  ];
+
+  // Helper to escape HTML
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Load event coloring settings
+  async function loadEventColoringSettings() {
+    debugLog('Loading event coloring settings...');
+    const settings = await window.cc3Storage.getSettings();
+    eventColoringSettings = settings.eventColoring || {};
+
+    // Update toggle
+    const toggle = qs('eventColoringToggle');
+    if (toggle) {
+      toggle.checked = eventColoringSettings.enabled !== false;
+    }
+
+    // Update disable custom colors checkbox
+    const disableCheckbox = qs('disableCustomColorsCheckbox');
+    if (disableCheckbox) {
+      disableCheckbox.checked = eventColoringSettings.disableCustomColors || false;
+    }
+
+    // Render categories
+    await renderEventColorCategories();
+
+    // Render Google color labels
+    await renderGoogleColorLabels();
+
+    debugLog('Event coloring settings loaded');
+  }
+
+  // Render event color categories
+  async function renderEventColorCategories() {
+    const container = qs('eventColorCategoriesList');
+    if (!container) return;
+
+    const categories = eventColoringSettings.categories || {};
+    const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    if (categoriesArray.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 24px; text-align: center; color: #64748b; font-size: 13px;">
+          No categories yet. Click "New Category" to create one.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = '';
+
+    for (const category of categoriesArray) {
+      const categoryEl = createCategoryElement(category);
+      container.appendChild(categoryEl);
+    }
+  }
+
+  // Create category element
+  function createCategoryElement(category) {
+    const div = document.createElement('div');
+    div.className = 'event-color-category';
+    div.dataset.categoryId = category.id;
+
+    const colorsHtml = (category.colors || []).map(color => `
+      <div
+        class="category-color-item"
+        style="background-color: ${color.hex};"
+        data-color-hex="${color.hex}"
+        data-category-id="${category.id}"
+      >
+        <span class="color-label-tooltip">${escapeHtml(color.label || color.hex)}</span>
+        <button class="remove-color-btn">×</button>
+      </div>
+    `).join('');
+
+    const addColorBtn = `
+      <button class="add-color-to-category-btn" data-category-id="${category.id}">+</button>
+    `;
+
+    div.innerHTML = `
+      <div class="category-header">
+        <input
+          type="text"
+          class="category-name-input"
+          value="${escapeHtml(category.name)}"
+          data-category-id="${category.id}"
+        />
+        <div class="category-actions">
+          <button class="icon-btn delete-category-btn" data-category-id="${category.id}" title="Delete Category">
+            🗑️
+          </button>
+        </div>
+      </div>
+      <div class="category-color-grid">
+        ${colorsHtml}
+        ${addColorBtn}
+      </div>
+    `;
+
+    // Event listeners
+    const nameInput = div.querySelector('.category-name-input');
+    nameInput.addEventListener('blur', async (e) => {
+      await updateCategoryName(category.id, e.target.value);
+    });
+
+    const deleteBtn = div.querySelector('.delete-category-btn');
+    deleteBtn.addEventListener('click', async () => {
+      if (confirm(`Delete category "${category.name}"?`)) {
+        await deleteCategory(category.id);
+      }
+    });
+
+    // Color item remove buttons
+    div.querySelectorAll('.category-color-item').forEach(item => {
+      const removeBtn = item.querySelector('.remove-color-btn');
+      item.addEventListener('mouseenter', () => {
+        removeBtn.style.display = 'flex';
+      });
+      item.addEventListener('mouseleave', () => {
+        removeBtn.style.display = 'none';
+      });
+      removeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await removeColorFromCategory(category.id, item.dataset.colorHex);
+      });
+    });
+
+    // Add color button
+    const addBtn = div.querySelector('.add-color-to-category-btn');
+    addBtn.addEventListener('click', () => {
+      openColorPickerForCategory(category.id);
+    });
+
+    return div;
+  }
+
+  // Add new category
+  async function addNewCategory() {
+    const categoryId = `category_${Date.now()}`;
+    const categories = eventColoringSettings.categories || {};
+    const order = Object.keys(categories).length;
+
+    const newCategory = {
+      id: categoryId,
+      name: "New Category",
+      colors: [],
+      order
+    };
+
+    await window.cc3Storage.setEventColorCategory(newCategory);
+    await loadEventColoringSettings();
+
+    debugLog('New category added:', categoryId);
+  }
+
+  // Update category name
+  async function updateCategoryName(categoryId, newName) {
+    const categories = eventColoringSettings.categories || {};
+    if (!categories[categoryId]) return;
+
+    categories[categoryId].name = newName;
+    await window.cc3Storage.setEventColorCategory(categories[categoryId]);
+
+    debugLog('Category name updated:', categoryId, newName);
+  }
+
+  // Delete category
+  async function deleteCategory(categoryId) {
+    await window.cc3Storage.deleteEventColorCategory(categoryId);
+    await loadEventColoringSettings();
+
+    debugLog('Category deleted:', categoryId);
+  }
+
+  // Open color picker for category
+  function openColorPickerForCategory(categoryId) {
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.style.display = 'none';
+    document.body.appendChild(colorInput);
+
+    colorInput.addEventListener('change', async (e) => {
+      const colorHex = e.target.value.toUpperCase();
+      const label = prompt('Enter a label for this color (optional):');
+
+      await addColorToCategory(categoryId, colorHex, label || '');
+      document.body.removeChild(colorInput);
+    });
+
+    colorInput.click();
+  }
+
+  // Add color to category
+  async function addColorToCategory(categoryId, colorHex, label = '') {
+    const categories = eventColoringSettings.categories || {};
+    if (!categories[categoryId]) return;
+
+    categories[categoryId].colors.push({ hex: colorHex, label });
+    await window.cc3Storage.setEventColorCategory(categories[categoryId]);
+    await loadEventColoringSettings();
+
+    debugLog('Color added to category:', categoryId, colorHex);
+  }
+
+  // Remove color from category
+  async function removeColorFromCategory(categoryId, colorHex) {
+    const categories = eventColoringSettings.categories || {};
+    if (!categories[categoryId]) return;
+
+    categories[categoryId].colors = categories[categoryId].colors.filter(
+      c => c.hex !== colorHex
+    );
+    await window.cc3Storage.setEventColorCategory(categories[categoryId]);
+    await loadEventColoringSettings();
+
+    debugLog('Color removed from category:', categoryId, colorHex);
+  }
+
+  // Render Google color labels
+  async function renderGoogleColorLabels() {
+    const container = qs('googleColorLabelsList');
+    if (!container) return;
+
+    const customLabels = eventColoringSettings.googleColorLabels || {};
+
+    container.innerHTML = '';
+
+    for (const googleColor of GOOGLE_COLORS) {
+      const customLabel = customLabels[googleColor.hex] || googleColor.default;
+
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'google-color-item';
+      itemDiv.innerHTML = `
+        <div
+          class="google-color-preview"
+          style="background-color: ${googleColor.hex};"
+          title="${googleColor.hex}"
+        ></div>
+        <input
+          type="text"
+          class="google-color-label-input"
+          value="${escapeHtml(customLabel)}"
+          data-color="${googleColor.hex}"
+          placeholder="${googleColor.default}"
+        />
+      `;
+
+      const input = itemDiv.querySelector('.google-color-label-input');
+      input.addEventListener('blur', async (e) => {
+        await updateGoogleColorLabel(googleColor.hex, e.target.value);
+      });
+
+      container.appendChild(itemDiv);
+    }
+
+    debugLog('Google color labels rendered');
+  }
+
+  // Update Google color label
+  async function updateGoogleColorLabel(colorHex, label) {
+    await window.cc3Storage.setGoogleColorLabel(colorHex, label);
+    debugLog('Google color label updated:', colorHex, label);
+  }
+
+  // Event Coloring event listeners
+  const eventColoringToggle = qs('eventColoringToggle');
+  if (eventColoringToggle) {
+    eventColoringToggle.addEventListener('change', async (e) => {
+      await window.cc3Storage.setEventColoringEnabled(e.target.checked);
+      debugLog('Event coloring enabled:', e.target.checked);
+
+      // Update feature disabled state
+      const section = document.querySelector('.event-coloring-section .section-content');
+      if (section) {
+        if (e.target.checked) {
+          section.classList.remove('feature-disabled');
+        } else {
+          section.classList.add('feature-disabled');
+        }
+      }
+
+      // Notify content script
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'EVENT_COLORING_TOGGLED',
+            enabled: e.target.checked
+          }).catch(() => {});
+        }
+      });
+    });
+  }
+
+  const addCategoryBtn = qs('addEventColorCategoryBtn');
+  if (addCategoryBtn) {
+    addCategoryBtn.addEventListener('click', addNewCategory);
+  }
+
+  const disableCustomColorsCheckbox = qs('disableCustomColorsCheckbox');
+  if (disableCustomColorsCheckbox) {
+    disableCustomColorsCheckbox.addEventListener('change', async (e) => {
+      await window.cc3Storage.setDisableCustomColors(e.target.checked);
+      debugLog('Disable custom colors:', e.target.checked);
+
+      // Notify content script
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'EVENT_COLORING_SETTINGS_CHANGED'
+          }).catch(() => {});
+        }
+      });
+    });
+  }
+
+  // Info toggle for event coloring
+  const eventColoringInfoToggle = qs('eventColoringInfoToggle');
+  if (eventColoringInfoToggle) {
+    eventColoringInfoToggle.addEventListener('click', () => {
+      const expanded = qs('eventColoringInfoExpanded');
+      if (expanded) {
+        const isHidden = expanded.style.display === 'none';
+        expanded.style.display = isHidden ? 'block' : 'none';
+
+        const chevron = eventColoringInfoToggle.querySelector('svg');
+        if (chevron) {
+          chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+      }
+    });
+  }
+
+  // Load event coloring settings on popup open
+  loadEventColoringSettings().catch(err => {
+    console.error('Failed to load event coloring settings:', err);
+  });
 })();
 

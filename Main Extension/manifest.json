@@ -45,6 +45,7 @@
         "features/calendar-coloring/core/dayColoring.js",
         "features/calendar-coloring/index.js",
         "features/tasks-coloring/index.js",
+        "features/event-coloring/index.js",
         "features/time-blocking/core/timeBlocking.js",
         "features/time-blocking/index.js",
         "features/columnCss.js",
