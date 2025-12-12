@@ -826,6 +826,10 @@
         onConfirm: async (applyToAll) => {
           console.log('[EventColoring] Recurring confirmed, applyToAll:', applyToAll);
           await saveColorWithRecurringSupport(eventId, colorHex, applyToAll);
+
+          // Update the Google color swatch before closing
+          updateGoogleColorSwatch(eventId, colorHex);
+
           closeColorPicker();
           refreshColors();
         },
@@ -838,9 +842,60 @@
       await window.cc3Storage.saveEventColor(eventId, colorHex, false);
       eventColors[eventId] = { hex: colorHex, isRecurring: false, appliedAt: Date.now() };
 
+      // Update the Google color swatch before closing
+      updateGoogleColorSwatch(eventId, colorHex);
+
       closeColorPicker();
       applyColorToEvent(eventId, colorHex);
     }
+  }
+
+  /**
+   * Update Google Calendar's color swatch/indicator in the editor or viewer
+   * This is the small colored circle that shows the currently selected color
+   */
+  function updateGoogleColorSwatch(eventId, colorHex) {
+    const scenario = ScenarioDetector.findColorPickerScenario();
+    console.log('[EventColoring] Updating Google color swatch for scenario:', scenario);
+
+    // Determine which selector to use based on scenario
+    let selector;
+    if (scenario === Scenario.EVENTEDIT) {
+      // Event editor color selector - the small circle showing current color
+      selector = 'div[jsname="QPiGnd"].A1wrjc.kQuqUe';
+    } else if (scenario === Scenario.EVENTVIEW) {
+      // Event viewer color indicator
+      selector = '.xnWuge';
+    } else {
+      // For list view, try both
+      selector = 'div[jsname="QPiGnd"].A1wrjc.kQuqUe, .xnWuge';
+    }
+
+    // Find and update the color swatch elements
+    const swatchElements = document.querySelectorAll(selector);
+    console.log('[EventColoring] Found', swatchElements.length, 'swatch elements');
+
+    swatchElements.forEach((swatch) => {
+      if (swatch instanceof HTMLElement) {
+        swatch.style.backgroundColor = colorHex;
+        console.log('[EventColoring] Updated swatch color to:', colorHex);
+      }
+    });
+
+    // Also try to find the color indicator by looking for specific structures
+    // Google Calendar sometimes uses different elements
+    const colorIndicators = document.querySelectorAll(
+      '[jsname="QPiGnd"], .kQuqUe, .A1wrjc'
+    );
+    colorIndicators.forEach((indicator) => {
+      if (indicator instanceof HTMLElement) {
+        const style = window.getComputedStyle(indicator);
+        // Only update if it looks like a color indicator (has background color set)
+        if (style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+          indicator.style.backgroundColor = colorHex;
+        }
+      }
+    });
   }
 
   async function saveColorWithRecurringSupport(eventId, colorHex, applyToAll) {
@@ -904,6 +959,15 @@
   async function refreshColors() {
     eventColors = await window.cc3Storage.getAllEventColors();
     applyStoredColors();
+
+    // Also update the color swatch if we're in an event editor
+    const currentEventId = lastClickedEventId || getEventIdFromContext();
+    if (currentEventId) {
+      const colorData = findColorForEvent(currentEventId);
+      if (colorData?.hex) {
+        updateGoogleColorSwatch(currentEventId, colorData.hex);
+      }
+    }
   }
 
   function applyStoredColors() {
