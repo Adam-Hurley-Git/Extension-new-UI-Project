@@ -8182,6 +8182,18 @@ Would you like to refresh all Google Calendar tabs?`;
     const normalizedHex = colorHex.toLowerCase();
     await window.cc3Storage.setGoogleColorLabel(normalizedHex, label);
     debugLog('Google color label updated:', normalizedHex, label);
+
+    // FIX #6a: CRITICAL - Notify content script that labels changed
+    // Without this, content script keeps using cached settings with old labels
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          type: 'EVENT_COLORING_SETTINGS_CHANGED'
+        }).catch(() => {
+          // Ignore errors if tab is not a calendar tab
+        });
+      }
+    });
   }
 
   // Event Coloring event listeners

@@ -679,7 +679,11 @@
       }
     } else if (message.type === 'EVENT_COLORING_SETTINGS_CHANGED') {
       console.log('[EventColoring] Settings changed, reloading...');
-      init(settings).catch((err) => console.error('[EventColoring] Reinit failed:', err));
+      // FIX #6b: Force reload from storage, don't use cached settings
+      // This ensures we get fresh googleColorLabels after user changes them in popup
+      window.cc3Storage.getEventColoringSettings().then(freshSettings => {
+        init(freshSettings).catch((err) => console.error('[EventColoring] Reinit failed:', err));
+      });
     }
   });
 
