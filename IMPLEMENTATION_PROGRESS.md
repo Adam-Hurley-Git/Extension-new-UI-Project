@@ -60,11 +60,15 @@ Calendar-wide defaults, text/border coloring, preset templates.
 
 ## 🔧 Current Tasks - IN PROGRESS
 
-### **UI Refinements**
-- [ ] Move Task Coloring section to Dashboard tab (currently in Preferences)
-- [ ] Verify Event Coloring is in Dashboard tab
-- [ ] Ensure all sections follow consistent design patterns
-- [ ] Test layout on actual extension popup
+### **UI Refinements** ✅ COMPLETED
+- [x] Move Event Coloring section to Dashboard tab (was in Preferences)
+- [x] Verify Event Coloring is in Dashboard tab
+- [x] Ensure all sections follow consistent design patterns
+
+### **Next Steps**
+- [ ] Test Event Coloring on live Google Calendar
+- [ ] Test color picker injection functionality
+- [ ] Verify all UI interactions work correctly
 
 ---
 
@@ -122,13 +126,13 @@ Calendar-wide defaults, text/border coloring, preset templates.
 **Commits:**
 1. ✅ feat: Add Phase 1 Event Coloring feature
 2. ✅ refactor: Redesign Event Coloring UI for better fit and consistency
+3. ✅ refactor: Move Event Coloring section to Dashboard tab
 
 ---
 
 ## 🐛 Known Issues
 
 ### **Phase 1**
-- ⚠️ Task Coloring section is in Preferences tab (should be Dashboard)
 - ⚠️ Need to test color picker injection on live Google Calendar
 - ⚠️ Event ID detection may need refinement for edge cases
 
@@ -140,6 +144,6 @@ Calendar-wide defaults, text/border coloring, preset templates.
 
 ---
 
-**Last Updated:** 2025-01-XX
-**Current Phase:** 1 - UI Refinements
-**Next Milestone:** Move Task Coloring to Dashboard
+**Last Updated:** 2025-12-12
+**Current Phase:** 1 - Complete (Testing Recommended)
+**Next Milestone:** Phase 2 - New Event Modal Integration
