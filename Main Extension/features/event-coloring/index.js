@@ -20,10 +20,24 @@
 
   async function init(featureSettings) {
     settings = featureSettings || {};
+
+    // FIX #1: Ensure settings are fully loaded from storage
+    // If settings don't include googleColorLabels, reload from storage
+    if (!settings.googleColorLabels || !settings.categories) {
+      console.log('[EventColoring] Settings incomplete, reloading from storage...');
+      const fullSettings = await window.cc3Storage.getEventColoringSettings();
+      settings = { ...settings, ...fullSettings };
+    }
+
     isEnabled = settings.enabled !== false;
     categories = settings.categories || {};
 
-    console.log('[EventColoring] Initializing...', { isEnabled, categoriesCount: Object.keys(categories).length });
+    console.log('[EventColoring] Initializing...', {
+      isEnabled,
+      categoriesCount: Object.keys(categories).length,
+      googleColorLabelsCount: Object.keys(settings.googleColorLabels || {}).length,
+      disableCustomColors: settings.disableCustomColors || false
+    });
 
     if (!isEnabled) {
       console.log('[EventColoring] Feature disabled');
@@ -82,17 +96,28 @@
   }
 
   function isColorPicker(element) {
+    // FIX #3: More specific color picker detection
     // Google Calendar color pickers have specific characteristics
-    // They contain color buttons with specific data attributes or classes
-    const hasColorButtons = element.querySelector('[data-color], div[style*="background"]');
+
+    // BEST: Look for Google Calendar's specific color picker structure
+    // The jsname="Ly0WL" attribute is unique to color picker buttons
+    const hasLy0WLButtons = element.querySelector('div[jsname="Ly0WL"]');
+    if (hasLy0WLButtons) {
+      console.log('[EventColoring] ✓ Color picker detected via jsname="Ly0WL"');
+      return true;
+    }
+
+    // FALLBACK: Check for color buttons with data-color attribute
+    const hasDataColorButtons = element.querySelectorAll('[data-color]').length >= 8;
     const isMenu = element.getAttribute('role') === 'menu';
 
-    // Exclude other menus that aren't color pickers
-    const hasColorKeyword = element.textContent?.toLowerCase().includes('color') ||
-                            element.querySelector('[aria-label*="color"]') ||
-                            element.querySelector('div[style*="background-color: rgb"]');
+    if (isMenu && hasDataColorButtons) {
+      console.log('[EventColoring] ✓ Color picker detected via role=menu + data-color buttons');
+      return true;
+    }
 
-    return isMenu && (hasColorButtons || hasColorKeyword);
+    // Don't match if it's just a generic menu
+    return false;
   }
 
   function injectCustomCategories(colorPickerElement) {
@@ -103,12 +128,14 @@
     colorPickerElement.dataset.cfEventColorModified = 'true';
     console.log('[EventColoring] Injecting custom categories');
 
+    // FIX #2: ALWAYS update Google color labels first (even if custom colors disabled)
+    updateGoogleColorLabels(colorPickerElement);
+    updateCheckmarks(colorPickerElement);
+
     // Check if custom colors are disabled
     if (settings.disableCustomColors) {
-      console.log('[EventColoring] Custom colors disabled, skipping injection');
-      updateGoogleColorLabels(colorPickerElement);
-      updateCheckmarks(colorPickerElement);
-      return;
+      console.log('[EventColoring] Custom colors disabled, skipping custom category injection');
+      return; // Stop here - labels are already updated above
     }
 
     // Find the container for Google's built-in colors
@@ -297,28 +324,68 @@
 
   function updateGoogleColorLabels(pickerElement) {
     const customLabels = settings.googleColorLabels || {};
-    console.log('[EventColoring] Updating Google color labels with:', customLabels);
+
+    // FIX #4: Comprehensive debug logging
+    console.log('[EventColoring] ========== updateGoogleColorLabels START ==========');
+    console.log('[EventColoring] Settings object:', settings);
+    console.log('[EventColoring] Custom labels:', customLabels);
+    console.log('[EventColoring] Number of custom labels:', Object.keys(customLabels).length);
 
     // Use Google Calendar's stable jsname attribute to find color buttons
     // This is the same selector used by the Color Extension
     const colorButtons = pickerElement.querySelectorAll('div[jsname="Ly0WL"]');
     console.log('[EventColoring] Found', colorButtons.length, 'Google color buttons');
 
-    colorButtons.forEach((button) => {
+    if (colorButtons.length === 0) {
+      console.warn('[EventColoring] ⚠️ No Google color buttons found! Picker may not be correct element.');
+      console.log('[EventColoring] Picker element:', pickerElement);
+      console.log('[EventColoring] Picker HTML:', pickerElement.innerHTML.substring(0, 500));
+      return;
+    }
+
+    // FIX #7: EXTRACT ACTUAL GOOGLE COLORS
+    // Capture ALL colors Google Calendar actually uses for popup array
+    const actualGoogleColors = [];
+    colorButtons.forEach((button, index) => {
+      const dataColor = button.getAttribute('data-color');
+      if (dataColor) {
+        const labelElement = button.querySelector('.oMnJrf');
+        const defaultLabel = labelElement?.getAttribute('data-text') ||
+                            button.getAttribute('aria-label') ||
+                            `Color ${index + 1}`;
+        actualGoogleColors.push({
+          hex: dataColor.toLowerCase(),
+          default: defaultLabel
+        });
+      }
+    });
+
+    console.log('[EventColoring] 🎨 ACTUAL GOOGLE COLORS DETECTED:');
+    console.log('[EventColoring] Copy this array to popup.js GOOGLE_COLORS:');
+    console.log(JSON.stringify(actualGoogleColors, null, 2));
+    console.log('[EventColoring] ==========================================');
+
+    let updatedCount = 0;
+    let skippedCount = 0;
+    const missingColors = [];
+
+    colorButtons.forEach((button, index) => {
       // Get the color from the data-color attribute (this is set by Google)
       const dataColor = button.getAttribute('data-color');
       if (!dataColor) {
-        console.log('[EventColoring] Button has no data-color, skipping');
+        console.log(`[EventColoring] Button ${index} has no data-color, skipping`);
+        skippedCount++;
         return;
       }
 
       // Normalize the color to lowercase for lookup
       const normalizedColor = dataColor.toLowerCase();
+      console.log(`[EventColoring] Button ${index}: ${dataColor} → ${normalizedColor}`);
 
       // Check if we have a custom label for this color
       if (customLabels[normalizedColor]) {
         const customLabel = customLabels[normalizedColor];
-        console.log('[EventColoring] Applying custom label to', normalizedColor, ':', customLabel);
+        console.log(`[EventColoring] ✓ Applying custom label to ${normalizedColor}: "${customLabel}"`);
 
         // Update the aria-label on the button itself (for accessibility)
         button.setAttribute('aria-label', customLabel);
@@ -328,12 +395,28 @@
         if (labelElement) {
           // Set the data-text attribute which Google Calendar uses to display the label
           labelElement.setAttribute('data-text', customLabel);
-          console.log('[EventColoring] Updated .oMnJrf element with data-text:', customLabel);
+          console.log(`[EventColoring] ✓ Updated .oMnJrf element with data-text: "${customLabel}"`);
+          updatedCount++;
         } else {
-          console.log('[EventColoring] No .oMnJrf element found in button');
+          console.warn(`[EventColoring] ⚠️ No .oMnJrf element found in button ${index}`);
+          console.log('[EventColoring] Button HTML:', button.innerHTML);
         }
+      } else {
+        console.log(`[EventColoring] ❌ No custom label for ${normalizedColor} (using Google default)`);
+        missingColors.push(normalizedColor);
       }
     });
+
+    if (missingColors.length > 0) {
+      console.warn('[EventColoring] ⚠️ MISMATCH DETECTED!');
+      console.warn('[EventColoring] These colors are in Google Calendar but not in your custom labels:');
+      console.warn(missingColors);
+      console.warn('[EventColoring] This means the GOOGLE_COLORS array in popup.js has WRONG hex values!');
+      console.warn('[EventColoring] Copy the array logged above to fix this.');
+    }
+
+    console.log(`[EventColoring] Summary: ${updatedCount} labels updated, ${skippedCount} skipped, ${missingColors.length} missing`);
+    console.log('[EventColoring] ========== updateGoogleColorLabels END ==========');
   }
 
   function updateCheckmarks(pickerElement) {
@@ -629,7 +712,11 @@
       }
     } else if (message.type === 'EVENT_COLORING_SETTINGS_CHANGED') {
       console.log('[EventColoring] Settings changed, reloading...');
-      init(settings).catch((err) => console.error('[EventColoring] Reinit failed:', err));
+      // FIX #6b: Force reload from storage, don't use cached settings
+      // This ensures we get fresh googleColorLabels after user changes them in popup
+      window.cc3Storage.getEventColoringSettings().then(freshSettings => {
+        init(freshSettings).catch((err) => console.error('[EventColoring] Reinit failed:', err));
+      });
     }
   });
 

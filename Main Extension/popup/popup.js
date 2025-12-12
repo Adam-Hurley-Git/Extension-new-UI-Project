@@ -7902,18 +7902,21 @@ Would you like to refresh all Google Calendar tabs?`;
   let eventColoringSettings = {};
   // Google Calendar's 11 standard event colors
   // These match the actual colors shown in Google Calendar's event color picker
+  // FIX #7: Updated to ACTUAL Google Calendar colors (extracted from live calendar)
+  // These are the colors Google Calendar actually uses (December 2025)
   const GOOGLE_COLORS = [
-    { hex: '#a4bdfc', default: 'Lavender' },
-    { hex: '#7ae7bf', default: 'Sage' },
-    { hex: '#dbadff', default: 'Grape' },
-    { hex: '#ff887c', default: 'Flamingo' },
-    { hex: '#fbd75b', default: 'Banana' },
-    { hex: '#ffb878', default: 'Tangerine' },
-    { hex: '#46d6db', default: 'Peacock' },
-    { hex: '#e1e1e1', default: 'Graphite' },
-    { hex: '#5484ed', default: 'Blueberry' },
-    { hex: '#51b749', default: 'Basil' },
-    { hex: '#dc2127', default: 'Tomato' }
+    { hex: '#d50000', default: 'Tomato' },
+    { hex: '#e67c73', default: 'Flamingo' },
+    { hex: '#f4511e', default: 'Tangerine' },
+    { hex: '#f6bf26', default: 'Banana' },
+    { hex: '#33b679', default: 'Sage' },
+    { hex: '#0b8043', default: 'Basil' },
+    { hex: '#3f51b5', default: 'Blueberry' },
+    { hex: '#7986cb', default: 'Lavender' },
+    { hex: '#8e24aa', default: 'Grape' },
+    { hex: '#616161', default: 'Graphite' },
+    { hex: '#8a6648', default: 'Cocoa' },
+    { hex: '#ad1457', default: 'Cherry Blossom' }
   ];
 
   // Helper to escape HTML
@@ -8178,8 +8181,22 @@ Would you like to refresh all Google Calendar tabs?`;
 
   // Update Google color label
   async function updateGoogleColorLabel(colorHex, label) {
-    await window.cc3Storage.setGoogleColorLabel(colorHex, label);
-    debugLog('Google color label updated:', colorHex, label);
+    // FIX #5: Ensure hex is always lowercase for consistency
+    const normalizedHex = colorHex.toLowerCase();
+    await window.cc3Storage.setGoogleColorLabel(normalizedHex, label);
+    debugLog('Google color label updated:', normalizedHex, label);
+
+    // FIX #6a: CRITICAL - Notify content script that labels changed
+    // Without this, content script keeps using cached settings with old labels
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          type: 'EVENT_COLORING_SETTINGS_CHANGED'
+        }).catch(() => {
+          // Ignore errors if tab is not a calendar tab
+        });
+      }
+    });
   }
 
   // Event Coloring event listeners
