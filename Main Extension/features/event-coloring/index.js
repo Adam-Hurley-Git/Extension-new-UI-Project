@@ -853,49 +853,37 @@
   /**
    * Update Google Calendar's color swatch/indicator in the editor or viewer
    * This is the small colored circle that shows the currently selected color
+   * IMPORTANT: Only update the preview swatch, NOT the color buttons in the palette
    */
   function updateGoogleColorSwatch(eventId, colorHex) {
     const scenario = ScenarioDetector.findColorPickerScenario();
     console.log('[EventColoring] Updating Google color swatch for scenario:', scenario);
 
-    // Determine which selector to use based on scenario
-    let selector;
-    if (scenario === Scenario.EVENTEDIT) {
-      // Event editor color selector - the small circle showing current color
-      selector = 'div[jsname="QPiGnd"].A1wrjc.kQuqUe';
-    } else if (scenario === Scenario.EVENTVIEW) {
-      // Event viewer color indicator
-      selector = '.xnWuge';
-    } else {
-      // For list view, try both
-      selector = 'div[jsname="QPiGnd"].A1wrjc.kQuqUe, .xnWuge';
-    }
+    // Find the color selector button in the event editor (NOT inside the color picker menu)
+    // This is the button you click to open the color picker - it shows the current color
+    const colorSelectorButtons = document.querySelectorAll('div[jsname="QPiGnd"].A1wrjc.kQuqUe');
 
-    // Find and update the color swatch elements
-    const swatchElements = document.querySelectorAll(selector);
-    console.log('[EventColoring] Found', swatchElements.length, 'swatch elements');
+    colorSelectorButtons.forEach((swatch) => {
+      // Make sure this element is NOT inside a color picker menu
+      // The menu has role="menu" or role="listbox"
+      const isInsideMenu = swatch.closest('[role="menu"], [role="listbox"], [role="dialog"]');
 
-    swatchElements.forEach((swatch) => {
-      if (swatch instanceof HTMLElement) {
+      if (!isInsideMenu && swatch instanceof HTMLElement) {
         swatch.style.backgroundColor = colorHex;
-        console.log('[EventColoring] Updated swatch color to:', colorHex);
+        console.log('[EventColoring] Updated preview swatch color to:', colorHex);
       }
     });
 
-    // Also try to find the color indicator by looking for specific structures
-    // Google Calendar sometimes uses different elements
-    const colorIndicators = document.querySelectorAll(
-      '[jsname="QPiGnd"], .kQuqUe, .A1wrjc'
-    );
-    colorIndicators.forEach((indicator) => {
-      if (indicator instanceof HTMLElement) {
-        const style = window.getComputedStyle(indicator);
-        // Only update if it looks like a color indicator (has background color set)
-        if (style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+    // Also check for the event viewer color indicator (different element)
+    if (scenario === Scenario.EVENTVIEW) {
+      const viewerIndicators = document.querySelectorAll('.xnWuge');
+      viewerIndicators.forEach((indicator) => {
+        const isInsideMenu = indicator.closest('[role="menu"], [role="listbox"]');
+        if (!isInsideMenu && indicator instanceof HTMLElement) {
           indicator.style.backgroundColor = colorHex;
         }
-      }
-    });
+      });
+    }
   }
 
   async function saveColorWithRecurringSupport(eventId, colorHex, applyToAll) {
