@@ -433,15 +433,37 @@ function invalidateCalendarMappingCache() {
 /**
  * Extract title and time from task element to create a fingerprint
  * Used for matching recurring task instances that aren't in the API mapping
+ *
+ * MARKER SYSTEM: If element has data-cf-fingerprint attribute, use that instead
+ * of extracting from DOM text. This preserves the fingerprint when a recurring
+ * task is moved to a different time slot.
+ *
  * @param {HTMLElement} element - Task element
- * @returns {{title: string|null, time: string|null, fingerprint: string|null}}
+ * @returns {{title: string|null, time: string|null, fingerprint: string|null, fromMarker: boolean}}
  */
 function extractTaskFingerprint(element) {
-  if (!element) return { title: null, time: null, fingerprint: null };
+  if (!element) return { title: null, time: null, fingerprint: null, fromMarker: false };
+
+  // MARKER CHECK: If element has preserved fingerprint marker, use it
+  // This handles moved recurring tasks that still belong to their original fingerprint group
+  const markerFingerprint = element.dataset?.cfFingerprint;
+  if (markerFingerprint) {
+    // Parse title and time from marker fingerprint
+    const parts = markerFingerprint.split('|');
+    if (parts.length === 2) {
+      console.log('[TaskColoring] Using preserved fingerprint from marker:', markerFingerprint);
+      return {
+        title: parts[0],
+        time: parts[1],
+        fingerprint: markerFingerprint,
+        fromMarker: true
+      };
+    }
+  }
 
   // Find the text content element (.XuJrye contains the task info)
   const textElement = element.querySelector('.XuJrye');
-  if (!textElement) return { title: null, time: null, fingerprint: null };
+  if (!textElement) return { title: null, time: null, fingerprint: null, fromMarker: false };
 
   const textContent = textElement.textContent || '';
 
@@ -462,7 +484,46 @@ function extractTaskFingerprint(element) {
     console.log('[TaskColoring] Extracted fingerprint:', { title, time, fingerprint });
   }
 
-  return { title, time, fingerprint };
+  return { title, time, fingerprint, fromMarker: false };
+}
+
+/**
+ * Set the fingerprint marker on an element to preserve it across moves
+ * @param {HTMLElement} element - Task element
+ * @param {string} fingerprint - The fingerprint to preserve
+ */
+function setFingerprintMarker(element, fingerprint) {
+  if (!element || !fingerprint) return;
+  element.dataset.cfFingerprint = fingerprint;
+  console.log('[TaskColoring] Set fingerprint marker:', fingerprint);
+}
+
+/**
+ * Clear the fingerprint marker from an element
+ * @param {HTMLElement} element - Task element
+ */
+function clearFingerprintMarker(element) {
+  if (!element) return;
+  if (element.dataset?.cfFingerprint) {
+    console.log('[TaskColoring] Cleared fingerprint marker:', element.dataset.cfFingerprint);
+    delete element.dataset.cfFingerprint;
+  }
+}
+
+/**
+ * Clear all fingerprint markers with a specific fingerprint value from the DOM
+ * Used when clearing a recurring color to remove all markers for that fingerprint
+ * @param {string} fingerprint - The fingerprint value to clear
+ */
+function clearAllFingerprintMarkers(fingerprint) {
+  if (!fingerprint) return;
+  const elements = document.querySelectorAll(`[data-cf-fingerprint="${fingerprint}"]`);
+  elements.forEach(el => {
+    delete el.dataset.cfFingerprint;
+  });
+  if (elements.length > 0) {
+    console.log('[TaskColoring] Cleared', elements.length, 'fingerprint markers for:', fingerprint);
+  }
 }
 
 /**
@@ -983,6 +1044,8 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
           // Storage listener fires when setRecurringTaskColor writes, and checks Priority 1 before Priority 2
           await clearTaskColor(taskId);
           await window.cc3Storage.setRecurringTaskColor(fingerprint.fingerprint, selectedColor);
+          // MARKER: Set fingerprint marker on element to preserve it if task is moved
+          setFingerprintMarker(taskElement, fingerprint.fingerprint);
         } else {
           console.warn('[TaskColoring] Could not extract fingerprint, falling back to single instance coloring');
           await setTaskColor(taskId, selectedColor);
@@ -1018,6 +1081,10 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
         if (fingerprint.fingerprint) {
           console.log('[TaskColoring] Clearing color for ALL instances with fingerprint:', fingerprint.fingerprint);
           await window.cc3Storage.clearRecurringTaskColor(fingerprint.fingerprint);
+          // MARKER: Clear fingerprint marker from element
+          clearFingerprintMarker(taskElement);
+          // Also clear markers from all elements with this fingerprint
+          clearAllFingerprintMarkers(fingerprint.fingerprint);
         }
       }
     }
@@ -1740,6 +1807,9 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     if (fingerprint.fingerprint) {
       const recurringColor = cache.recurringTaskColors[fingerprint.fingerprint];
       if (recurringColor) {
+        // MARKER: Set fingerprint marker on element to preserve it if task is moved
+        // This ensures the task keeps its recurring color even after time change
+        setFingerprintMarker(element, fingerprint.fingerprint);
 
         if (isCompleted) {
           // For completed recurring manual tasks: use manual color with opacity from list settings
