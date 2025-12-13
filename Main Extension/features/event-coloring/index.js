@@ -23,6 +23,7 @@
   let settings = {};
   let eventColors = {};
   let categories = {};
+  let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor }
   let isEnabled = false;
   let colorPickerObserver = null;
   let colorRenderObserver = null;
@@ -367,6 +368,84 @@
   }
 
   // ========================================
+  // CALENDAR COLORS API
+  // ========================================
+
+  /**
+   * Fetch all calendar colors from background (single API call, cached)
+   */
+  async function fetchCalendarColors() {
+    try {
+      const colors = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'GET_CALENDAR_COLORS' }, (response) => {
+          resolve(response || {});
+        });
+      });
+      calendarColors = colors;
+      console.log('[EventColoring] Fetched colors for', Object.keys(calendarColors).length, 'calendars');
+    } catch (error) {
+      console.error('[EventColoring] Failed to fetch calendar colors:', error);
+      calendarColors = {};
+    }
+  }
+
+  /**
+   * Get calendar color for an event by its encoded event ID
+   * @param {string} encodedEventId - The data-eventid value
+   * @returns {string|null} Background color hex or null
+   */
+  function getCalendarColorForEvent(encodedEventId) {
+    if (!encodedEventId || Object.keys(calendarColors).length === 0) {
+      return null;
+    }
+
+    try {
+      let partialCalendarId = null;
+
+      if (encodedEventId.startsWith('ttb_')) {
+        // TTB format: decode base64 after prefix
+        const base64Part = encodedEventId.slice(4);
+        const decoded = atob(base64Part);
+        const spaceIndex = decoded.indexOf(' ');
+        if (spaceIndex > 0) {
+          partialCalendarId = decoded.substring(spaceIndex + 1);
+        }
+      } else {
+        // Standard format: base64 encoded with email suffix
+        try {
+          const decoded = atob(encodedEventId);
+          const spaceIndex = decoded.indexOf(' ');
+          if (spaceIndex > 0) {
+            partialCalendarId = decoded.substring(spaceIndex + 1);
+          }
+        } catch (e) {
+          // Not base64, might be plain ID
+        }
+      }
+
+      if (partialCalendarId) {
+        // First try exact match
+        if (calendarColors[partialCalendarId]) {
+          return calendarColors[partialCalendarId].backgroundColor;
+        }
+
+        // The event ID often has truncated email (e.g., "adam.hurley.private@m" instead of full "@gmail.com")
+        // So we need to find a calendar that starts with this partial ID
+        for (const calendarId of Object.keys(calendarColors)) {
+          if (calendarId.startsWith(partialCalendarId)) {
+            return calendarColors[calendarId].backgroundColor;
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[EventColoring] Failed to get calendar color for event:', error);
+      return null;
+    }
+  }
+
+  // ========================================
   // INITIALIZATION
   // ========================================
 
@@ -398,6 +477,9 @@
     // Load event colors from storage
     eventColors = await window.cc3Storage.getAllEventColors();
     console.log('[EventColoring] Loaded', Object.keys(eventColors).length, 'event colors');
+
+    // Fetch calendar colors from API (single call, cached in background)
+    await fetchCalendarColors();
 
     // Start observers
     startColorPickerObserver();
@@ -1025,18 +1107,20 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // IMPORTANT: Save the original Google calendar color from the left indicator bar
-      // before applying our custom color, so we can preserve it
-      const leftIndicator = element.querySelector('.jSrjCf');
-      let originalCalendarColor = null;
-      if (leftIndicator instanceof HTMLElement) {
-        // Get the current (original) background color before we change anything
-        originalCalendarColor = leftIndicator.style.backgroundColor ||
-                               window.getComputedStyle(leftIndicator).backgroundColor;
+      // Get the calendar's color from API cache (using event ID to determine calendar)
+      const eventId = element.getAttribute('data-eventid');
+      const calendarColor = getCalendarColorForEvent(eventId);
+
+      // Use a gradient to preserve the left 4px with calendar color
+      // and apply our custom color to the rest of the element
+      if (calendarColor) {
+        const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${colorHex} 4px)`;
+        element.style.setProperty('background', gradient, 'important');
+      } else {
+        // Fallback: just apply the custom color if we don't have calendar color
+        element.style.setProperty('background-color', colorHex, 'important');
       }
 
-      // Color only the main container
-      element.style.setProperty('background-color', colorHex, 'important');
       element.style.borderColor = adjustColorBrightness(colorHex, -15);
       element.dataset.cfEventColored = 'true';
 
@@ -1050,14 +1134,6 @@
           child.style.color = textColor;
         }
       });
-
-      // RESTORE the left indicator bar to show the original Google calendar color
-      // This lets users still see which calendar the event belongs to
-      if (leftIndicator instanceof HTMLElement && originalCalendarColor) {
-        leftIndicator.style.setProperty('background-color', originalCalendarColor, 'important');
-        // Don't mark it as cf-colored so it keeps original styling
-        delete leftIndicator.dataset.cfEventColored;
-      }
 
     } else if (element.matches('[data-draggable-id]')) {
       // For draggable items (different event type)
