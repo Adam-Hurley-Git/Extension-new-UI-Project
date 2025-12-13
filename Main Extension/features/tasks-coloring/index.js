@@ -454,7 +454,7 @@ function extractTaskFingerprint(element) {
     // Parse title and time from marker fingerprint
     const parts = markerFingerprint.split('|');
     if (parts.length === 2) {
-      console.log('[TaskColoring] Using preserved fingerprint from marker:', markerFingerprint);
+      // Note: Log removed to reduce noise - marker usage is expected behavior
       return {
         title: parts[0],
         time: parts[1],
@@ -483,10 +483,7 @@ function extractTaskFingerprint(element) {
   // Create fingerprint (null if either title or time is missing)
   const fingerprint = (title && time) ? `${title}|${time}` : null;
 
-  if (fingerprint) {
-    console.log('[TaskColoring] Extracted fingerprint:', { title, time, fingerprint });
-  }
-
+  // Note: Fingerprint extraction log removed to reduce noise
   return { title, time, fingerprint, fromMarker: false };
 }
 
@@ -498,7 +495,7 @@ function extractTaskFingerprint(element) {
 function setFingerprintMarker(element, fingerprint) {
   if (!element || !fingerprint) return;
   element.dataset.cfFingerprint = fingerprint;
-  console.log('[TaskColoring] Set fingerprint marker:', fingerprint);
+  // Note: Log removed to reduce noise - marker setting happens on every repaint
 }
 
 /**
@@ -1713,7 +1710,13 @@ function applyPaintIfNeeded(node, colors, isCompleted = false) {
   const currentBg = node.dataset.cfTaskBgColor;
   const currentText = node.dataset.cfTaskTextActual;
 
-  if (node.classList.contains(MARK) && currentBg === desiredBg && currentText === desiredText) {
+  // CRITICAL FIX: Also verify inline styles weren't reset by Google Calendar
+  // Google resets inline styles on drag/move but our data attributes survive
+  // We must check actual inline style has !important to know our paint is still applied
+  const hasOurInlineStyle = node.style.cssText.includes('background-color') &&
+                            node.style.cssText.includes('!important');
+
+  if (node.classList.contains(MARK) && currentBg === desiredBg && currentText === desiredText && hasOurInlineStyle) {
     return;
   }
 
@@ -1872,9 +1875,11 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     // FIRST: Check if this taskId has a stored fingerprint mapping (for moved tasks)
     // This allows tasks that have been moved to a different time to still find their recurring color
     let fingerprintToUse = null;
+    let fingerprintFromStorage = false; // Track source to avoid redundant storage writes
     const storedFingerprint = cache.taskFingerprintMap?.[taskId];
     if (storedFingerprint && cache.recurringTaskColors[storedFingerprint]) {
       fingerprintToUse = storedFingerprint;
+      fingerprintFromStorage = true;
       console.log('[TaskColoring] Using stored fingerprint mapping for moved task:', taskId, '→', storedFingerprint);
     }
 
@@ -1883,6 +1888,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
       const fingerprint = extractTaskFingerprint(element);
       if (fingerprint.fingerprint && cache.recurringTaskColors[fingerprint.fingerprint]) {
         fingerprintToUse = fingerprint.fingerprint;
+        // fingerprintFromStorage stays false - this is a new extraction
       }
     }
 
@@ -1890,9 +1896,11 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     if (fingerprintToUse) {
       const recurringColor = cache.recurringTaskColors[fingerprintToUse];
       if (recurringColor) {
-        // Store the fingerprint mapping so this task keeps its color if moved
-        // This is done asynchronously to not block painting
-        window.cc3Storage?.setTaskFingerprintMapping?.(taskId, fingerprintToUse);
+        // Only store mapping if it wasn't already in storage (avoid redundant writes)
+        // This prevents storage growth from repeated writes on every repaint
+        if (!fingerprintFromStorage) {
+          window.cc3Storage?.setTaskFingerprintMapping?.(taskId, fingerprintToUse);
+        }
 
         // MARKER: Set fingerprint marker on element to preserve it if task is moved (session-only backup)
         if (element) {
