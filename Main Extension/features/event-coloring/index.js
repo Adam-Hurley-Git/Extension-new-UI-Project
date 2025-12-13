@@ -1020,35 +1020,41 @@
   function applyColorToElement(element, colorHex) {
     if (!element || !colorHex) return;
 
-    const paintTargets = [];
+    // Only color the main event chip element - NOT child elements
+    // This preserves the rounded corners and other styling
+    const isEventChip = element.matches('[data-eventchip]');
 
-    // Strategy 1: Direct element
-    if (element.matches('[data-draggable-id], .event-card, [data-eventchip]')) {
-      paintTargets.push(element);
-    }
+    if (isEventChip) {
+      // Color only the main container
+      element.style.setProperty('background-color', colorHex, 'important');
+      element.style.borderColor = adjustColorBrightness(colorHex, -15);
+      element.dataset.cfEventColored = 'true';
 
-    // Strategy 2: Child containers
-    const containers = element.querySelectorAll('[data-draggable-id], .FAxxKc, div[style*="background"]');
-    paintTargets.push(...containers);
-
-    // Strategy 3: Fallback
-    if (paintTargets.length === 0) {
-      paintTargets.push(element);
-    }
-
-    paintTargets.forEach((target) => {
-      target.style.setProperty('background-color', colorHex, 'important');
-      target.style.borderColor = adjustColorBrightness(colorHex, -15);
-
+      // Update text colors for readability
       const textColor = getTextColorForBackground(colorHex);
-      target.style.color = textColor;
+      element.style.color = textColor;
 
-      target.querySelectorAll('span, div:not([style*="background"])').forEach((child) => {
-        child.style.color = textColor;
+      // Update text color on child text elements only (not background)
+      element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
+        if (child instanceof HTMLElement) {
+          child.style.color = textColor;
+        }
       });
 
-      target.dataset.cfEventColored = 'true';
-    });
+      // DO NOT color these child elements as it breaks rounded corners:
+      // - .jSrjCf (left color indicator bar)
+      // - .leOeGd (resize handle at bottom)
+      // - .QZVPzb, .Jcb6qd (container divs)
+
+    } else if (element.matches('[data-draggable-id]')) {
+      // For draggable items (different event type)
+      element.style.setProperty('background-color', colorHex, 'important');
+      element.style.borderColor = adjustColorBrightness(colorHex, -15);
+      element.dataset.cfEventColored = 'true';
+
+      const textColor = getTextColorForBackground(colorHex);
+      element.style.color = textColor;
+    }
   }
 
   // ========================================
@@ -1079,12 +1085,14 @@
   }
 
   function setupEventClickCapture() {
-    document.addEventListener('click', (e) => {
+    // Capture both left-click and right-click (contextmenu) events
+    const captureEventId = (e) => {
       const eventElement = e.target.closest('[data-eventid]');
       if (eventElement) {
         const eventId = eventElement.getAttribute('data-eventid');
         if (eventId && !eventId.startsWith('tasks')) {
           lastClickedEventId = eventId;
+          console.log('[EventColoring] Captured event ID:', eventId, 'from', e.type);
           setTimeout(() => {
             if (lastClickedEventId === eventId) {
               lastClickedEventId = null;
@@ -1092,7 +1100,16 @@
           }, 10000);
         }
       }
-    }, true);
+    };
+
+    // Left-click
+    document.addEventListener('click', captureEventId, true);
+
+    // Right-click (context menu) - this is crucial for the right-click color picker
+    document.addEventListener('contextmenu', captureEventId, true);
+
+    // Also capture mousedown for cases where context menu appears before click completes
+    document.addEventListener('mousedown', captureEventId, true);
   }
 
   function getTextColorForBackground(bgHex) {
