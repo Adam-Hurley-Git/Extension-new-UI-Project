@@ -382,7 +382,8 @@
         });
       });
       calendarColors = colors;
-      console.log('[EventColoring] Fetched colors for', Object.keys(calendarColors).length, 'calendars');
+      console.log('[EventColoring] Fetched colors for', Object.keys(calendarColors).length, 'calendars:',
+        Object.entries(calendarColors).map(([id, c]) => `${id}=${c.backgroundColor}`).join(', '));
     } catch (error) {
       console.error('[EventColoring] Failed to fetch calendar colors:', error);
       calendarColors = {};
@@ -426,16 +427,26 @@
       if (partialCalendarId) {
         // First try exact match
         if (calendarColors[partialCalendarId]) {
+          console.log('[EventColoring] Calendar color found (exact match):', partialCalendarId);
           return calendarColors[partialCalendarId].backgroundColor;
         }
 
         // The event ID often has truncated email (e.g., "adam.hurley.private@m" instead of full "@gmail.com")
-        // So we need to find a calendar that starts with this partial ID
-        for (const calendarId of Object.keys(calendarColors)) {
-          if (calendarId.startsWith(partialCalendarId)) {
-            return calendarColors[calendarId].backgroundColor;
+        // Extract the username part (before @) to match against full calendar IDs
+        const atIndex = partialCalendarId.indexOf('@');
+        if (atIndex > 0) {
+          const usernamePrefix = partialCalendarId.substring(0, atIndex);
+
+          for (const calendarId of Object.keys(calendarColors)) {
+            // Check if the calendar ID starts with the same username
+            if (calendarId.startsWith(usernamePrefix + '@')) {
+              console.log('[EventColoring] Calendar color found (username match):', calendarId, 'from partial:', partialCalendarId);
+              return calendarColors[calendarId].backgroundColor;
+            }
           }
         }
+
+        console.log('[EventColoring] No calendar color found for:', partialCalendarId, 'Available calendars:', Object.keys(calendarColors));
       }
 
       return null;
@@ -1111,14 +1122,23 @@
       const eventId = element.getAttribute('data-eventid');
       const calendarColor = getCalendarColorForEvent(eventId);
 
+      console.log('[EventColoring] Applying color to event chip:', {
+        eventId: eventId?.substring(0, 30) + '...',
+        calendarColor,
+        customColor: colorHex,
+        calendarColorsAvailable: Object.keys(calendarColors).length
+      });
+
       // Use a gradient to preserve the left 4px with calendar color
       // and apply our custom color to the rest of the element
       if (calendarColor) {
         const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${colorHex} 4px)`;
         element.style.setProperty('background', gradient, 'important');
+        console.log('[EventColoring] Applied gradient:', gradient);
       } else {
         // Fallback: just apply the custom color if we don't have calendar color
         element.style.setProperty('background-color', colorHex, 'important');
+        console.log('[EventColoring] Applied solid color (no calendar color found)');
       }
 
       element.style.borderColor = adjustColorBrightness(colorHex, -15);
