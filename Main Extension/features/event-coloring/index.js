@@ -23,6 +23,7 @@
   let settings = {};
   let eventColors = {};
   let categories = {};
+  let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor }
   let isEnabled = false;
   let colorPickerObserver = null;
   let colorRenderObserver = null;
@@ -367,6 +368,73 @@
   }
 
   // ========================================
+  // CALENDAR COLORS API
+  // ========================================
+
+  /**
+   * Fetch all calendar colors from background (single API call, cached)
+   */
+  async function fetchCalendarColors() {
+    try {
+      const colors = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'GET_CALENDAR_COLORS' }, (response) => {
+          resolve(response || {});
+        });
+      });
+      calendarColors = colors;
+      console.log('[EventColoring] Fetched colors for', Object.keys(calendarColors).length, 'calendars');
+    } catch (error) {
+      console.error('[EventColoring] Failed to fetch calendar colors:', error);
+      calendarColors = {};
+    }
+  }
+
+  /**
+   * Get calendar color for an event by its encoded event ID
+   * @param {string} encodedEventId - The data-eventid value
+   * @returns {string|null} Background color hex or null
+   */
+  function getCalendarColorForEvent(encodedEventId) {
+    if (!encodedEventId || Object.keys(calendarColors).length === 0) {
+      return null;
+    }
+
+    try {
+      let calendarId = null;
+
+      if (encodedEventId.startsWith('ttb_')) {
+        // TTB format: decode base64 after prefix
+        const base64Part = encodedEventId.slice(4);
+        const decoded = atob(base64Part);
+        const spaceIndex = decoded.indexOf(' ');
+        if (spaceIndex > 0) {
+          calendarId = decoded.substring(spaceIndex + 1);
+        }
+      } else {
+        // Standard format: base64 encoded with email suffix
+        try {
+          const decoded = atob(encodedEventId);
+          const spaceIndex = decoded.indexOf(' ');
+          if (spaceIndex > 0) {
+            calendarId = decoded.substring(spaceIndex + 1);
+          }
+        } catch (e) {
+          // Not base64, might be plain ID
+        }
+      }
+
+      if (calendarId && calendarColors[calendarId]) {
+        return calendarColors[calendarId].backgroundColor;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[EventColoring] Failed to get calendar color for event:', error);
+      return null;
+    }
+  }
+
+  // ========================================
   // INITIALIZATION
   // ========================================
 
@@ -398,6 +466,9 @@
     // Load event colors from storage
     eventColors = await window.cc3Storage.getAllEventColors();
     console.log('[EventColoring] Loaded', Object.keys(eventColors).length, 'event colors');
+
+    // Fetch calendar colors from API (single call, cached in background)
+    await fetchCalendarColors();
 
     // Start observers
     startColorPickerObserver();
@@ -458,24 +529,14 @@
       colorRenderObserver.disconnect();
     }
 
-    // Debounce color updates - use longer delay to let Google finish rendering
+    // Debounce color updates
     let renderTimeout = null;
-    let secondaryTimeout = null;
 
     colorRenderObserver = new MutationObserver(() => {
       if (renderTimeout) clearTimeout(renderTimeout);
-      if (secondaryTimeout) clearTimeout(secondaryTimeout);
-
-      // First pass - apply colors after short delay
       renderTimeout = setTimeout(() => {
         applyStoredColors();
-
-        // Second pass - re-apply after longer delay to catch any left indicators
-        // that weren't rendered in time on the first pass
-        secondaryTimeout = setTimeout(() => {
-          retryMissingLeftIndicators();
-        }, 300);
-      }, 150);
+      }, 100);
     });
 
     colorRenderObserver.observe(document.body, {
@@ -486,12 +547,6 @@
     });
 
     console.log('[EventColoring] Color render observer started');
-  }
-
-  // Re-check events - currently a no-op since the gradient approach handles everything
-  // in a single pass. Kept for potential future use.
-  function retryMissingLeftIndicators() {
-    // No action needed - gradient approach handles left indicator in single pass
   }
 
   function isColorPicker(element) {
@@ -1041,26 +1096,20 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // IMPORTANT: Capture the PARENT element's original background color BEFORE we change it
-      // This is Google's calendar color - we'll use it for the left indicator bar
-      if (!element.dataset.cfOriginalBgColor) {
-        let originalBgColor = element.style.backgroundColor ||
-                              window.getComputedStyle(element).backgroundColor;
+      // Get the calendar's color from API cache (using event ID to determine calendar)
+      const eventId = element.getAttribute('data-eventid');
+      const calendarColor = getCalendarColorForEvent(eventId);
 
-        // Check if color is valid (not empty, not transparent)
-        if (originalBgColor &&
-            originalBgColor !== 'transparent' &&
-            originalBgColor !== 'rgba(0, 0, 0, 0)' &&
-            originalBgColor !== '') {
-          element.dataset.cfOriginalBgColor = originalBgColor;
-        }
+      // Use a gradient to preserve the left 4px with calendar color
+      // and apply our custom color to the rest of the element
+      if (calendarColor) {
+        const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${colorHex} 4px)`;
+        element.style.setProperty('background', gradient, 'important');
+      } else {
+        // Fallback: just apply the custom color if we don't have calendar color
+        element.style.setProperty('background-color', colorHex, 'important');
       }
 
-      // Use a gradient to preserve the left 4px with original Google calendar color
-      // and apply our custom color to the rest of the element
-      const originalColor = element.dataset.cfOriginalBgColor || colorHex;
-      const gradient = `linear-gradient(to right, ${originalColor} 4px, ${colorHex} 4px)`;
-      element.style.setProperty('background', gradient, 'important');
       element.style.borderColor = adjustColorBrightness(colorHex, -15);
       element.dataset.cfEventColored = 'true';
 

@@ -233,6 +233,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleResolveCalendarEvent(message.calendarEventId).then(sendResponse);
       return true;
 
+    case 'GET_CALENDAR_COLORS':
+      // Fetch all calendar colors (single API call, cached)
+      GoogleCalendarAPI.fetchCalendarColors(message.forceRefresh || false).then(sendResponse);
+      return true;
+
+    case 'GET_CALENDAR_COLOR_FOR_EVENT':
+      // Get calendar color for a specific event ID
+      GoogleCalendarAPI.getCalendarColorFromEventId(message.eventId).then(sendResponse);
+      return true;
+
     case 'GET_LIST_DEFAULT_COLOR':
       getListDefaultColor(message.listId).then(sendResponse);
       return true;
