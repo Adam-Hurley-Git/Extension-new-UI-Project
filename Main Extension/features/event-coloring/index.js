@@ -458,14 +458,24 @@
       colorRenderObserver.disconnect();
     }
 
-    // Debounce color updates
+    // Debounce color updates - use longer delay to let Google finish rendering
     let renderTimeout = null;
+    let secondaryTimeout = null;
 
     colorRenderObserver = new MutationObserver(() => {
       if (renderTimeout) clearTimeout(renderTimeout);
+      if (secondaryTimeout) clearTimeout(secondaryTimeout);
+
+      // First pass - apply colors after short delay
       renderTimeout = setTimeout(() => {
         applyStoredColors();
-      }, 100);
+
+        // Second pass - re-apply after longer delay to catch any left indicators
+        // that weren't rendered in time on the first pass
+        secondaryTimeout = setTimeout(() => {
+          retryMissingLeftIndicators();
+        }, 300);
+      }, 150);
     });
 
     colorRenderObserver.observe(document.body, {
@@ -476,6 +486,29 @@
     });
 
     console.log('[EventColoring] Color render observer started');
+  }
+
+  // Re-check events that have our custom color but no stored original left indicator color
+  function retryMissingLeftIndicators() {
+    const coloredEvents = document.querySelectorAll('[data-eventchip][data-cf-event-colored="true"]');
+
+    coloredEvents.forEach((element) => {
+      const leftIndicator = element.querySelector('.jSrjCf');
+      if (leftIndicator instanceof HTMLElement && !leftIndicator.dataset.cfOriginalColor) {
+        // Try to capture the original color now
+        let originalColor = leftIndicator.style.backgroundColor ||
+                           window.getComputedStyle(leftIndicator).backgroundColor;
+
+        if (originalColor &&
+            originalColor !== 'transparent' &&
+            originalColor !== 'rgba(0, 0, 0, 0)' &&
+            originalColor !== '') {
+          leftIndicator.dataset.cfOriginalColor = originalColor;
+          leftIndicator.style.setProperty('background-color', originalColor, 'important');
+          console.log('[EventColoring] Restored left indicator on retry:', originalColor);
+        }
+      }
+    });
   }
 
   function isColorPicker(element) {
@@ -1026,13 +1059,23 @@
 
     if (isEventChip) {
       // IMPORTANT: Save the original Google calendar color from the left indicator bar
-      // before applying our custom color, so we can preserve it
+      // We store it in a data attribute so it persists across multiple color applications
       const leftIndicator = element.querySelector('.jSrjCf');
-      let originalCalendarColor = null;
+
       if (leftIndicator instanceof HTMLElement) {
-        // Get the current (original) background color before we change anything
-        originalCalendarColor = leftIndicator.style.backgroundColor ||
-                               window.getComputedStyle(leftIndicator).backgroundColor;
+        // Only capture and store original color if we haven't already
+        if (!leftIndicator.dataset.cfOriginalColor) {
+          let originalColor = leftIndicator.style.backgroundColor ||
+                             window.getComputedStyle(leftIndicator).backgroundColor;
+
+          // Check if color is valid (not empty, not transparent)
+          if (originalColor &&
+              originalColor !== 'transparent' &&
+              originalColor !== 'rgba(0, 0, 0, 0)' &&
+              originalColor !== '') {
+            leftIndicator.dataset.cfOriginalColor = originalColor;
+          }
+        }
       }
 
       // Color only the main container
@@ -1052,11 +1095,9 @@
       });
 
       // RESTORE the left indicator bar to show the original Google calendar color
-      // This lets users still see which calendar the event belongs to
-      if (leftIndicator instanceof HTMLElement && originalCalendarColor) {
-        leftIndicator.style.setProperty('background-color', originalCalendarColor, 'important');
-        // Don't mark it as cf-colored so it keeps original styling
-        delete leftIndicator.dataset.cfEventColored;
+      // Use the stored original color from data attribute
+      if (leftIndicator instanceof HTMLElement && leftIndicator.dataset.cfOriginalColor) {
+        leftIndicator.style.setProperty('background-color', leftIndicator.dataset.cfOriginalColor, 'important');
       }
 
     } else if (element.matches('[data-draggable-id]')) {
