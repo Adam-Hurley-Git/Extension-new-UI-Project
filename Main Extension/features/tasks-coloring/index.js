@@ -229,6 +229,7 @@ let listTextColorsCache = null;
 let completedStylingCache = null;
 let manualColorsCache = null;
 let recurringTaskColorsCache = null; // Manual colors for ALL instances of recurring tasks
+let taskFingerprintMapCache = null; // Maps taskId → fingerprint for moved recurring tasks
 let cacheLastUpdated = 0;
 const CACHE_LIFETIME = 30000; // 30 seconds
 let cachedColorMap = null;
@@ -1099,7 +1100,9 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
           // Storage listener fires when setRecurringTaskColor writes, and checks Priority 1 before Priority 2
           await clearTaskColor(taskId);
           await window.cc3Storage.setRecurringTaskColor(fingerprint.fingerprint, selectedColor);
-          // MARKER: Set fingerprint marker on element to preserve it if task is moved
+          // Store fingerprint mapping so this task keeps its color even if moved to different time
+          await window.cc3Storage.setTaskFingerprintMapping(taskId, fingerprint.fingerprint);
+          // MARKER: Set fingerprint marker on element to preserve it if task is moved (session-only backup)
           setFingerprintMarker(taskElement, fingerprint.fingerprint);
         } else {
           console.warn('[TaskColoring] Could not extract fingerprint, falling back to single instance coloring');
@@ -1136,6 +1139,8 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
         if (fingerprint.fingerprint) {
           console.log('[TaskColoring] Clearing color for ALL instances with fingerprint:', fingerprint.fingerprint);
           await window.cc3Storage.clearRecurringTaskColor(fingerprint.fingerprint);
+          // Clear all fingerprint mappings for this fingerprint (taskId → fingerprint)
+          await window.cc3Storage.clearAllTaskFingerprintMappingsForFingerprint(fingerprint.fingerprint);
           // MARKER: Clear fingerprint marker from element
           clearFingerprintMarker(taskElement);
           // Also clear markers from all elements with this fingerprint
@@ -1146,6 +1151,8 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
 
     // Always clear single-instance color as well
     await clearTaskColor(taskId);
+    // Also clear the fingerprint mapping for this specific task
+    await window.cc3Storage.clearTaskFingerprintMapping(taskId);
     onChanged?.(taskId, null);
 
     // Reset color picker or input to default
@@ -1727,6 +1734,7 @@ async function refreshColorCache() {
       listColors: listColorsCache,
       manualColors: manualColorsCache,
       recurringTaskColors: recurringTaskColorsCache,
+      taskFingerprintMap: taskFingerprintMapCache,
       listTextColors: listTextColorsCache,
       completedStyling: completedStylingCache,
     };
@@ -1734,12 +1742,13 @@ async function refreshColorCache() {
 
   // Fetch all data in parallel
   const [localData, syncData] = await Promise.all([
-    chrome.storage.local.get('cf.taskToListMap'),
+    chrome.storage.local.get(['cf.taskToListMap', 'cf.taskFingerprintMap']),
     chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.taskListColors', 'cf.taskListTextColors', 'settings']),
   ]);
 
   // Update cache
   taskToListMapCache = localData['cf.taskToListMap'] || {};
+  taskFingerprintMapCache = localData['cf.taskFingerprintMap'] || {};
   manualColorsCache = syncData['cf.taskColors'] || {};
   recurringTaskColorsCache = syncData['cf.recurringTaskColors'] || {};
   listColorsCache = syncData['cf.taskListColors'] || {};
@@ -1759,6 +1768,7 @@ async function refreshColorCache() {
     listColors: listColorsCache,
     manualColors: manualColorsCache,
     recurringTaskColors: recurringTaskColorsCache,
+    taskFingerprintMap: taskFingerprintMapCache,
     listTextColors: listTextColorsCache,
     completedStyling: completedStylingCache,
   };
@@ -1775,6 +1785,7 @@ function invalidateColorCache() {
   completedStylingCache = null;
   manualColorsCache = null;
   recurringTaskColorsCache = null;
+  taskFingerprintMapCache = null;
   // Also invalidate calendar mapping cache (NEW UI)
   invalidateCalendarMappingCache();
 }
@@ -1857,14 +1868,36 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   }
 
   // PRIORITY 2: Recurring color for ALL instances (fingerprint-based matching)
-  if (element && cache.recurringTaskColors) {
-    const fingerprint = extractTaskFingerprint(element);
-    if (fingerprint.fingerprint) {
-      const recurringColor = cache.recurringTaskColors[fingerprint.fingerprint];
+  if (cache.recurringTaskColors) {
+    // FIRST: Check if this taskId has a stored fingerprint mapping (for moved tasks)
+    // This allows tasks that have been moved to a different time to still find their recurring color
+    let fingerprintToUse = null;
+    const storedFingerprint = cache.taskFingerprintMap?.[taskId];
+    if (storedFingerprint && cache.recurringTaskColors[storedFingerprint]) {
+      fingerprintToUse = storedFingerprint;
+      console.log('[TaskColoring] Using stored fingerprint mapping for moved task:', taskId, '→', storedFingerprint);
+    }
+
+    // SECOND: If no stored mapping, extract fingerprint from DOM element
+    if (!fingerprintToUse && element) {
+      const fingerprint = extractTaskFingerprint(element);
+      if (fingerprint.fingerprint && cache.recurringTaskColors[fingerprint.fingerprint]) {
+        fingerprintToUse = fingerprint.fingerprint;
+      }
+    }
+
+    // If we found a valid fingerprint with a recurring color, apply it
+    if (fingerprintToUse) {
+      const recurringColor = cache.recurringTaskColors[fingerprintToUse];
       if (recurringColor) {
-        // MARKER: Set fingerprint marker on element to preserve it if task is moved
-        // This ensures the task keeps its recurring color even after time change
-        setFingerprintMarker(element, fingerprint.fingerprint);
+        // Store the fingerprint mapping so this task keeps its color if moved
+        // This is done asynchronously to not block painting
+        window.cc3Storage?.setTaskFingerprintMapping?.(taskId, fingerprintToUse);
+
+        // MARKER: Set fingerprint marker on element to preserve it if task is moved (session-only backup)
+        if (element) {
+          setFingerprintMarker(element, fingerprintToUse);
+        }
 
         if (isCompleted) {
           // For completed recurring manual tasks: use manual color with opacity from list settings
@@ -2541,6 +2574,13 @@ function initTasksColoring() {
       // CRITICAL: Don't repaint during reset
       if (!isResetting) {
         repaintSoon(); // Repaint with new mappings
+      }
+    }
+    if (area === 'local' && changes['cf.taskFingerprintMap']) {
+      invalidateColorCache();
+      // Don't repaint during reset
+      if (!isResetting) {
+        repaintSoon(); // Repaint with updated fingerprint mappings
       }
     }
   };
