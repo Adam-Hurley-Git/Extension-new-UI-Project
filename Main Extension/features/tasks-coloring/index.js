@@ -215,6 +215,8 @@ let initialized = false;
 let clickHandler = null;
 let gridObserver = null;
 let urlObserver = null;
+let styleObserver = null; // Watches for style changes on marked elements
+let dragEndHandler = null; // Handles drag-end events for task moves
 let popstateHandler = null;
 let repaintIntervalId = null;
 let storageChangeHandler = null;
@@ -527,6 +529,49 @@ function clearAllFingerprintMarkers(fingerprint) {
 }
 
 /**
+ * Re-apply color to a marked element after Google resets its styles (e.g., after drag/move)
+ * This is called when we detect style changes on elements with our fingerprint marker
+ * @param {HTMLElement} element - Task element with data-cf-fingerprint marker
+ */
+async function reapplyColorToMarkedElement(element) {
+  if (!element || !element.dataset?.cfFingerprint) return;
+
+  const fingerprint = element.dataset.cfFingerprint;
+  const cache = await refreshColorCache();
+
+  // Look up the recurring color for this fingerprint
+  const recurringColor = cache.recurringTaskColors?.[fingerprint];
+  if (!recurringColor) {
+    console.log('[TaskColoring] No recurring color found for marker:', fingerprint);
+    return;
+  }
+
+  // Check if element already has the correct color applied
+  const currentBg = element.style.backgroundColor;
+  if (currentBg && currentBg.includes('!important')) {
+    // Already has our styling, skip
+    return;
+  }
+
+  console.log('[TaskColoring] Re-applying color to moved task with marker:', fingerprint);
+
+  // Get task ID from element
+  const taskId = await getResolvedTaskId(element);
+  if (!taskId) return;
+
+  // Check if completed
+  const textEl = element.querySelector('.XuJrye');
+  const isCompleted = textEl?.textContent?.toLowerCase().includes('completed') &&
+                      !textEl?.textContent?.toLowerCase().includes('not completed');
+
+  // Apply the color using existing paint logic
+  const colorInfo = await getColorForTask(taskId, null, { element, isCompleted });
+  if (colorInfo) {
+    applyPaintIfNeeded(element, colorInfo);
+  }
+}
+
+/**
  * Store a task's fingerprint in the recurring task cache
  * @param {HTMLElement} element - Task element that was successfully colored
  * @param {string} listId - List ID that this task belongs to
@@ -653,6 +698,16 @@ function cleanupListeners() {
   if (urlObserver) {
     urlObserver.disconnect();
     urlObserver = null;
+  }
+
+  if (styleObserver) {
+    styleObserver.disconnect();
+    styleObserver = null;
+  }
+
+  if (dragEndHandler) {
+    document.removeEventListener('dragend', dragEndHandler, true);
+    dragEndHandler = null;
   }
 
   if (popstateHandler) {
@@ -2379,6 +2434,53 @@ function initTasksColoring() {
     }, 1000);
   }
 
+  // STYLE OBSERVER: Watch for style attribute changes on marked task elements
+  // This catches when Google resets styles after drag/move operations
+  styleObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+        const element = mutation.target;
+        // Only process elements with our fingerprint marker
+        if (element.dataset?.cfFingerprint) {
+          // Check if our color was removed (no !important in background)
+          const bg = element.style.backgroundColor;
+          if (!bg || !element.style.cssText.includes('background-color') || !element.style.cssText.includes('!important')) {
+            console.log('[TaskColoring] Style reset detected on marked element, re-applying color');
+            // Debounce re-application to avoid rapid-fire during drag
+            clearTimeout(element._cfReapplyTimeout);
+            element._cfReapplyTimeout = setTimeout(() => {
+              reapplyColorToMarkedElement(element);
+            }, 100);
+          }
+        }
+      }
+    }
+  });
+
+  // Observe the grid for style attribute changes on task elements
+  const styleObserverTarget = grid || document.body;
+  if (styleObserverTarget && styleObserverTarget instanceof Node) {
+    styleObserver.observe(styleObserverTarget, {
+      attributes: true,
+      attributeFilter: ['style'],
+      subtree: true,
+    });
+  }
+
+  // DRAG-END HANDLER: Re-apply colors after task drag/move completes
+  // Google Calendar resets styles during drag operations
+  dragEndHandler = (e) => {
+    // Check if the dragged element or its parent has our marker
+    const element = e.target.closest?.('[data-cf-fingerprint]');
+    if (element) {
+      console.log('[TaskColoring] Drag ended on marked element, scheduling re-paint');
+      // Multiple repaints to ensure we catch any late style updates from Google
+      setTimeout(() => reapplyColorToMarkedElement(element), 50);
+      setTimeout(() => reapplyColorToMarkedElement(element), 150);
+      setTimeout(() => reapplyColorToMarkedElement(element), 300);
+    }
+  };
+  document.addEventListener('dragend', dragEndHandler, true);
 
   // Listen for URL changes (navigation events)
   let lastUrl = location.href;
