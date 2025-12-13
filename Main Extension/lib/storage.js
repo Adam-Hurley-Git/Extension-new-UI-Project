@@ -336,92 +336,6 @@
   }
 
   // ========================================
-  // TASK FINGERPRINT MAPPING (for moved recurring tasks)
-  // ========================================
-  // Maps taskId → original fingerprint so moved tasks can still find their recurring color
-  // Storage: cf.taskFingerprintMap[taskId] = fingerprint (e.g., "3|3pm")
-
-  // Store fingerprint mapping for a task (when it gets a recurring color)
-  async function setTaskFingerprintMapping(taskId, fingerprint) {
-    if (!taskId || !fingerprint) return;
-
-    return new Promise((resolve) => {
-      chrome.storage.local.get('cf.taskFingerprintMap', (result) => {
-        const current = result['cf.taskFingerprintMap'] || {};
-        const updated = { ...current, [taskId]: fingerprint };
-
-        chrome.storage.local.set({ 'cf.taskFingerprintMap': updated }, () => {
-          console.log('[Storage] Stored task fingerprint mapping:', taskId, '→', fingerprint);
-          resolve(updated);
-        });
-      });
-    });
-  }
-
-  // Clear fingerprint mapping for a task
-  async function clearTaskFingerprintMapping(taskId) {
-    if (!taskId) return;
-
-    return new Promise((resolve) => {
-      chrome.storage.local.get('cf.taskFingerprintMap', (result) => {
-        const current = result['cf.taskFingerprintMap'] || {};
-        const updated = { ...current };
-        delete updated[taskId];
-
-        chrome.storage.local.set({ 'cf.taskFingerprintMap': updated }, () => {
-          resolve(updated);
-        });
-      });
-    });
-  }
-
-  // Clear all fingerprint mappings for a specific fingerprint value
-  // Used when clearing a recurring color to remove all associated task mappings
-  async function clearAllTaskFingerprintMappingsForFingerprint(fingerprint) {
-    if (!fingerprint) return;
-
-    return new Promise((resolve) => {
-      chrome.storage.local.get('cf.taskFingerprintMap', (result) => {
-        const current = result['cf.taskFingerprintMap'] || {};
-        const updated = {};
-
-        // Keep only mappings that don't match this fingerprint
-        for (const [taskId, fp] of Object.entries(current)) {
-          if (fp !== fingerprint) {
-            updated[taskId] = fp;
-          }
-        }
-
-        chrome.storage.local.set({ 'cf.taskFingerprintMap': updated }, () => {
-          console.log('[Storage] Cleared task fingerprint mappings for:', fingerprint);
-          resolve(updated);
-        });
-      });
-    });
-  }
-
-  // Get fingerprint mapping for a task
-  async function getTaskFingerprintMapping(taskId) {
-    if (!taskId) return null;
-
-    return new Promise((resolve) => {
-      chrome.storage.local.get('cf.taskFingerprintMap', (result) => {
-        const map = result['cf.taskFingerprintMap'] || {};
-        resolve(map[taskId] || null);
-      });
-    });
-  }
-
-  // Get all task fingerprint mappings
-  async function getAllTaskFingerprintMappings() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get('cf.taskFingerprintMap', (result) => {
-        resolve(result['cf.taskFingerprintMap'] || {});
-      });
-    });
-  }
-
-  // ========================================
   // TASK LIST COLORING FUNCTIONS
   // ========================================
 
@@ -1534,12 +1448,6 @@
     setRecurringTaskColor,
     clearRecurringTaskColor,
     getRecurringTaskColors,
-    // Task fingerprint mapping (for moved recurring tasks)
-    setTaskFingerprintMapping,
-    clearTaskFingerprintMapping,
-    clearAllTaskFingerprintMappingsForFingerprint,
-    getTaskFingerprintMapping,
-    getAllTaskFingerprintMappings,
     // Task list coloring functions
     setTaskListColoringEnabled,
     setTaskListDefaultColor,
