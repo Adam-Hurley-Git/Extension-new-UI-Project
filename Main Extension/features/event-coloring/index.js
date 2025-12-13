@@ -488,19 +488,10 @@
     console.log('[EventColoring] Color render observer started');
   }
 
-  // Re-check events that have our custom color but missing left indicator styling
+  // Re-check events - currently a no-op since the gradient approach handles everything
+  // in a single pass. Kept for potential future use.
   function retryMissingLeftIndicators() {
-    const coloredEvents = document.querySelectorAll('[data-eventchip][data-cf-event-colored="true"]');
-
-    coloredEvents.forEach((element) => {
-      const leftIndicator = element.querySelector('.jSrjCf');
-      if (leftIndicator instanceof HTMLElement) {
-        // If we have the original background color stored, apply it to the left indicator
-        if (element.dataset.cfOriginalBgColor) {
-          leftIndicator.style.setProperty('background-color', element.dataset.cfOriginalBgColor, 'important');
-        }
-      }
-    });
+    // No action needed - gradient approach handles left indicator in single pass
   }
 
   function isColorPicker(element) {
@@ -1065,8 +1056,11 @@
         }
       }
 
-      // Color only the main container
-      element.style.setProperty('background-color', colorHex, 'important');
+      // Use a gradient to preserve the left 4px with original Google calendar color
+      // and apply our custom color to the rest of the element
+      const originalColor = element.dataset.cfOriginalBgColor || colorHex;
+      const gradient = `linear-gradient(to right, ${originalColor} 4px, ${colorHex} 4px)`;
+      element.style.setProperty('background', gradient, 'important');
       element.style.borderColor = adjustColorBrightness(colorHex, -15);
       element.dataset.cfEventColored = 'true';
 
@@ -1080,13 +1074,6 @@
           child.style.color = textColor;
         }
       });
-
-      // Set the left indicator bar to show the original Google calendar color
-      // This preserves which calendar the event belongs to
-      const leftIndicator = element.querySelector('.jSrjCf');
-      if (leftIndicator instanceof HTMLElement && element.dataset.cfOriginalBgColor) {
-        leftIndicator.style.setProperty('background-color', element.dataset.cfOriginalBgColor, 'important');
-      }
 
     } else if (element.matches('[data-draggable-id]')) {
       // For draggable items (different event type)
