@@ -400,7 +400,7 @@
     }
 
     try {
-      let calendarId = null;
+      let partialCalendarId = null;
 
       if (encodedEventId.startsWith('ttb_')) {
         // TTB format: decode base64 after prefix
@@ -408,7 +408,7 @@
         const decoded = atob(base64Part);
         const spaceIndex = decoded.indexOf(' ');
         if (spaceIndex > 0) {
-          calendarId = decoded.substring(spaceIndex + 1);
+          partialCalendarId = decoded.substring(spaceIndex + 1);
         }
       } else {
         // Standard format: base64 encoded with email suffix
@@ -416,15 +416,26 @@
           const decoded = atob(encodedEventId);
           const spaceIndex = decoded.indexOf(' ');
           if (spaceIndex > 0) {
-            calendarId = decoded.substring(spaceIndex + 1);
+            partialCalendarId = decoded.substring(spaceIndex + 1);
           }
         } catch (e) {
           // Not base64, might be plain ID
         }
       }
 
-      if (calendarId && calendarColors[calendarId]) {
-        return calendarColors[calendarId].backgroundColor;
+      if (partialCalendarId) {
+        // First try exact match
+        if (calendarColors[partialCalendarId]) {
+          return calendarColors[partialCalendarId].backgroundColor;
+        }
+
+        // The event ID often has truncated email (e.g., "adam.hurley.private@m" instead of full "@gmail.com")
+        // So we need to find a calendar that starts with this partial ID
+        for (const calendarId of Object.keys(calendarColors)) {
+          if (calendarId.startsWith(partialCalendarId)) {
+            return calendarColors[calendarId].backgroundColor;
+          }
+        }
       }
 
       return null;
