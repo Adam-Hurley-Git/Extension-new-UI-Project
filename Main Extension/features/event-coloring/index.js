@@ -1025,6 +1025,16 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
+      // IMPORTANT: Save the original Google calendar color from the left indicator bar
+      // before applying our custom color, so we can preserve it
+      const leftIndicator = element.querySelector('.jSrjCf');
+      let originalCalendarColor = null;
+      if (leftIndicator instanceof HTMLElement) {
+        // Get the current (original) background color before we change anything
+        originalCalendarColor = leftIndicator.style.backgroundColor ||
+                               window.getComputedStyle(leftIndicator).backgroundColor;
+      }
+
       // Color only the main container
       element.style.setProperty('background-color', colorHex, 'important');
       element.style.borderColor = adjustColorBrightness(colorHex, -15);
@@ -1041,10 +1051,13 @@
         }
       });
 
-      // DO NOT color these child elements as it breaks rounded corners:
-      // - .jSrjCf (left color indicator bar)
-      // - .leOeGd (resize handle at bottom)
-      // - .QZVPzb, .Jcb6qd (container divs)
+      // RESTORE the left indicator bar to show the original Google calendar color
+      // This lets users still see which calendar the event belongs to
+      if (leftIndicator instanceof HTMLElement && originalCalendarColor) {
+        leftIndicator.style.setProperty('background-color', originalCalendarColor, 'important');
+        // Don't mark it as cf-colored so it keeps original styling
+        delete leftIndicator.dataset.cfEventColored;
+      }
 
     } else if (element.matches('[data-draggable-id]')) {
       // For draggable items (different event type)
