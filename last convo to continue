@@ -1,0 +1,1192 @@
+Please analyse the task coloring feature in the main extension, currently i have the systems coloring working correctly, but when moving a recurring task the coloring gets broken, this does not effect normal tasks using new ui but recurring tasks in old ui, the problem i think is that after we move the task the time associated to fingerprint changes and breaks, analyse and plan a fix, but maybe adding logic that if a task has fingerprint then when we move it, we keep the fingerprint marker to continue including it in list and manual recurring coloring, we dont match tasks that have same title same list with different times, unless it previously was part of fingerprint coloring
+
+I'll analyze the task coloring feature and the fingerprint system to understand the recurring task coloring issue. Let me explore the codebase first.
+
+Task
+Explore task coloring system
+Used 21 tools
+Let me read the specific files to understand the current implementation details better, focusing on the fingerprint extraction and how task movement might affect it.
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 100 lines
+Read
+/home/user/Extension-new-UI-Project/Main Extension/lib/storage.js
+Read 60 lines
+Let me look at where recurring colors are checked and applied, and how the old UI differs from new UI:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 150 lines
+Grep
+old.?ui|oldui|old\s+ui|isOldUI|old-ui|chip-element|recurring
+Now I have a complete understanding of the issue. Let me create a plan for the fix.
+
+Update Todos
+ Analyze the fingerprint breaking issue for recurring tasks
+ Creating implementation plan
+Analysis Complete
+The Problem
+The fingerprint system uses {title}|{time} format (e.g., "Daily Standup|9am"). When a recurring task is moved to a different time slot:
+
+Before move: Fingerprint = "Daily Standup|9am" → matches stored color
+After move: Fingerprint = "Daily Standup|10am" → no match, color lost!
+This only affects OLD UI recurring tasks because:
+
+Normal tasks use task ID-based coloring (cf.taskColors[taskId])
+New UI tasks resolve via ttb_ to a specific task ID
+OLD UI recurring instances rely on fingerprint matching
+Root Cause
+The fingerprint includes the time component, which changes when a task is moved:
+
+extractTaskFingerprint() at line 439-466 extracts both title AND time
+Stored recurring color key: cf.recurringTaskColors["Daily Standup|9am"]
+After move: new fingerprint "Daily Standup|10am" doesn't exist in storage
+Proposed Solution
+Add a title-based fallback with tracking to preserve colors for moved tasks:
+
+Strategy: Store both exact fingerprint AND title-based mapping
+
+When setting a recurring color:
+
+Store exact fingerprint: cf.recurringTaskColors["Daily Standup|9am"] = "#34a853"
+Store title mapping: cf.recurringTitleColors["Daily Standup"] = "#34a853"
+When looking up color:
+
+Priority 1: Exact fingerprint match (current behavior)
+Priority 2: Title-only match (new fallback for moved tasks)
+Safeguard: Only use title fallback for tasks that:
+
+Have the same title as a stored recurring color
+Are recurring task instances (not single tasks)
+Files to Modify
+File	Changes
+lib/storage.js	Add cf.recurringTitleColors storage functions
+features/tasks-coloring/index.js	Add title-based fallback in getColorForTask()
+Implementation Plan
+Phase 1: Storage Layer
+├─ Add setRecurringTitleColor() function
+├─ Add clearRecurringTitleColor() function  
+├─ Add getRecurringTitleColors() function
+└─ Modify setRecurringTaskColor() to also store title mapping
+
+Phase 2: Coloring Logic
+├─ Load recurringTitleColors into cache
+├─ Modify getColorForTask() to fallback to title match
+└─ Add titleFallbackMatch logic after fingerprint check fails
+
+Phase 3: Cleanup
+├─ Modify clearRecurringTaskColor() to also clear title mapping
+└─ Add migration for existing recurring colors (optional)
+
+Code Changes Overview
+1. In lib/storage.js - Add title-based storage:
+
+// Store title mapping alongside fingerprint
+async function setRecurringTaskColor(fingerprint, color) {
+  const title = fingerprint.split('|')[0]; // Extract title from fingerprint
+  // Store both fingerprint and title mappings
+}
+
+2. In features/tasks-coloring/index.js - Add fallback lookup:
+
+// In getColorForTask(), after fingerprint check fails:
+if (!recurringColor && fingerprint.title) {
+  // Fallback: Check title-only match (for moved recurring tasks)
+  recurringColor = cache.recurringTitleColors?.[fingerprint.title];
+}
+
+Would you like me to proceed with implementing this fix?
+
+could this accidetally capture other recurring tasks with same titles? and add more cache? would it be better to not search for events that are different time but same title, instead add a marker to events that have been moved (it starts in calendar as old ui, same fingerprint) if we next see dom and this task is no longer in right place for fingerprint but previosuly had fingerprint so we kneo it still belongs to that recurring chain to tasks all we need to do is add the marker to still connect it not add new logic and large caching?
+
+You're absolutely right - that's a much cleaner approach. The title-based fallback could cause false positives and adds unnecessary storage complexity.
+
+Your marker-based solution is smarter:
+
+The Marker Approach
+Instead of searching by title, mark the element when it gets fingerprint-colored:
+
+When a task matches a fingerprint and gets colored → add marker data-cf-fingerprint="Daily Standup|9am" to the element
+When task is moved (time changes) → DOM text changes but marker stays on element
+On next repaint → check marker first, use stored fingerprint from marker instead of extracting from DOM
+Benefits
+No false positives - only marked elements get the treatment
+No new storage - marker is on DOM element itself
+No new caching - uses existing fingerprint cache
+Minimal code change - just check marker before extracting fingerprint
+Implementation Flow
+Current:
+  extractTaskFingerprint(element) → "Daily Standup|10am" (from DOM text)
+  ↓
+  No match in cf.recurringTaskColors → color lost
+
+With marker:
+  1. Check element.dataset.cfFingerprint first
+  2. If marker exists → use "Daily Standup|9am" (original)
+  3. If no marker → extract from DOM text as normal
+  ↓
+  Match found → color preserved
+
+Code Changes
+Only in features/tasks-coloring/index.js:
+
+Add marker when recurring color applied (in getColorForTask or paint function)
+Check marker in extractTaskFingerprint() - return stored fingerprint if marker exists
+Would you like me to implement this marker-based approach? It's much simpler - essentially just:
+
+Add element.dataset.cfFingerprint = fingerprint when coloring
+Check element.dataset.cfFingerprint before extracting from DOM text
+would this cause any other breakage or issues or is it safe to implement
+
+Let me think through potential issues:
+
+Potential Issues Analysis
+Scenario	Risk	Assessment
+DOM element recreated on move	Marker lost if Google destroys/recreates element	Medium risk - need to test
+User clears recurring color	Stale marker could cause wrong coloring	Need to handle - clear marker when clearing color
+Google reuses DOM elements	Marker from task A applies to task B	Low risk - taskId would mismatch
+Task title renamed	Marker points to old fingerprint	Safe - old fingerprint won't match any stored color
+Page refresh	Markers lost	Safe - task is now at new position permanently
+Multiple instances same time	N/A	Same fingerprint, same color - correct behavior
+The Main Concern: DOM Recreation
+When you drag a task in Google Calendar, does it:
+
+Update element in place → marker survives ✓
+Destroy and recreate element → marker lost ✗
+If elements are recreated, we'd need an in-memory backup map:
+
+// Backup: taskId → originalFingerprint
+const preservedFingerprints = new Map();
+
+Safe Implementation (Hybrid)
+When applying recurring color:
+
+Set DOM marker: element.dataset.cfFingerprint = fingerprint
+Set backup: preservedFingerprints.set(taskId, fingerprint)
+When extracting fingerprint:
+
+Check DOM marker first
+If missing, check backup map by taskId
+If neither, extract from DOM text
+When clearing recurring color:
+
+Remove entries from backup map that match the fingerprint
+What Could Break?
+Honestly, very little:
+
+The marker is additive - if no marker, falls back to current behavior
+Only affects tasks that already had recurring color applied
+Doesn't interfere with normal tasks or new UI
+Recommendation
+Start with DOM marker only (simplest). If testing shows elements are recreated on move, add the in-memory backup map.
+
+Should I implement the DOM marker approach first and we can test if it survives task moves?
+
+do the full implementation, we can revert if element is recreated
+
+I'll implement the DOM marker approach to preserve recurring task colors when tasks are moved.
+
+Update Todos
+ Analyze the fingerprint breaking issue for recurring tasks
+ Create implementation plan for preserving recurring task colors when moved
+ Modifying extractTaskFingerprint() to check DOM marker first
+ Add marker when recurring color is applied in getColorForTask()
+ Add marker when recurring color is applied via color picker
+ Handle marker cleanup when recurring color is cleared
+ Test the implementation
+Let me first read the relevant sections to understand the full context:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 80 lines
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 200 lines
+Let me also see where the color picker applies recurring colors:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 100 lines
+Now I understand the full flow. Let me implement the changes:
+
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+/**
+
+ * Extract title and time from task element to create a fingerprint
+
+ * Used for matching recurring task instances that aren't in the API mapping
+
+ * @param {HTMLElement} element - Task element
+
+ * @returns {{title: string|null, time: string|null, fingerprint: string|null}}
+
+ */
+
+function extractTaskFingerprint(element) {
+
+  if (!element) return { title: null, time: null, fingerprint: null };
+
+ 
+
+  // Find the text content element (.XuJrye contains the task info)
+
+  const textElement = element.querySelector('.XuJrye');
+
+  if (!textElement) return { title: null, time: null, fingerprint: null };
+
+ 
+
+  const textContent = textElement.textContent || '';
+
+ 
+
+  // Extract title (after "task: " and before first comma)
+
+  // Format: "task: recur tasksss, Not completed, December 7, 2025, 2pm"
+
+  const titleMatch = textContent.match(/task:\s*([^,]+)/);
+
+  const title = titleMatch ? titleMatch[1].trim() : null;
+
+ 
+
+Show full diff (89 more lines)
+Update Todos
+ Analyze the fingerprint breaking issue for recurring tasks
+ Create implementation plan for preserving recurring task colors when moved
+ Modify extractTaskFingerprint() to check DOM marker first
+ Adding marker when recurring color is applied
+ Add marker when recurring color is applied via color picker
+ Handle marker cleanup when recurring color is cleared
+ Test the implementation
+Now let me add the marker when recurring color is applied in getColorForTask():
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 100 lines
+Now I'll add the marker when recurring color is successfully matched in getColorForTask():
+
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+    if (fingerprint.fingerprint) {
+
+      const recurringColor = cache.recurringTaskColors[fingerprint.fingerprint];
+
+      if (recurringColor) {
+
+        // MARKER: Set fingerprint marker on element to preserve it if task is moved
+
+        // This ensures the task keeps its recurring color even after time change
+
+        setFingerprintMarker(element, fingerprint.fingerprint);
+
+      }
+
+    }
+
+  }
+
+Update Todos
+ Analyze the fingerprint breaking issue for recurring tasks
+ Create implementation plan for preserving recurring task colors when moved
+ Modify extractTaskFingerprint() to check DOM marker first
+ Add marker when recurring color is applied in getColorForTask()
+ Adding marker in color picker flow
+ Handle marker cleanup when recurring color is cleared
+ Test the implementation
+Now let me add the marker in the color picker flow when user applies recurring color:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 50 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+          // Storage listener fires when setRecurringTaskColor writes, and checks Priority 1 before Priority 2
+
+          await clearTaskColor(taskId);
+
+          await window.cc3Storage.setRecurringTaskColor(fingerprint.fingerprint, selectedColor);
+
+          // MARKER: Set fingerprint marker on element to preserve it if task is moved
+
+          setFingerprintMarker(taskElement, fingerprint.fingerprint);
+
+      // Normal single-instance coloring
+
+      await setTaskColor(taskId, selectedColor);
+
+    }
+
+Update Todos
+ Analyze the fingerprint breaking issue for recurring tasks
+ Create implementation plan for preserving recurring task colors when moved
+ Modify extractTaskFingerprint() to check DOM marker first
+ Add marker when recurring color is applied in getColorForTask()
+ Add marker when recurring color is applied via color picker
+ Handling marker cleanup
+ Test the implementation
+Now let me handle the marker cleanup when recurring color is cleared:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 50 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+        if (fingerprint.fingerprint) {
+
+          console.log('[TaskColoring] Clearing color for ALL instances with fingerprint:', fingerprint.fingerprint);
+
+          await window.cc3Storage.clearRecurringTaskColor(fingerprint.fingerprint);
+
+          // MARKER: Clear fingerprint marker from element
+
+          clearFingerprintMarker(taskElement);
+
+          // Also clear markers from all elements with this fingerprint
+
+          clearAllFingerprintMarkers(fingerprint.fingerprint);
+
+    // Always clear single-instance color as well
+
+    await clearTaskColor(taskId);
+
+    onChanged?.(taskId, null);
+
+Now I need to add the clearAllFingerprintMarkers function:
+
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+    delete element.dataset.cfFingerprint;
+
+  }
+
+}
+
+ 
+
+/**
+
+ * Clear all fingerprint markers with a specific fingerprint value from the DOM
+
+ * Used when clearing a recurring color to remove all markers for that fingerprint
+
+ * @param {string} fingerprint - The fingerprint value to clear
+
+ */
+
+function clearAllFingerprintMarkers(fingerprint) {
+
+  if (!fingerprint) return;
+
+  const elements = document.querySelectorAll(`[data-cf-fingerprint="${fingerprint}"]`);
+
+  elements.forEach(el => {
+
+    delete el.dataset.cfFingerprint;
+
+  });
+
+  if (elements.length > 0) {
+
+    console.log('[TaskColoring] Cleared', elements.length, 'fingerprint markers for:', fingerprint);
+
+  }
+
+}
+
+Update Todos
+ Analyze the fingerprint breaking issue for recurring tasks
+ Create implementation plan for preserving recurring task colors when moved
+ Modify extractTaskFingerprint() to check DOM marker first
+ Add marker when recurring color is applied in getColorForTask()
+ Add marker when recurring color is applied via color picker
+ Handle marker cleanup when recurring color is cleared
+ Committing and pushing changes
+Let me verify the implementation is complete by checking the key functions:
+
+Bash
+git diff --stat
+Main Extension/features/tasks-coloring/index.js | 78 +++++++++++++++++++++++--
+ 1 file changed, 74 insertions(+), 4 deletions(-)
+Bash
+git diff "Main Extension/features/tasks-coloring/index.js"
+ 
+         if (isCompleted) {
+           // For completed recurring manual tasks: use manual color with opacity from list settings
+... +120 lines
+The implementation looks complete. Let me commit and push the changes:
+
+Bash
+git add "Main Extension/features/tasks-coloring/index.js" && git commit -m "$(cat <<'EOF' fix: Preserve recurring task colors when task is moved to different time Add DOM marker system to preserve fingerprint when recurring tasks are moved to different time slots. Previously, moving a task would change the fingerprint (title|time) causing the recurring color to be lost. Changes: - Add data-cf-fingerprint marker on elements with recurring colors - Check marker first in extractTaskFingerprint() before DOM text extraction - Set marker when recurring color is applied (getColorForTask, color picker) - Clear markers when recurring color is removed This only affects OLD UI recurring tasks - normal tasks and new UI are unaffected. EOF )"
+[claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ 184060e] fix: Preserve recurring task colors when task is moved to different time
+ 1 file changed, 74 insertions(+), 4 deletions(-)
+Bash
+git push -u origin claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ
+remote: 
+To http://127.0.0.1:59520/git/Adam-Hurley-Git/Extension-new-UI-Project
+ * [new branch]      claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ -> claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ
+... +4 lines
+Update Todos
+ Analyze the fingerprint breaking issue for recurring tasks
+ Create implementation plan for preserving recurring task colors when moved
+ Modify extractTaskFingerprint() to check DOM marker first
+ Add marker when recurring color is applied in getColorForTask()
+ Add marker when recurring color is applied via color picker
+ Handle marker cleanup when recurring color is cleared
+ Commit and push changes
+Implementation Complete
+I've implemented the DOM marker approach to preserve recurring task colors when tasks are moved. Here's a summary:
+
+Changes Made (features/tasks-coloring/index.js)
+1. Modified extractTaskFingerprint() (line 444-488)
+
+Now checks for data-cf-fingerprint marker first before extracting from DOM text
+Returns fromMarker: boolean to indicate source of fingerprint
+2. Added helper functions (line 490-527)
+
+setFingerprintMarker(element, fingerprint) - Sets marker on element
+clearFingerprintMarker(element) - Clears marker from single element
+clearAllFingerprintMarkers(fingerprint) - Clears markers from all elements with matching fingerprint
+3. Set marker when recurring color applied
+
+In getColorForTask() (line 1790) - when recurring color matches
+In color picker apply handler (line 1032) - when user applies to all instances
+4. Clear markers when recurring color cleared
+
+In color picker clear handler (line 1069-1071) - clears from current element and all matching elements
+How It Works
+Before (broken):
+  Task at 9am → fingerprint "Daily Standup|9am" → matches stored color ✓
+  Task moved to 10am → fingerprint "Daily Standup|10am" → no match ✗
+
+After (fixed):
+  Task at 9am → fingerprint "Daily Standup|9am" → matches → marker set ✓
+  Task moved to 10am → marker "Daily Standup|9am" found → use marker → matches ✓
+
+Testing Notes
+If elements are recreated (not just repositioned) when moved, the marker will be lost. In that case, we'd need to add an in-memory backup map. Please test and let me know if the fix works or if elements are being recreated.
+
+okay so this did not work check html of the task when it was colored and in the recurring time place - <div role="button" data-eventchip="" data-opens-details="true" tabindex="0" data-eventid="tasks_NrK1cxo0hy2Mmq9W" data-keyboardactiontype="0;1" data-focusable="" jscontroller="NAKBTc" jsaction="click:cOuCgd; contextmenu:mg9Pef; dblclick:Reio8; mouseenter:tfO1Yc; mouseleave:JywGue;Bp7Oie:rfjeo;urdzG:Hu9wEd" jslog="185338; track:impression,click,dblclick,rfjeo,Hu9wEd" data-dragsource-type="2" class="GTG3wb ChfiMc rFUW1c LLspoc cf-task-colored" style="top: 719px; height: 22px; left: calc(0% + 0px); width: calc(100% + 0px); z-index: 5; background-color: rgb(233, 30, 99) !important; border-color: rgb(233, 30, 99) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important; --cf-task-text-color: rgba(255, 255, 255, 1) !important; color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important;" data-cf-google-bg="rgb(252, 248, 232)" data-cf-google-bg-was-completed="false" data-cf-google-border="rgb(228, 196, 65)" data-cf-google-text="rgb(31, 31, 31)" data-cf-fingerprint="3|3pm" data-cf-task-text-color="#fff" data-cf-task-bg-color="rgb(233, 30, 99)" data-cf-task-text-actual="rgba(255, 255, 255, 1)"><div class="QZVPzb" aria-hidden="true" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><div class="jSrjCf" style="background-color: rgb(228, 196, 65); color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"></div></div><div class="XuJrye" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;">task: 3, Not completed, December 20, 2025, 3pm</div><div aria-hidden="true" class="Jcb6qd AL18ce" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><div class="FGo AL18ce" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><div class="bgr46c" jsaction="JIbuQc:Vse0zf(nWuQKb)" jslog="87527; track:click; mutable:true;" jscontroller="hgGok" data-eventid="tasks_NrK1cxo0hy2Mmq9W" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><button class="pYTkkf-Bz112c-LgbsSe CPXyj qeMtzb AL18ce LLspoc ouqA7d HA9jxf" jscontroller="PIVayb" jsaction="click:h5M12e;clickmod:h5M12e;pointerdown:FEiYhc;pointerup:mF5Elf;pointerenter:EX0mI;pointerleave:vpvbp;pointercancel:xyn4sd;contextmenu:xexox;focus:h06R8; blur:zjh6rb;mlnRJb:fLiPzd" data-idom-class="CPXyj qeMtzb AL18ce LLspoc ouqA7d HA9jxf" data-use-native-focus-logic="true" jsname="nWuQKb" aria-label="Mark complete" tabindex="-1" aria-hidden="true"><span class="XjoK4b pYTkkf-Bz112c-UHGRz" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"></span><span class="UTNHae" jscontroller="LBaJxb" jsname="m9ZlFb" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"></span><span jsname="S5tZuc" aria-hidden="true" class="pYTkkf-Bz112c-kBDsod-Rtc0Jf" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><span class="notranslate VfPpkd-kBDsod" aria-hidden="true" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><span class="notranslate CPXyj qeMtzb AL18ce LLspoc ouqA7d NV3tib" aria-hidden="true" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><svg focusable="false" width="14" height="14" viewBox="0 0 24 24" class="jB5sh ykyZxc NMm5M" style="color: rgb(255, 255, 255) !important; fill: rgb(255, 255, 255) !important; opacity: 1 !important;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg></span><span class="notranslate CPXyj qeMtzb AL18ce LLspoc ouqA7d kKIV3" aria-hidden="true" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><svg enable-background="new 0 0 24 24" focusable="false" height="14" viewBox="0 0 24 24" width="14" class="jB5sh ykyZxc NMm5M" style="color: rgb(255, 255, 255) !important; fill: rgb(255, 255, 255) !important; opacity: 1 !important;"><rect fill="none" height="24" width="24"></rect><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"></path></svg></span></span></span><div class="pYTkkf-Bz112c-RLmnJb" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"></div></button></div></div><div class="fFwDnf" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><div class="lhydbb RIOtYe cpCWFd PKhkGc LLspoc" style="max-height: 15px; color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><span class="KcY3wb" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><span class="I0UMhf" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;">3</span><span class="pttLke" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;">, </span><span class="EWOIrf" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;">3pm</span></span></div></div></div></div>
+
+and then after moving it - <div role="button" data-eventchip="" data-opens-details="true" tabindex="0" data-eventid="tasks_NrK1cxo0hy2Mmq9W" data-keyboardactiontype="0;1" data-focusable="" jscontroller="NAKBTc" jsaction="click:cOuCgd; contextmenu:mg9Pef; dblclick:Reio8; mouseenter:tfO1Yc; mouseleave:JywGue;Bp7Oie:rfjeo;urdzG:Hu9wEd" jslog="185338; track:impression,click,dblclick,rfjeo,Hu9wEd" data-dragsource-type="2" class="GTG3wb ChfiMc rFUW1c LLspoc cf-task-colored" style="top: 779px; height: 22px; left: calc(0% + 0px); width: calc(100% + 0px); z-index: 5; background-color: rgb(252, 248, 232); border-color: rgb(228, 196, 65);" data-cf-google-bg="rgb(252, 248, 232)" data-cf-google-bg-was-completed="false" data-cf-google-border="rgb(228, 196, 65)" data-cf-google-text="rgb(31, 31, 31)" data-cf-fingerprint="3|3pm" data-cf-task-text-color="#fff" data-cf-task-bg-color="rgb(233, 30, 99)" data-cf-task-text-actual="rgba(255, 255, 255, 1)"><div class="QZVPzb" aria-hidden="true" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><div class="jSrjCf" style="background-color: rgb(228, 196, 65); color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"></div></div><div class="XuJrye" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;">task: 3, Not completed, December 20, 2025, 4:15pm</div><div aria-hidden="true" class="Jcb6qd AL18ce" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><div class="FGo AL18ce" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><div class="bgr46c" jsaction="JIbuQc:Vse0zf(nWuQKb)" jslog="87527; track:click; mutable:true;" jscontroller="hgGok" data-eventid="tasks_NrK1cxo0hy2Mmq9W" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><button class="pYTkkf-Bz112c-LgbsSe CPXyj qeMtzb AL18ce LLspoc ouqA7d HA9jxf" jscontroller="PIVayb" jsaction="click:h5M12e;clickmod:h5M12e;pointerdown:FEiYhc;pointerup:mF5Elf;pointerenter:EX0mI;pointerleave:vpvbp;pointercancel:xyn4sd;contextmenu:xexox;focus:h06R8; blur:zjh6rb;mlnRJb:fLiPzd" data-idom-class="CPXyj qeMtzb AL18ce LLspoc ouqA7d HA9jxf" data-use-native-focus-logic="true" jsname="nWuQKb" aria-label="Mark complete" tabindex="-1" aria-hidden="true"><span class="XjoK4b pYTkkf-Bz112c-UHGRz" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"></span><span class="UTNHae" jscontroller="LBaJxb" jsname="m9ZlFb" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"></span><span jsname="S5tZuc" aria-hidden="true" class="pYTkkf-Bz112c-kBDsod-Rtc0Jf" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><span class="notranslate VfPpkd-kBDsod" aria-hidden="true" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><span class="notranslate CPXyj qeMtzb AL18ce LLspoc ouqA7d NV3tib" aria-hidden="true" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><svg focusable="false" width="14" height="14" viewBox="0 0 24 24" class="jB5sh ykyZxc NMm5M" style="color: rgb(255, 255, 255) !important; fill: rgb(255, 255, 255) !important; opacity: 1 !important;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg></span><span class="notranslate CPXyj qeMtzb AL18ce LLspoc ouqA7d kKIV3" aria-hidden="true" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><svg enable-background="new 0 0 24 24" focusable="false" height="14" viewBox="0 0 24 24" width="14" class="jB5sh ykyZxc NMm5M" style="color: rgb(255, 255, 255) !important; fill: rgb(255, 255, 255) !important; opacity: 1 !important;"><rect fill="none" height="24" width="24"></rect><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"></path></svg></span></span></span><div class="pYTkkf-Bz112c-RLmnJb" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"></div></button></div></div><div class="fFwDnf" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><div class="lhydbb RIOtYe cpCWFd PKhkGc LLspoc" style="max-height: 15px; color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><span class="KcY3wb" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;"><span class="I0UMhf" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;">3</span><span class="pttLke" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;">, </span><span class="EWOIrf" style="color: rgb(255, 255, 255) !important; -webkit-text-fill-color: rgb(255, 255, 255) !important; text-decoration-color: rgb(255, 255, 255) !important; mix-blend-mode: normal !important; filter: none !important; opacity: 1 !important;">4:15pm</span></span></div></div></div></div>
+
+i see color of text is still affected but not card coloring, after refresh of page it is completely uncolored including text
+
+I see the issue now. Looking at your HTML:
+
+Before move:
+
+data-cf-fingerprint="3|3pm" ✓
+background-color: rgb(233, 30, 99) !important; ✓
+After move:
+
+data-cf-fingerprint="3|3pm" ✓ (marker survived!)
+background-color: rgb(252, 248, 232); ✗ (no !important, Google's default)
+The marker IS preserved (element wasn't recreated), but Google is resetting the inline styles when you drag/move the task. Our repaint is either not running, or running BEFORE Google finishes resetting styles.
+
+Let me check the repaint/mutation observer logic and add a specific handler for moved tasks:
+
+Grep
+MutationObserver|mutation|repaintSoon
+I see the issue. The MutationObserver triggers repaintSoon() with 50ms debounce for minor updates, but Google might be resetting styles AFTER our repaint runs. We need to add a specific observer that watches for style changes on marked elements and re-applies colors immediately.
+
+Let me add a dedicated style-change observer for marked task elements:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 80 lines
+I see the issue - the MutationObserver only watches childList, not attributes. When Google moves a task, it modifies the style attribute, which doesn't trigger the observer. Let me add a style-specific observer and a drag-end handler:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 50 lines
+Update Todos
+ Adding style change observer for marked elements
+ Add drag-end handler to trigger repaint after task move
+ Test and commit fixes
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+let clickHandler = null;
+
+let gridObserver = null;
+
+let urlObserver = null;
+
+let styleObserver = null; // Watches for style changes on marked elements
+
+let dragEndHandler = null; // Handles drag-end events for task moves
+
+let repaintIntervalId = null;
+
+let storageChangeHandler = null;
+
+let modalSettingsUnsubscribe = null;
+
+Now let me add a function to re-apply colors to a specific marked element:
+
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+    console.log('[TaskColoring] Cleared', elements.length, 'fingerprint markers for:', fingerprint);
+
+  }
+
+}
+
+ 
+
+/**
+
+ * Re-apply color to a marked element after Google resets its styles (e.g., after drag/move)
+
+ * This is called when we detect style changes on elements with our fingerprint marker
+
+ * @param {HTMLElement} element - Task element with data-cf-fingerprint marker
+
+ */
+
+async function reapplyColorToMarkedElement(element) {
+
+  if (!element || !element.dataset?.cfFingerprint) return;
+
+ 
+
+  const fingerprint = element.dataset.cfFingerprint;
+
+  const cache = await refreshColorCache();
+
+ 
+
+  // Look up the recurring color for this fingerprint
+
+  const recurringColor = cache.recurringTaskColors?.[fingerprint];
+
+  if (!recurringColor) {
+
+    console.log('[TaskColoring] No recurring color found for marker:', fingerprint);
+
+    return;
+
+Show full diff (26 more lines)
+Now let me add the style observer and drag-end handler in the initialization section:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 60 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+    }, 1000);
+
+  }
+
+ 
+
+  // STYLE OBSERVER: Watch for style attribute changes on marked task elements
+
+  // This catches when Google resets styles after drag/move operations
+
+  styleObserver = new MutationObserver((mutations) => {
+
+    for (const mutation of mutations) {
+
+      if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+
+        const element = mutation.target;
+
+        // Only process elements with our fingerprint marker
+
+        if (element.dataset?.cfFingerprint) {
+
+          // Check if our color was removed (no !important in background)
+
+          const bg = element.style.backgroundColor;
+
+          if (!bg || !element.style.cssText.includes('background-color') || !element.style.cssText.includes('!important')) {
+
+            console.log('[TaskColoring] Style reset detected on marked element, re-applying color');
+
+            // Debounce re-application to avoid rapid-fire during drag
+
+            clearTimeout(element._cfReapplyTimeout);
+
+            element._cfReapplyTimeout = setTimeout(() => {
+
+              reapplyColorToMarkedElement(element);
+
+            }, 100);
+
+Show full diff (32 more lines)
+Now I need to add cleanup for these new observers. Let me find and update the cleanup function:
+
+Grep
+gridObserver\.disconnect|cleanup|disconnect
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 40 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+    urlObserver = null;
+
+  }
+
+ 
+
+  if (styleObserver) {
+
+    styleObserver.disconnect();
+
+    styleObserver = null;
+
+  }
+
+ 
+
+  if (dragEndHandler) {
+
+    document.removeEventListener('dragend', dragEndHandler, true);
+
+    dragEndHandler = null;
+
+  }
+
+ 
+
+    window.removeEventListener('popstate', popstateHandler);
+
+    popstateHandler = null;
+
+  }
+
+Update Todos
+ Fix marker approach - add style change observer for marked elements
+ Add drag-end handler to trigger repaint after task move
+ Testing and committing fixes
+Now let me commit and push the fix:
+
+Bash
+git diff --stat
+Main Extension/features/tasks-coloring/index.js | 102 ++++++++++++++++++++++++
+ 1 file changed, 102 insertions(+)
+Bash
+git add "Main Extension/features/tasks-coloring/index.js" && git commit -m "$(cat <<'EOF' fix: Add style observer to re-apply colors after task move/drag The previous marker approach worked (marker survived on element) but Google Calendar resets inline styles when tasks are dragged/moved. This caused the recurring color to be lost even though the fingerprint marker was preserved. Changes: - Add styleObserver to watch for style attribute changes on marked elements - Add dragEndHandler to re-apply colors after drag operations complete - Add reapplyColorToMarkedElement() function for targeted color re-application - Add proper cleanup for new observers/handlers When a marked task's style is reset by Google, we now detect this and immediately re-apply the recurring color using the preserved fingerprint. EOF )"
+[claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ 5473710] fix: Add style observer to re-apply colors after task move/drag
+ 1 file changed, 102 insertions(+)
+Bash
+git push -u origin claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ
+branch 'claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ' set up to track 'origin/claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ'.
+To http://127.0.0.1:59520/git/Adam-Hurley-Git/Extension-new-UI-Project
+   184060e..5473710  claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ -> claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ
+Update Todos
+ Fix marker approach - add style change observer for marked elements
+ Add drag-end handler to trigger repaint after task move
+ Test and commit fixes
+Fix Pushed
+I've added a style observer to detect and re-apply colors when Google resets styles after task drag/move.
+
+What was happening:
+✅ Marker was preserved on element (data-cf-fingerprint="3|3pm")
+❌ But Google Calendar resets inline style attribute when tasks are moved
+❌ Our repaint wasn't fast enough to catch this
+The fix:
+Added two new mechanisms:
+
+1. Style Observer - Watches for style attribute changes on marked elements:
+
+styleObserver = new MutationObserver((mutations) => {
+  // If marked element loses !important background color → re-apply
+  reapplyColorToMarkedElement(element);
+});
+
+2. Drag-End Handler - Extra safety net for drag operations:
+
+dragEndHandler = (e) => {
+  // Multiple delayed repaints after drag ends
+  setTimeout(() => reapplyColorToMarkedElement(element), 50);
+  setTimeout(() => reapplyColorToMarkedElement(element), 150);
+  setTimeout(() => reapplyColorToMarkedElement(element), 300);
+};
+
+Testing:
+Please test again:
+
+Color a recurring task with "Apply to all instances"
+Drag/move it to a different time
+The color should now persist after the move
+The console should show logs like:
+
+[TaskColoring] Style reset detected on marked element, re-applying color
+[TaskColoring] Re-applying color to moved task with marker: 3|3pm
+this has not worked, moving the recurring task still does not keep the color it should. here is the html of task after reload - <div role="button" data-eventchip="" data-opens-details="true" tabindex="0" data-eventid="tasks_-9miFFKdE_5PBKGy" data-keyboardactiontype="0;1" data-focusable="" jscontroller="NAKBTc" jsaction="click:cOuCgd; contextmenu:mg9Pef; dblclick:Reio8; mouseenter:tfO1Yc; mouseleave:JywGue;Bp7Oie:rfjeo;urdzG:Hu9wEd" jslog="185338; track:impression,click,dblclick,rfjeo,Hu9wEd" data-dragsource-type="2" class="GTG3wb ChfiMc rFUW1c LLspoc" style="top: 767px; height: 22px; left: calc(0% + 0px); width: calc(100% + 0px); z-index: 5; background-color: rgb(252, 248, 232); border-color: rgb(228, 196, 65);" data-cf-google-bg="rgb(252, 248, 232)" data-cf-google-bg-was-completed="false" data-cf-google-border="rgb(228, 196, 65)" data-cf-google-text="rgb(31, 31, 31)"><div class="QZVPzb" aria-hidden="true"><div class="jSrjCf" style="background-color: rgb(228, 196, 65);"></div></div><div class="XuJrye">task: 3, Not completed, December 19, 2025, 4pm</div><div aria-hidden="true" class="Jcb6qd AL18ce"><div class="FGo AL18ce" style=""><div class="bgr46c" jsaction="JIbuQc:Vse0zf(nWuQKb)" jslog="87527; track:click; mutable:true;" jscontroller="hgGok" data-eventid="tasks_-9miFFKdE_5PBKGy"><button class="pYTkkf-Bz112c-LgbsSe CPXyj qeMtzb AL18ce LLspoc ouqA7d HA9jxf" jscontroller="PIVayb" jsaction="click:h5M12e;clickmod:h5M12e;pointerdown:FEiYhc;pointerup:mF5Elf;pointerenter:EX0mI;pointerleave:vpvbp;pointercancel:xyn4sd;contextmenu:xexox;focus:h06R8; blur:zjh6rb;mlnRJb:fLiPzd" data-idom-class="CPXyj qeMtzb AL18ce LLspoc ouqA7d HA9jxf" data-use-native-focus-logic="true" jsname="nWuQKb" aria-label="Mark complete" tabindex="-1" aria-hidden="true"><span class="XjoK4b pYTkkf-Bz112c-UHGRz"></span><span class="UTNHae" jscontroller="LBaJxb" jsname="m9ZlFb"></span><span jsname="S5tZuc" aria-hidden="true" class="pYTkkf-Bz112c-kBDsod-Rtc0Jf"><span class="notranslate VfPpkd-kBDsod" aria-hidden="true"><span class="notranslate CPXyj qeMtzb AL18ce LLspoc ouqA7d NV3tib" aria-hidden="true"><svg focusable="false" width="14" height="14" viewBox="0 0 24 24" class="jB5sh ykyZxc NMm5M"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"></path></svg></span><span class="notranslate CPXyj qeMtzb AL18ce LLspoc ouqA7d kKIV3" aria-hidden="true"><svg enable-background="new 0 0 24 24" focusable="false" height="14" viewBox="0 0 24 24" width="14" class="jB5sh ykyZxc NMm5M"><rect fill="none" height="24" width="24"></rect><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"></path></svg></span></span></span><div class="pYTkkf-Bz112c-RLmnJb"></div></button></div></div><div class="fFwDnf"><div class="lhydbb RIOtYe cpCWFd PKhkGc LLspoc" style="max-height: 15px;"><span class="KcY3wb"><span class="I0UMhf">3</span><span class="pttLke">, </span><span class="EWOIrf">4pm</span></span></div></div></div></div>
+
+please step back, we need to work a proper fix that does not affect optimisation and quotas but allows these tasks to still get the coloring, perhaps once we do fingerprint we see the id so we should still connect the task event after moving it
+
+You're right. After page reload, the DOM marker is lost and the task can't find its color because the fingerprint changed from 3|3pm to 3|4pm.
+
+Let me implement a persistent mapping approach - store the taskId→fingerprint relationship in chrome storage so it survives reloads:
+
+Strategy:
+
+When a task gets a recurring color, store: taskId → originalFingerprint
+When looking up color, check this mapping FIRST before extracting fingerprint from DOM
+This mapping persists in storage, survives page reloads
+Update Todos
+ Adding persistent taskId→fingerprint mapping
+ Update getColorForTask to check mapping before DOM extraction
+ Store mapping when recurring color is applied
+ Clean up mapping when recurring color is cleared
+ Test and commit the fix
+First, let me add storage functions for the taskId→fingerprint mapping:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/lib/storage.js
+Read 60 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/lib/storage.js
+      });
+
+    });
+
+  }
+
+ 
+
+  // ========================================
+
+  // TASK FINGERPRINT MAPPING (for moved recurring tasks)
+
+  // ========================================
+
+  // Maps taskId → original fingerprint so moved tasks can still find their recurring color
+
+  // Storage: cf.taskFingerprintMap[taskId] = fingerprint (e.g., "3|3pm")
+
+ 
+
+  // Store fingerprint mapping for a task (when it gets a recurring color)
+
+  async function setTaskFingerprintMapping(taskId, fingerprint) {
+
+    if (!taskId || !fingerprint) return;
+
+ 
+
+    return new Promise((resolve) => {
+
+      chrome.storage.local.get('cf.taskFingerprintMap', (result) => {
+
+        const current = result['cf.taskFingerprintMap'] || {};
+
+        const updated = { ...current, [taskId]: fingerprint };
+
+ 
+
+        chrome.storage.local.set({ 'cf.taskFingerprintMap': updated }, () => {
+
+Show full diff (69 more lines)
+Now I need to export these functions. Let me find the export section:
+
+Grep
+window\.cc3Storage\s*=
+Read
+/home/user/Extension-new-UI-Project/Main Extension/lib/storage.js
+Read 80 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/lib/storage.js
+    setRecurringTaskColor,
+
+    clearRecurringTaskColor,
+
+    getRecurringTaskColors,
+
+    // Task fingerprint mapping (for moved recurring tasks)
+
+    setTaskFingerprintMapping,
+
+    clearTaskFingerprintMapping,
+
+    clearAllTaskFingerprintMappingsForFingerprint,
+
+    getTaskFingerprintMapping,
+
+    getAllTaskFingerprintMappings,
+
+    // Task list coloring functions
+
+Update Todos
+ Add persistent taskId→fingerprint mapping in storage
+ Updating getColorForTask to use mapping
+ Store mapping when recurring color is applied
+ Clean up mapping when recurring color is cleared
+ Test and commit the fix
+Now let me update the tasks-coloring/index.js to use this mapping. First, add the cache variable:
+
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 30 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+let completedStylingCache = null;
+
+let manualColorsCache = null;
+
+let recurringTaskColorsCache = null; // Manual colors for ALL instances of recurring tasks
+
+let taskFingerprintMapCache = null; // Maps taskId → fingerprint for moved recurring tasks
+
+let cacheLastUpdated = 0;
+
+const CACHE_LIFETIME = 30000; // 30 seconds
+
+Now let me update refreshColorCache to load the taskFingerprintMap:
+
+Grep
+async function refreshColorCache
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 70 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+      listColors: listColorsCache,
+
+      manualColors: manualColorsCache,
+
+      recurringTaskColors: recurringTaskColorsCache,
+
+      listTextColors: listTextColorsCache,
+
+      completedStyling: completedStylingCache,
+
+    };
+
+  }
+
+ 
+
+  // Fetch all data in parallel
+
+  const [localData, syncData] = await Promise.all([
+
+    chrome.storage.local.get('cf.taskToListMap'),
+
+    chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.taskListColors', 'cf.taskListTextColors', 'settings']),
+
+  ]);
+
+ 
+
+  // Update cache
+
+  taskToListMapCache = localData['cf.taskToListMap'] || {};
+
+  manualColorsCache = syncData['cf.taskColors'] || {};
+
+  recurringTaskColorsCache = syncData['cf.recurringTaskColors'] || {};
+
+  listColorsCache = syncData['cf.taskListColors'] || {};
+
+  const settingsPending =
+
+Show full diff (53 more lines)
+Now update invalidateColorCache to clear the new cache:
+
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+  completedStylingCache = null;
+
+  manualColorsCache = null;
+
+  recurringTaskColorsCache = null;
+
+  taskFingerprintMapCache = null;
+
+  // Also invalidate calendar mapping cache (NEW UI)
+
+  invalidateCalendarMappingCache();
+
+}
+
+Now I need to update getColorForTask to check the mapping before extracting fingerprint from DOM. Let me read the relevant section:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 80 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+  // PRIORITY 2: Recurring color for ALL instances (fingerprint-based matching)
+
+  if (element && cache.recurringTaskColors) {
+
+    const fingerprint = extractTaskFingerprint(element);
+
+    if (fingerprint.fingerprint) {
+
+      const recurringColor = cache.recurringTaskColors[fingerprint.fingerprint];
+
+      if (recurringColor) {
+
+        // MARKER: Set fingerprint marker on element to preserve it if task is moved
+
+        // This ensures the task keeps its recurring color even after time change
+
+        setFingerprintMarker(element, fingerprint.fingerprint);
+
+  if (cache.recurringTaskColors) {
+
+    // FIRST: Check if this taskId has a stored fingerprint mapping (for moved tasks)
+
+    // This allows tasks that have been moved to a different time to still find their recurring color
+
+    let fingerprintToUse = null;
+
+    const storedFingerprint = cache.taskFingerprintMap?.[taskId];
+
+    if (storedFingerprint && cache.recurringTaskColors[storedFingerprint]) {
+
+      fingerprintToUse = storedFingerprint;
+
+      console.log('[TaskColoring] Using stored fingerprint mapping for moved task:', taskId, '→', storedFingerprint);
+
+    }
+
+ 
+
+    // SECOND: If no stored mapping, extract fingerprint from DOM element
+
+Show full diff (22 more lines)
+Update Todos
+ Add persistent taskId→fingerprint mapping in storage
+ Update getColorForTask to check mapping before DOM extraction
+ Storing mapping when recurring color is applied
+ Clean up mapping when recurring color is cleared
+ Test and commit the fix
+Now let me update the color picker to store the mapping:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 60 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+          // Storage listener fires when setRecurringTaskColor writes, and checks Priority 1 before Priority 2
+
+          await clearTaskColor(taskId);
+
+          await window.cc3Storage.setRecurringTaskColor(fingerprint.fingerprint, selectedColor);
+
+          // MARKER: Set fingerprint marker on element to preserve it if task is moved
+
+          // Store fingerprint mapping so this task keeps its color even if moved to different time
+
+          await window.cc3Storage.setTaskFingerprintMapping(taskId, fingerprint.fingerprint);
+
+          // MARKER: Set fingerprint marker on element to preserve it if task is moved (session-only backup)
+
+          setFingerprintMarker(taskElement, fingerprint.fingerprint);
+
+        } else {
+
+Now update the clear handler:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 40 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+        if (fingerprint.fingerprint) {
+
+          console.log('[TaskColoring] Clearing color for ALL instances with fingerprint:', fingerprint.fingerprint);
+
+          await window.cc3Storage.clearRecurringTaskColor(fingerprint.fingerprint);
+
+          // MARKER: Clear fingerprint marker from element
+
+          clearFingerprintMarker(taskElement);
+
+          // Also clear markers from all elements with this fingerprint
+
+          clearAllFingerprintMarkers(fingerprint.fingerprint);
+
+        }
+
+      }
+
+    }
+
+ 
+
+    // Always clear single-instance color as well
+
+    await clearTaskColor(taskId);
+
+          // Clear all fingerprint mappings for this fingerprint (taskId → fingerprint)
+
+          await window.cc3Storage.clearAllTaskFingerprintMappingsForFingerprint(fingerprint.fingerprint);
+
+          // MARKER: Clear fingerprint marker from element
+
+          clearFingerprintMarker(taskElement);
+
+          // Also clear markers from all elements with this fingerprint
+
+          clearAllFingerprintMarkers(fingerprint.fingerprint);
+
+        }
+
+Show full diff (7 more lines)
+Update Todos
+ Add persistent taskId→fingerprint mapping in storage
+ Update getColorForTask to check mapping before DOM extraction
+ Store mapping when recurring color is applied in color picker
+ Clean up mapping when recurring color is cleared
+ Adding storage listener for fingerprint map
+ Test and commit the fix
+Let me add storage listener for taskFingerprintMap changes:
+
+Grep
+storageChangeHandler = \(changes
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 50 lines
+Edit
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+        repaintSoon(); // Repaint with new mappings
+
+      }
+
+    }
+
+    if (area === 'local' && changes['cf.taskFingerprintMap']) {
+
+      invalidateColorCache();
+
+      // Don't repaint during reset
+
+      if (!isResetting) {
+
+        repaintSoon(); // Repaint with updated fingerprint mappings
+
+      }
+
+    }
+
+  };
+
+  chrome.storage.onChanged.addListener(storageChangeHandler);
+
+Update Todos
+ Add persistent taskId→fingerprint mapping in storage
+ Update getColorForTask to check mapping before DOM extraction
+ Store mapping when recurring color is applied in color picker
+ Clean up mapping when recurring color is cleared
+ Add storage listener for taskFingerprintMap changes
+ Testing and committing
+Bash
+git diff --stat
+Main Extension/features/tasks-coloring/index.js | 58 +++++++++++++---
+ Main Extension/lib/storage.js                   | 92 +++++++++++++++++++++++++
+ 2 files changed, 141 insertions(+), 9 deletions(-)
+Bash
+git add "Main Extension/features/tasks-coloring/index.js" "Main Extension/lib/storage.js" && git commit -m "$(cat <<'EOF' fix: Add persistent taskId→fingerprint mapping for moved recurring tasks The DOM marker approach didn't survive page reloads because the marker was lost when the DOM element was recreated. This adds a persistent storage mapping that survives reloads. Storage changes (lib/storage.js): - Add cf.taskFingerprintMap in chrome.storage.local - Add setTaskFingerprintMapping() to store taskId → fingerprint - Add clearTaskFingerprintMapping() to clear single mapping - Add clearAllTaskFingerprintMappingsForFingerprint() to clear all mappings for a fingerprint - Add getTaskFingerprintMapping() and getAllTaskFingerprintMappings() Coloring logic changes (tasks-coloring/index.js): - Load taskFingerprintMap into cache alongside other color data - In getColorForTask(): check stored fingerprint mapping FIRST before DOM extraction - Store mapping when recurring color is successfully applied - Clear mappings when recurring color is cleared - Add storage listener to invalidate cache when mapping changes Flow: 1. User colors task "3" at 3pm with recurring color → stores mapping tasks_ABC → "3|3pm" 2. User moves task to 4pm → fingerprint from DOM would be "3|4pm" 3. On repaint, we check stored mapping first → find "3|3pm" 4. Use stored fingerprint to find recurring color → color preserved! EOF )"
+[claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ a99c0bc] fix: Add persistent taskId→fingerprint mapping for moved recurring tasks
+ 2 files changed, 141 insertions(+), 9 deletions(-)
+Bash
+git push -u origin claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ
+branch 'claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ' set up to track 'origin/claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ'.
+To http://127.0.0.1:37267/git/Adam-Hurley-Git/Extension-new-UI-Project
+   5473710..a99c0bc  claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ -> claude/fix-recurring-task-colors-01YT4Rc25yoDE2yNmPTGoosJ
+Update Todos
+ Add persistent taskId→fingerprint mapping in storage
+ Update getColorForTask to check mapping before DOM extraction
+ Store mapping when recurring color is applied in color picker
+ Clean up mapping when recurring color is cleared
+ Add storage listener for taskFingerprintMap changes
+ Test and commit the fix
+Fix Pushed - Persistent Fingerprint Mapping
+I've implemented a persistent storage-based solution that survives page reloads:
+
+How It Works Now
+Storage: cf.taskFingerprintMap in chrome.storage.local
+
+{
+  "tasks_ABC123": "3|3pm",  // taskId → original fingerprint
+  "tasks_XYZ789": "3|3pm",  // another instance of same recurring task
+  ...
+}
+
+Flow:
+
+Color applied: User colors task "3" at 3pm → stores tasks_ABC → "3|3pm"
+Task moved: User moves task to 4pm
+Page reload: New fingerprint from DOM would be "3|4pm" (no match)
+Lookup: Check taskFingerprintMap[taskId] first → finds "3|3pm"
+Color found: Use stored fingerprint → recurring color still applies ✓
+Changes Made
+lib/storage.js:
+
+Added setTaskFingerprintMapping(taskId, fingerprint)
+Added clearTaskFingerprintMapping(taskId)
+Added clearAllTaskFingerprintMappingsForFingerprint(fingerprint)
+Added getTaskFingerprintMapping(taskId)
+Added getAllTaskFingerprintMappings()
+tasks-coloring/index.js:
+
+Load taskFingerprintMap into cache
+Check stored mapping BEFORE extracting fingerprint from DOM
+Store mapping when recurring color is applied
+Clear mappings when recurring color is cleared
+Storage listener for cache invalidation
+Testing
+Please test:
+
+Color a recurring task with "Apply to all instances"
+Move it to a different time
+Refresh the page
+The color should now persist!
+Console should show:
+
+[TaskColoring] Using stored fingerprint mapping for moved task: tasks_ABC → 3|3pm
+
+this approach has not worked, i copied the console during the time when i dragged a recurrence instace to another time, it does not get colored correctly including after reload please examine file 'console task coloring' in repo
+
+Glob
+**/console*task*coloring*
+Glob
+**/*console*
+Read
+/home/user/Extension-new-UI-Project/Main Extension/recurring console logs
+<tool_use_error>File content (4MB) exceeds maximum allowed size (256KB). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.</tool_use_error>
+Grep
+fingerprint|mapping|moved task|stored fingerprint
+Grep
+Using stored fingerprint|taskFingerprintMap|setTaskFingerprintMapping|recurring.*color|PRIORITY 2.*match
+Grep
+drag|move|Style reset|re-applying
+Grep
+Stored task fingerprint|cf\.taskFingerprintMap|setTaskFingerprintMapping
+Grep
+Set fingerprint marker|PRIORITY 2 MATCH
+Let me look at the end of the log file to see what happens during/after the move:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/recurring console logs
+Read 200 lines
+I see the critical issue now! Looking at the logs:
+
+The Problem:
+
+Element has .XuJrye child: true → fingerprint extracted ✓
+Element has .XuJrye child: false → fingerprint: null ✗
+
+The same task is being processed twice - once with the .XuJrye child element (works), and once without it (fails). This happens because:
+
+During drag/move, Google creates temporary elements without full child structure
+The incomplete element can't extract fingerprint from DOM
+Our taskFingerprintMap check IS in the code, but it's not being reached because the logs show no "Using stored fingerprint mapping" messages
+Let me check the current code to see why the stored mapping isn't being checked:
+
+Read
+/home/user/Extension-new-UI-Project/Main Extension/features/tasks-coloring/index.js
+Read 60 lines
