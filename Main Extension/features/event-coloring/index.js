@@ -1079,12 +1079,14 @@
   }
 
   function setupEventClickCapture() {
-    document.addEventListener('click', (e) => {
+    // Capture both left-click and right-click (contextmenu) events
+    const captureEventId = (e) => {
       const eventElement = e.target.closest('[data-eventid]');
       if (eventElement) {
         const eventId = eventElement.getAttribute('data-eventid');
         if (eventId && !eventId.startsWith('tasks')) {
           lastClickedEventId = eventId;
+          console.log('[EventColoring] Captured event ID:', eventId, 'from', e.type);
           setTimeout(() => {
             if (lastClickedEventId === eventId) {
               lastClickedEventId = null;
@@ -1092,7 +1094,16 @@
           }, 10000);
         }
       }
-    }, true);
+    };
+
+    // Left-click
+    document.addEventListener('click', captureEventId, true);
+
+    // Right-click (context menu) - this is crucial for the right-click color picker
+    document.addEventListener('contextmenu', captureEventId, true);
+
+    // Also capture mousedown for cases where context menu appears before click completes
+    document.addEventListener('mousedown', captureEventId, true);
   }
 
   function getTextColorForBackground(bgHex) {
