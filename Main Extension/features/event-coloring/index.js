@@ -488,24 +488,16 @@
     console.log('[EventColoring] Color render observer started');
   }
 
-  // Re-check events that have our custom color but no stored original left indicator color
+  // Re-check events that have our custom color but missing left indicator styling
   function retryMissingLeftIndicators() {
     const coloredEvents = document.querySelectorAll('[data-eventchip][data-cf-event-colored="true"]');
 
     coloredEvents.forEach((element) => {
       const leftIndicator = element.querySelector('.jSrjCf');
-      if (leftIndicator instanceof HTMLElement && !leftIndicator.dataset.cfOriginalColor) {
-        // Try to capture the original color now
-        let originalColor = leftIndicator.style.backgroundColor ||
-                           window.getComputedStyle(leftIndicator).backgroundColor;
-
-        if (originalColor &&
-            originalColor !== 'transparent' &&
-            originalColor !== 'rgba(0, 0, 0, 0)' &&
-            originalColor !== '') {
-          leftIndicator.dataset.cfOriginalColor = originalColor;
-          leftIndicator.style.setProperty('background-color', originalColor, 'important');
-          console.log('[EventColoring] Restored left indicator on retry:', originalColor);
+      if (leftIndicator instanceof HTMLElement) {
+        // If we have the original background color stored, apply it to the left indicator
+        if (element.dataset.cfOriginalBgColor) {
+          leftIndicator.style.setProperty('background-color', element.dataset.cfOriginalBgColor, 'important');
         }
       }
     });
@@ -1058,23 +1050,18 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // IMPORTANT: Save the original Google calendar color from the left indicator bar
-      // We store it in a data attribute so it persists across multiple color applications
-      const leftIndicator = element.querySelector('.jSrjCf');
+      // IMPORTANT: Capture the PARENT element's original background color BEFORE we change it
+      // This is Google's calendar color - we'll use it for the left indicator bar
+      if (!element.dataset.cfOriginalBgColor) {
+        let originalBgColor = element.style.backgroundColor ||
+                              window.getComputedStyle(element).backgroundColor;
 
-      if (leftIndicator instanceof HTMLElement) {
-        // Only capture and store original color if we haven't already
-        if (!leftIndicator.dataset.cfOriginalColor) {
-          let originalColor = leftIndicator.style.backgroundColor ||
-                             window.getComputedStyle(leftIndicator).backgroundColor;
-
-          // Check if color is valid (not empty, not transparent)
-          if (originalColor &&
-              originalColor !== 'transparent' &&
-              originalColor !== 'rgba(0, 0, 0, 0)' &&
-              originalColor !== '') {
-            leftIndicator.dataset.cfOriginalColor = originalColor;
-          }
+        // Check if color is valid (not empty, not transparent)
+        if (originalBgColor &&
+            originalBgColor !== 'transparent' &&
+            originalBgColor !== 'rgba(0, 0, 0, 0)' &&
+            originalBgColor !== '') {
+          element.dataset.cfOriginalBgColor = originalBgColor;
         }
       }
 
@@ -1094,10 +1081,11 @@
         }
       });
 
-      // RESTORE the left indicator bar to show the original Google calendar color
-      // Use the stored original color from data attribute
-      if (leftIndicator instanceof HTMLElement && leftIndicator.dataset.cfOriginalColor) {
-        leftIndicator.style.setProperty('background-color', leftIndicator.dataset.cfOriginalColor, 'important');
+      // Set the left indicator bar to show the original Google calendar color
+      // This preserves which calendar the event belongs to
+      const leftIndicator = element.querySelector('.jSrjCf');
+      if (leftIndicator instanceof HTMLElement && element.dataset.cfOriginalBgColor) {
+        leftIndicator.style.setProperty('background-color', element.dataset.cfOriginalBgColor, 'important');
       }
 
     } else if (element.matches('[data-draggable-id]')) {
