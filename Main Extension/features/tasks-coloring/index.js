@@ -242,6 +242,13 @@ const CALENDAR_MAPPING_CACHE_LIFETIME = 30000; // 30 seconds
 // Used to match recurring instances that aren't in the API mapping
 let recurringTaskFingerprintCache = new Map(); // In-memory cache: "title|time" → listId
 
+// RECURRING TASK CHAINS (persistent storage)
+// Chain system: taskId → chainId, then chainId → color
+// This persists across refreshes and survives task time changes
+let taskIdToChainCache = null; // taskId → chainId mapping
+let chainMetadataCache = null; // chainId → { fingerprint, listId, lastSeen }
+let chainColorsCache = null; // chainId → color (manual "apply to all" colors)
+
 /**
  * Lookup value in map with base64 fallbacks
  * Tries: direct → decoded (atob) → encoded (btoa)
@@ -497,6 +504,164 @@ function getListIdFromFingerprint(element) {
   }
 
   return listId || null;
+}
+
+// ========================================
+// RECURRING TASK CHAIN FUNCTIONS
+// ========================================
+
+/**
+ * Build chain membership for a task
+ * Called when taskId is not yet in any chain
+ * @param {string} taskId - Task ID
+ * @param {HTMLElement} element - DOM element
+ * @param {Object} cache - Color cache from refreshColorCache()
+ * @returns {Promise<string|null>} ChainId if successfully built
+ */
+async function buildChainMembership(taskId, element, cache) {
+  if (!taskId || !element) return null;
+
+  // Extract fingerprint from DOM
+  const { fingerprint, title } = extractTaskFingerprint(element);
+  if (!fingerprint) {
+    console.log('[TaskColoring] Cannot build chain - no fingerprint for task:', taskId);
+    return null;
+  }
+
+  // Get listId (from API mapping first)
+  let listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+
+  // If not in API, try to find listId from existing chain with same fingerprint
+  if (!listId && cache.chainMetadata) {
+    for (const [cId, meta] of Object.entries(cache.chainMetadata)) {
+      if (meta.fingerprint === fingerprint && meta.listId) {
+        listId = meta.listId;
+        console.log('[TaskColoring] Found listId from existing chain:', cId, '→', listId);
+        break;
+      }
+    }
+  }
+
+  // If still no listId, try fingerprint cache (in-memory)
+  if (!listId) {
+    listId = recurringTaskFingerprintCache.get(fingerprint);
+  }
+
+  // Generate deterministic chainId
+  const chainId = listId ? `${listId}|${fingerprint}` : `unknown|${fingerprint}`;
+
+  // Check if chain already exists
+  const existingChain = cache.chainMetadata?.[chainId];
+
+  if (!existingChain) {
+    // Create new chain
+    await window.cc3Storage.setChainMetadata(chainId, {
+      fingerprint,
+      listId,
+      lastSeen: Date.now(),
+    });
+    // Update local cache
+    if (!chainMetadataCache) chainMetadataCache = {};
+    chainMetadataCache[chainId] = { fingerprint, listId, lastSeen: Date.now() };
+    console.log('[TaskColoring] Created new chain:', chainId);
+  } else {
+    // Update lastSeen timestamp (non-blocking)
+    window.cc3Storage.setChainMetadata(chainId, {
+      ...existingChain,
+      lastSeen: Date.now(),
+    }).catch(() => {});
+  }
+
+  // Add taskId to chain
+  await window.cc3Storage.setTaskIdToChain(taskId, chainId);
+
+  // Update local cache
+  if (!taskIdToChainCache) taskIdToChainCache = {};
+  taskIdToChainCache[taskId] = chainId;
+
+  console.log('[TaskColoring] Built chain membership:', taskId, '→', chainId);
+
+  return chainId;
+}
+
+/**
+ * Find a chain by fingerprint (for matching migrated chains or existing chains)
+ * @param {string} fingerprint - Fingerprint to search for
+ * @param {Object} chainMetadata - Chain metadata cache
+ * @returns {{chainId: string, meta: Object}|null} Chain info or null
+ */
+function findChainByFingerprint(fingerprint, chainMetadata) {
+  if (!fingerprint || !chainMetadata) return null;
+
+  for (const [chainId, meta] of Object.entries(chainMetadata)) {
+    if (meta.fingerprint === fingerprint) {
+      return { chainId, meta };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get chain color for a task, building chain membership if needed
+ * @param {string} taskId - Task ID
+ * @param {HTMLElement} element - DOM element
+ * @param {Object} cache - Color cache
+ * @returns {Promise<{chainId: string, color: string, listId: string}|null>}
+ */
+async function getChainColorForTask(taskId, element, cache) {
+  if (!taskId) return null;
+
+  // Check if taskId is already in a chain
+  let chainId = cache.taskIdToChain?.[taskId];
+
+  if (chainId) {
+    // TaskId is in a chain - return chain data
+    const chainColor = cache.chainColors?.[chainId];
+    const chainMeta = cache.chainMetadata?.[chainId];
+
+    // Update lastSeen (non-blocking)
+    if (chainMeta && window.cc3Storage?.setChainMetadata) {
+      window.cc3Storage.setChainMetadata(chainId, {
+        ...chainMeta,
+        lastSeen: Date.now(),
+      }).catch(() => {});
+    }
+
+    return {
+      chainId,
+      color: chainColor || null,
+      listId: chainMeta?.listId || null,
+    };
+  }
+
+  // TaskId not in a chain - try to find matching chain by fingerprint
+  if (element) {
+    const { fingerprint } = extractTaskFingerprint(element);
+    if (fingerprint) {
+      const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata);
+
+      if (existingChain) {
+        // Found existing chain with same fingerprint - add this taskId to it
+        chainId = existingChain.chainId;
+        await window.cc3Storage.setTaskIdToChain(taskId, chainId);
+
+        // Update local cache
+        if (!taskIdToChainCache) taskIdToChainCache = {};
+        taskIdToChainCache[taskId] = chainId;
+
+        console.log('[TaskColoring] Added taskId to existing chain:', taskId, '→', chainId);
+
+        return {
+          chainId,
+          color: cache.chainColors?.[chainId] || null,
+          listId: existingChain.meta?.listId || null,
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 // ========================================
@@ -980,8 +1145,43 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
 
         if (fingerprint.fingerprint) {
           // CRITICAL: Clear single-instance color FIRST to prevent storage listener from using stale color
-          // Storage listener fires when setRecurringTaskColor writes, and checks Priority 1 before Priority 2
           await clearTaskColor(taskId);
+
+          // Get or create chain for this task
+          const cache = await refreshColorCache();
+          let chainId = cache.taskIdToChain?.[taskId];
+
+          if (!chainId) {
+            // Build chain membership for this task
+            chainId = await buildChainMembership(taskId, taskElement, cache);
+          }
+
+          if (chainId) {
+            // Set color for the chain
+            await window.cc3Storage.setChainColor(chainId, selectedColor);
+            console.log('[TaskColoring] Set chain color:', chainId, '→', selectedColor);
+
+            // Scan DOM for other visible instances with same fingerprint/title and add them to chain
+            const { title } = fingerprint;
+            if (title) {
+              const allTaskElements = document.querySelectorAll('[data-eventid^="tasks."], [data-eventid^="tasks_"], [data-eventid^="ttb_"]');
+              for (const el of allTaskElements) {
+                if (el === taskElement) continue; // Skip the clicked element
+                const elFingerprint = extractTaskFingerprint(el);
+                // Match by title (same recurring series)
+                if (elFingerprint.title === title) {
+                  const elTaskId = await getResolvedTaskId(el);
+                  if (elTaskId && !cache.taskIdToChain?.[elTaskId]) {
+                    // Add this taskId to the same chain
+                    await window.cc3Storage.setTaskIdToChain(elTaskId, chainId);
+                    console.log('[TaskColoring] Added visible instance to chain:', elTaskId, '→', chainId);
+                  }
+                }
+              }
+            }
+          }
+
+          // LEGACY: Also store in old format for backward compatibility
           await window.cc3Storage.setRecurringTaskColor(fingerprint.fingerprint, selectedColor);
         } else {
           console.warn('[TaskColoring] Could not extract fingerprint, falling back to single instance coloring');
@@ -1015,6 +1215,16 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
       const taskElement = document.querySelector(`[data-eventid="tasks.${taskId}"], [data-eventid="tasks_${taskId}"], [data-taskid="${taskId}"]`);
       if (taskElement) {
         const fingerprint = extractTaskFingerprint(taskElement);
+
+        // Clear chain color if task is in a chain
+        const cache = await refreshColorCache();
+        const chainId = cache.taskIdToChain?.[taskId];
+        if (chainId) {
+          console.log('[TaskColoring] Clearing chain color:', chainId);
+          await window.cc3Storage.clearChainColor(chainId);
+        }
+
+        // LEGACY: Also clear old format
         if (fingerprint.fingerprint) {
           console.log('[TaskColoring] Clearing color for ALL instances with fingerprint:', fingerprint.fingerprint);
           await window.cc3Storage.clearRecurringTaskColor(fingerprint.fingerprint);
@@ -1607,13 +1817,17 @@ async function refreshColorCache() {
       recurringTaskColors: recurringTaskColorsCache,
       listTextColors: listTextColorsCache,
       completedStyling: completedStylingCache,
+      // Chain data
+      taskIdToChain: taskIdToChainCache,
+      chainMetadata: chainMetadataCache,
+      chainColors: chainColorsCache,
     };
   }
 
   // Fetch all data in parallel
   const [localData, syncData] = await Promise.all([
-    chrome.storage.local.get('cf.taskToListMap'),
-    chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.taskListColors', 'cf.taskListTextColors', 'settings']),
+    chrome.storage.local.get(['cf.taskToListMap', 'cf.taskIdToChainId', 'cf.recurringChains']),
+    chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.recurringChainColors', 'cf.taskListColors', 'cf.taskListTextColors', 'settings']),
   ]);
 
   // Update cache
@@ -1630,6 +1844,12 @@ async function refreshColorCache() {
     ...(syncData['cf.taskListTextColors'] || {}),
   };
   completedStylingCache = syncData.settings?.taskListColoring?.completedStyling || {};
+
+  // Chain data cache
+  taskIdToChainCache = localData['cf.taskIdToChainId'] || {};
+  chainMetadataCache = localData['cf.recurringChains'] || {};
+  chainColorsCache = syncData['cf.recurringChainColors'] || {};
+
   cacheLastUpdated = now;
 
   return {
@@ -1639,6 +1859,10 @@ async function refreshColorCache() {
     recurringTaskColors: recurringTaskColorsCache,
     listTextColors: listTextColorsCache,
     completedStyling: completedStylingCache,
+    // Chain data
+    taskIdToChain: taskIdToChainCache,
+    chainMetadata: chainMetadataCache,
+    chainColors: chainColorsCache,
   };
 }
 
@@ -1653,6 +1877,10 @@ function invalidateColorCache() {
   completedStylingCache = null;
   manualColorsCache = null;
   recurringTaskColorsCache = null;
+  // Chain caches
+  taskIdToChainCache = null;
+  chainMetadataCache = null;
+  chainColorsCache = null;
   // Also invalidate calendar mapping cache (NEW UI)
   invalidateCalendarMappingCache();
 }
@@ -1734,15 +1962,57 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     });
   }
 
-  // PRIORITY 2: Recurring color for ALL instances (fingerprint-based matching)
-  if (element && cache.recurringTaskColors) {
+  // PRIORITY 2: Chain-based recurring color for ALL instances
+  // Uses taskId → chainId mapping (persists across moves)
+  // Falls back to fingerprint matching for new instances
+  const chainData = await getChainColorForTask(taskId, element, cache);
+
+  if (chainData?.color) {
+    // Found chain color - use it
+    const recurringColor = chainData.color;
+
+    // Update listId from chain if we don't have one
+    if (!listId && chainData.listId) {
+      listId = chainData.listId;
+    }
+
+    // Re-get completed styling with potentially updated listId
+    const chainCompletedStyling = listId ? cache.completedStyling?.[listId] : null;
+
+    if (isCompleted) {
+      // For completed recurring manual tasks: use manual color with opacity from list settings
+      const { bgOpacity, textOpacity } = getCompletedOpacities(chainCompletedStyling, cache);
+      return {
+        backgroundColor: recurringColor,
+        textColor: overrideTextColor || pickContrastingText(recurringColor),
+        bgOpacity,
+        textOpacity,
+      };
+    }
+
+    // Pending recurring manual task: full opacity
+    return buildColorInfo({
+      baseColor: recurringColor,
+      pendingTextColor: null, // Don't use list text color for manual backgrounds
+      overrideTextColor,
+      isCompleted: false,
+      completedStyling: null,
+    });
+  }
+
+  // LEGACY FALLBACK: Old fingerprint-based recurring colors (for backward compatibility)
+  // This handles colors stored before the chain system was implemented
+  if (element && cache.recurringTaskColors && Object.keys(cache.recurringTaskColors).length > 0) {
     const fingerprint = extractTaskFingerprint(element);
     if (fingerprint.fingerprint) {
       const recurringColor = cache.recurringTaskColors[fingerprint.fingerprint];
       if (recurringColor) {
+        // Build chain membership for this task so it uses chains going forward
+        if (taskId) {
+          buildChainMembership(taskId, element, cache).catch(() => {});
+        }
 
         if (isCompleted) {
-          // For completed recurring manual tasks: use manual color with opacity from list settings
           const { bgOpacity, textOpacity } = getCompletedOpacities(completedStyling, cache);
           return {
             backgroundColor: recurringColor,
@@ -1752,10 +2022,9 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
           };
         }
 
-        // Pending recurring manual task: full opacity
         return buildColorInfo({
           baseColor: recurringColor,
-          pendingTextColor: null, // Don't use list text color for manual backgrounds
+          pendingTextColor: null,
           overrideTextColor,
           isCompleted: false,
           completedStyling: null,
@@ -1765,6 +2034,11 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   }
 
   // PRIORITY 3: List default color (lowest priority)
+  // Use listId from chain if we got one
+  if (!listId && chainData?.listId) {
+    listId = chainData.listId;
+  }
+
   if (listId) {
     const listBgColor = cache.listColors[listId];
     const hasTextColor = !!pendingTextColor;
@@ -1778,6 +2052,12 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
       // Store fingerprint for recurring task matching (if element provided)
       if (element) {
         storeFingerprintForRecurringTasks(element, listId);
+
+        // Build chain membership so listId persists when task is moved
+        // This is non-blocking to avoid slowing down paint
+        if (taskId && !cache.taskIdToChain?.[taskId]) {
+          buildChainMembership(taskId, element, cache).catch(() => {});
+        }
       }
 
       return buildColorInfo({
@@ -2169,6 +2449,25 @@ function initTasksColoring() {
   }
   initialized = true;
 
+  // CHAIN SYSTEM: Migration and cleanup (non-blocking)
+  (async () => {
+    try {
+      // Migrate old recurringTaskColors to chain system (runs once)
+      const migrationResult = await window.cc3Storage.migrateToChainSystem();
+      if (migrationResult?.migrated && migrationResult?.count > 0) {
+        console.log('[Task Coloring] Migrated', migrationResult.count, 'recurring colors to chain system');
+      }
+
+      // Cleanup stale chains older than 90 days (periodic maintenance)
+      const cleanedUp = await window.cc3Storage.cleanupStaleChains(90);
+      if (cleanedUp > 0) {
+        console.log('[Task Coloring] Cleaned up', cleanedUp, 'stale chains');
+      }
+    } catch (error) {
+      console.error('[Task Coloring] Chain migration/cleanup error:', error);
+    }
+  })();
+
   // AUTO-SYNC ON PAGE LOAD
   // Trigger incremental sync if last sync > 30 minutes ago
   (async () => {
@@ -2364,11 +2663,25 @@ function initTasksColoring() {
         repaintSoon();
       }
     }
+    // Chain colors (sync storage)
+    if (area === 'sync' && changes['cf.recurringChainColors']) {
+      invalidateColorCache();
+      if (!isResetting) {
+        repaintSoon();
+      }
+    }
     if (area === 'local' && changes['cf.taskToListMap']) {
       invalidateColorCache();
       // CRITICAL: Don't repaint during reset
       if (!isResetting) {
         repaintSoon(); // Repaint with new mappings
+      }
+    }
+    // Chain data (local storage)
+    if (area === 'local' && (changes['cf.taskIdToChainId'] || changes['cf.recurringChains'])) {
+      invalidateColorCache();
+      if (!isResetting) {
+        repaintSoon();
       }
     }
   };

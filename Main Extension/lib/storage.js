@@ -336,6 +336,322 @@
   }
 
   // ========================================
+  // RECURRING TASK CHAINS
+  // ========================================
+  // Chain-based system for recurring task coloring
+  // - TaskId → ChainId mapping (LOCAL storage - large capacity)
+  // - Chain metadata: fingerprint, listId, lastSeen (LOCAL storage)
+  // - Chain colors (SYNC storage - small, syncs across devices)
+  //
+  // ChainId format: "${listId}|${fingerprint}" e.g., "listA123|Meeting|10am"
+  // This ensures different lists with same title/time are separate chains
+
+  /**
+   * Set taskId → chainId mapping
+   * @param {string} taskId - Task ID
+   * @param {string} chainId - Chain ID
+   */
+  async function setTaskIdToChain(taskId, chainId) {
+    if (!taskId || !chainId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.taskIdToChainId', (result) => {
+        const current = result['cf.taskIdToChainId'] || {};
+        const updated = { ...current, [taskId]: chainId };
+
+        chrome.storage.local.set({ 'cf.taskIdToChainId': updated }, () => {
+          resolve(updated);
+        });
+      });
+    });
+  }
+
+  /**
+   * Get all taskId → chainId mappings
+   * @returns {Promise<Object>} All mappings
+   */
+  async function getTaskIdToChainMap() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.taskIdToChainId', (result) => {
+        resolve(result['cf.taskIdToChainId'] || {});
+      });
+    });
+  }
+
+  /**
+   * Remove a taskId from its chain
+   * @param {string} taskId - Task ID to remove
+   */
+  async function removeTaskIdFromChain(taskId) {
+    if (!taskId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.taskIdToChainId', (result) => {
+        const current = result['cf.taskIdToChainId'] || {};
+        const updated = { ...current };
+        delete updated[taskId];
+
+        chrome.storage.local.set({ 'cf.taskIdToChainId': updated }, () => {
+          resolve(updated);
+        });
+      });
+    });
+  }
+
+  /**
+   * Set chain metadata
+   * @param {string} chainId - Chain ID
+   * @param {Object} metadata - { fingerprint, listId, lastSeen }
+   */
+  async function setChainMetadata(chainId, metadata) {
+    if (!chainId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.recurringChains', (result) => {
+        const current = result['cf.recurringChains'] || {};
+        const updated = {
+          ...current,
+          [chainId]: {
+            ...metadata,
+            lastSeen: metadata.lastSeen || Date.now(),
+          },
+        };
+
+        chrome.storage.local.set({ 'cf.recurringChains': updated }, () => {
+          resolve(updated);
+        });
+      });
+    });
+  }
+
+  /**
+   * Get metadata for a specific chain
+   * @param {string} chainId - Chain ID
+   * @returns {Promise<Object|null>} Chain metadata or null
+   */
+  async function getChainMetadata(chainId) {
+    if (!chainId) return null;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.recurringChains', (result) => {
+        const chains = result['cf.recurringChains'] || {};
+        resolve(chains[chainId] || null);
+      });
+    });
+  }
+
+  /**
+   * Get all chain metadata
+   * @returns {Promise<Object>} All chain metadata
+   */
+  async function getAllChainMetadata() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.recurringChains', (result) => {
+        resolve(result['cf.recurringChains'] || {});
+      });
+    });
+  }
+
+  /**
+   * Remove a chain and all its taskId mappings
+   * @param {string} chainId - Chain ID to remove
+   */
+  async function removeChain(chainId) {
+    if (!chainId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['cf.recurringChains', 'cf.taskIdToChainId'], (result) => {
+        const chains = { ...(result['cf.recurringChains'] || {}) };
+        const mappings = { ...(result['cf.taskIdToChainId'] || {}) };
+
+        // Remove chain metadata
+        delete chains[chainId];
+
+        // Remove all taskId mappings pointing to this chain
+        for (const [taskId, cId] of Object.entries(mappings)) {
+          if (cId === chainId) {
+            delete mappings[taskId];
+          }
+        }
+
+        chrome.storage.local.set({
+          'cf.recurringChains': chains,
+          'cf.taskIdToChainId': mappings,
+        }, () => {
+          // Also remove chain color from sync storage
+          chrome.storage.sync.get('cf.recurringChainColors', (syncResult) => {
+            const colors = { ...(syncResult['cf.recurringChainColors'] || {}) };
+            delete colors[chainId];
+            chrome.storage.sync.set({ 'cf.recurringChainColors': colors }, () => {
+              resolve();
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /**
+   * Set color for a chain (SYNC storage - syncs across devices)
+   * @param {string} chainId - Chain ID
+   * @param {string} color - Hex color
+   */
+  async function setChainColor(chainId, color) {
+    if (!chainId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.sync.get('cf.recurringChainColors', (result) => {
+        const current = result['cf.recurringChainColors'] || {};
+        const updated = { ...current, [chainId]: color };
+
+        chrome.storage.sync.set({ 'cf.recurringChainColors': updated }, () => {
+          resolve(updated);
+        });
+      });
+    });
+  }
+
+  /**
+   * Get all chain colors
+   * @returns {Promise<Object>} All chain colors
+   */
+  async function getChainColors() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get('cf.recurringChainColors', (result) => {
+        resolve(result['cf.recurringChainColors'] || {});
+      });
+    });
+  }
+
+  /**
+   * Clear color for a chain
+   * @param {string} chainId - Chain ID
+   */
+  async function clearChainColor(chainId) {
+    if (!chainId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.sync.get('cf.recurringChainColors', (result) => {
+        const current = result['cf.recurringChainColors'] || {};
+        const updated = { ...current };
+        delete updated[chainId];
+
+        chrome.storage.sync.set({ 'cf.recurringChainColors': updated }, () => {
+          resolve(updated);
+        });
+      });
+    });
+  }
+
+  /**
+   * Cleanup stale chains not seen in X days
+   * @param {number} maxAgeDays - Maximum age in days (default 90)
+   * @returns {Promise<number>} Number of chains cleaned up
+   */
+  async function cleanupStaleChains(maxAgeDays = 90) {
+    const maxAge = maxAgeDays * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['cf.recurringChains', 'cf.taskIdToChainId'], (localResult) => {
+        chrome.storage.sync.get('cf.recurringChainColors', (syncResult) => {
+          const chains = { ...(localResult['cf.recurringChains'] || {}) };
+          const mappings = { ...(localResult['cf.taskIdToChainId'] || {}) };
+          const colors = { ...(syncResult['cf.recurringChainColors'] || {}) };
+
+          const staleChainIds = [];
+          for (const [chainId, meta] of Object.entries(chains)) {
+            if (now - (meta.lastSeen || 0) > maxAge) {
+              staleChainIds.push(chainId);
+            }
+          }
+
+          if (staleChainIds.length === 0) {
+            resolve(0);
+            return;
+          }
+
+          // Remove stale chains
+          for (const chainId of staleChainIds) {
+            delete chains[chainId];
+            delete colors[chainId];
+          }
+
+          // Remove taskId mappings pointing to stale chains
+          for (const [taskId, chainId] of Object.entries(mappings)) {
+            if (staleChainIds.includes(chainId)) {
+              delete mappings[taskId];
+            }
+          }
+
+          chrome.storage.local.set({
+            'cf.recurringChains': chains,
+            'cf.taskIdToChainId': mappings,
+          }, () => {
+            chrome.storage.sync.set({ 'cf.recurringChainColors': colors }, () => {
+              console.log('[Storage] Cleaned up', staleChainIds.length, 'stale chains');
+              resolve(staleChainIds.length);
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /**
+   * Migrate old recurringTaskColors to chain system
+   * Run once on extension update
+   */
+  async function migrateToChainSystem() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.chainsMigrated', (migrationResult) => {
+        if (migrationResult['cf.chainsMigrated']) {
+          resolve({ migrated: false, reason: 'already_migrated' });
+          return;
+        }
+
+        chrome.storage.sync.get('cf.recurringTaskColors', (syncResult) => {
+          const oldColors = syncResult['cf.recurringTaskColors'] || {};
+          const colorEntries = Object.entries(oldColors);
+
+          if (colorEntries.length === 0) {
+            // No old colors to migrate, just mark as complete
+            chrome.storage.local.set({ 'cf.chainsMigrated': true }, () => {
+              resolve({ migrated: true, count: 0 });
+            });
+            return;
+          }
+
+          const newChainColors = {};
+          const newChainMetadata = {};
+
+          for (const [fingerprint, color] of colorEntries) {
+            // Create chain with 'migrated' prefix (listId will be updated on first paint)
+            const chainId = `migrated|${fingerprint}`;
+            newChainColors[chainId] = color;
+            newChainMetadata[chainId] = {
+              fingerprint,
+              listId: null, // Will be populated when tasks are painted
+              lastSeen: Date.now(),
+            };
+          }
+
+          // Save new chain data
+          chrome.storage.sync.set({ 'cf.recurringChainColors': newChainColors }, () => {
+            chrome.storage.local.set({
+              'cf.recurringChains': newChainMetadata,
+              'cf.chainsMigrated': true,
+            }, () => {
+              console.log('[Storage] Migrated', colorEntries.length, 'recurring colors to chain system');
+              resolve({ migrated: true, count: colorEntries.length });
+            });
+          });
+        });
+      });
+    });
+  }
+
+  // ========================================
   // TASK LIST COLORING FUNCTIONS
   // ========================================
 
@@ -1365,6 +1681,7 @@
       const syncKeysToRemove = [
         'cf.taskColors',
         'cf.recurringTaskColors',
+        'cf.recurringChainColors',
         'cf.taskListColors',
         'cf.taskListTextColors',
         'customDayColors',
@@ -1396,7 +1713,14 @@
       }
 
       // Step 4: Clear Chrome Storage Local caches (non-critical)
-      const localKeysToRemove = ['cf.taskToListMap', 'cf.taskListsMeta', 'cf.stateMachine'];
+      const localKeysToRemove = [
+        'cf.taskToListMap',
+        'cf.taskListsMeta',
+        'cf.stateMachine',
+        'cf.taskIdToChainId',
+        'cf.recurringChains',
+        'cf.chainsMigrated',
+      ];
 
       try {
         await new Promise((resolve, reject) => {
@@ -1444,10 +1768,23 @@
     updateTaskPresetColor,
     setTaskInlineColors,
     updateTaskInlineColor,
-    // Recurring task manual colors
+    // Recurring task manual colors (legacy - kept for backward compatibility)
     setRecurringTaskColor,
     clearRecurringTaskColor,
     getRecurringTaskColors,
+    // Recurring task chains (new chain-based system)
+    setTaskIdToChain,
+    getTaskIdToChainMap,
+    removeTaskIdFromChain,
+    setChainMetadata,
+    getChainMetadata,
+    getAllChainMetadata,
+    removeChain,
+    setChainColor,
+    getChainColors,
+    clearChainColor,
+    cleanupStaleChains,
+    migrateToChainSystem,
     // Task list coloring functions
     setTaskListColoringEnabled,
     setTaskListDefaultColor,
