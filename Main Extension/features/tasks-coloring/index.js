@@ -589,14 +589,36 @@ async function buildChainMembership(taskId, element, cache) {
  * Find a chain by fingerprint (for matching migrated chains or existing chains)
  * @param {string} fingerprint - Fingerprint to search for
  * @param {Object} chainMetadata - Chain metadata cache
+ * @param {string} listId - Optional list ID for safe title-only fallback (handles moved tasks)
+ * @param {Object} chainColors - Optional chain colors to only match chains that have colors
  * @returns {{chainId: string, meta: Object}|null} Chain info or null
  */
-function findChainByFingerprint(fingerprint, chainMetadata) {
+function findChainByFingerprint(fingerprint, chainMetadata, listId = null, chainColors = null) {
   if (!fingerprint || !chainMetadata) return null;
 
+  // PRIORITY 1: Exact fingerprint match
   for (const [chainId, meta] of Object.entries(chainMetadata)) {
     if (meta.fingerprint === fingerprint) {
       return { chainId, meta };
+    }
+  }
+
+  // PRIORITY 2: Title + listId fallback for moved tasks
+  // This handles the case where a task was moved to a different time,
+  // changing its fingerprint (e.g., "test|2pm" → "test|3pm")
+  // Safety: Only match within the SAME list to avoid false positives
+  const titlePart = fingerprint.split('|')[0];
+  if (titlePart && listId) {
+    for (const [chainId, meta] of Object.entries(chainMetadata)) {
+      // Check if this chain:
+      // 1. Is in the SAME list (critical for safety)
+      // 2. Has the same title (fingerprint starts with "title|")
+      // 3. Has a color assigned (only match chains that were actually colored)
+      const hasColor = !chainColors || chainColors[chainId];
+      if (meta.listId === listId && meta.fingerprint?.startsWith(titlePart + '|') && hasColor) {
+        console.log('[TaskColoring] ✅ Found chain via title+listId fallback:', chainId, 'title:', titlePart, 'listId:', listId);
+        return { chainId, meta };
+      }
     }
   }
 
@@ -649,15 +671,39 @@ async function getChainColorForTask(taskId, element, cache) {
   // TaskId not in a chain - try to find matching chain by fingerprint
   console.log('[TaskColoring] ❌ taskId not in chain, trying fingerprint fallback');
   if (element) {
-    const { fingerprint } = extractTaskFingerprint(element);
+    const { fingerprint, title } = extractTaskFingerprint(element);
     console.log('[TaskColoring] 🔍 Extracted fingerprint:', fingerprint);
     console.log('[TaskColoring] 🔍 chainMetadata fingerprints:', Object.entries(cache.chainMetadata || {}).map(([id, m]) => `${id}: ${m.fingerprint}`));
     if (fingerprint) {
-      const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata);
+      // Get listId from multiple sources for safe title+listId fallback
+      // This is critical for matching moved tasks without false positives
+      let listIdForFallback = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+
+      // Try fingerprint cache if not in API mapping
+      if (!listIdForFallback) {
+        listIdForFallback = recurringTaskFingerprintCache.get(fingerprint);
+      }
+
+      // Try title-only fingerprint cache lookup (for moved tasks)
+      if (!listIdForFallback && title) {
+        const titlePrefix = title + '|';
+        for (const [fp, lid] of recurringTaskFingerprintCache.entries()) {
+          if (fp.startsWith(titlePrefix)) {
+            listIdForFallback = lid;
+            console.log('[TaskColoring] 🔍 Found listId from fingerprint cache title match:', title, '→', lid);
+            break;
+          }
+        }
+      }
+
+      console.log('[TaskColoring] 🔍 listIdForFallback:', listIdForFallback);
+
+      // Pass listId and chainColors for safe title+listId fallback
+      const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata, listIdForFallback, cache.chainColors);
       console.log('[TaskColoring] 🔍 findChainByFingerprint result:', existingChain?.chainId || 'null');
 
       if (existingChain) {
-        // Found existing chain with same fingerprint - add this taskId to it
+        // Found existing chain with same fingerprint (or title+listId match) - add this taskId to it
         chainId = existingChain.chainId;
         await window.cc3Storage.setTaskIdToChain(taskId, chainId);
 
