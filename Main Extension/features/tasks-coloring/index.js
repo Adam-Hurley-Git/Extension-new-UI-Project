@@ -213,6 +213,7 @@ let initialized = false;
 
 // Store references to listeners/observers for cleanup
 let clickHandler = null;
+let dragEndHandler = null;
 let gridObserver = null;
 let urlObserver = null;
 let popstateHandler = null;
@@ -613,7 +614,9 @@ async function getChainColorForTask(taskId, element, cache) {
   if (!taskId) return null;
 
   // Check if taskId is already in a chain
-  let chainId = cache.taskIdToChain?.[taskId];
+  // Use lookupWithBase64Fallback to handle encoding differences
+  // (taskId might be base64 encoded when stored but decoded when looked up, or vice versa)
+  let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
 
   if (chainId) {
     // TaskId is in a chain - return chain data
@@ -747,6 +750,11 @@ function cleanupListeners() {
   if (clickHandler) {
     document.removeEventListener('click', clickHandler, true);
     clickHandler = null;
+  }
+
+  if (dragEndHandler) {
+    document.removeEventListener('dragend', dragEndHandler, true);
+    dragEndHandler = null;
   }
 
   if (gridObserver) {
@@ -1149,7 +1157,7 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
 
           // Get or create chain for this task
           const cache = await refreshColorCache();
-          let chainId = cache.taskIdToChain?.[taskId];
+          let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
 
           if (!chainId) {
             // Build chain membership for this task
@@ -1171,7 +1179,7 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
                 // Match by title (same recurring series)
                 if (elFingerprint.title === title) {
                   const elTaskId = await getResolvedTaskId(el);
-                  if (elTaskId && !cache.taskIdToChain?.[elTaskId]) {
+                  if (elTaskId && !lookupWithBase64Fallback(cache.taskIdToChain, elTaskId)) {
                     // Add this taskId to the same chain
                     await window.cc3Storage.setTaskIdToChain(elTaskId, chainId);
                     console.log('[TaskColoring] Added visible instance to chain:', elTaskId, '→', chainId);
@@ -1218,7 +1226,7 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
 
         // Clear chain color if task is in a chain
         const cache = await refreshColorCache();
-        const chainId = cache.taskIdToChain?.[taskId];
+        const chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
         if (chainId) {
           console.log('[TaskColoring] Clearing chain color:', chainId);
           await window.cc3Storage.clearChainColor(chainId);
@@ -2055,7 +2063,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
 
         // Build chain membership so listId persists when task is moved
         // This is non-blocking to avoid slowing down paint
-        if (taskId && !cache.taskIdToChain?.[taskId]) {
+        if (taskId && !lookupWithBase64Fallback(cache.taskIdToChain, taskId)) {
           buildChainMembership(taskId, element, cache).catch(() => {});
         }
       }
@@ -2548,6 +2556,37 @@ function initTasksColoring() {
     }
   };
   document.addEventListener('click', clickHandler, true);
+
+  // TASK MOVE DETECTION: Listen for dragend to repaint after task is moved
+  // When a task is dragged to a new time, Google Calendar updates the DOM
+  // but our MutationObserver may not catch it (style changes vs DOM changes)
+  // This ensures colors are reapplied after any drag operation
+  dragEndHandler = (e) => {
+    // Check if the drag happened on the calendar grid (not other UI elements)
+    const grid = e.target.closest('[role="grid"], [role="main"], .tEhMVd');
+    if (grid) {
+      console.log('[TaskColoring] Drag ended on calendar, triggering repaint');
+      // Clear element references since positions may have changed
+      taskElementReferences.clear();
+      // Invalidate cache to ensure fresh data
+      invalidateColorCache();
+      // Immediate repaint + delayed repaints to catch Google's DOM updates
+      repaintSoon(true);
+      setTimeout(() => {
+        invalidateColorCache();
+        repaintSoon(true);
+      }, 150);
+      setTimeout(() => {
+        invalidateColorCache();
+        repaintSoon(true);
+      }, 400);
+      setTimeout(() => {
+        invalidateColorCache();
+        repaintSoon(true);
+      }, 800);
+    }
+  };
+  document.addEventListener('dragend', dragEndHandler, true);
 
   const grid = getGridRoot();
   let mutationTimeout;
