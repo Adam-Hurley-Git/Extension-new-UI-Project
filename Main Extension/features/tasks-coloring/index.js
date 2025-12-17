@@ -591,39 +591,12 @@ async function buildChainMembership(taskId, element, cache) {
  * @param {Object} chainMetadata - Chain metadata cache
  * @returns {{chainId: string, meta: Object}|null} Chain info or null
  */
-function findChainByFingerprint(fingerprint, chainMetadata, listId = null) {
+function findChainByFingerprint(fingerprint, chainMetadata) {
   if (!fingerprint || !chainMetadata) return null;
 
-  // First try exact fingerprint match
   for (const [chainId, meta] of Object.entries(chainMetadata)) {
     if (meta.fingerprint === fingerprint) {
       return { chainId, meta };
-    }
-  }
-
-  // FALLBACK: Title-only match within same list
-  // This handles tasks that were moved to different times
-  // Fingerprint format: "title|time" - we extract title and match
-  const titlePart = fingerprint.split('|')[0];
-  if (titlePart && listId) {
-    for (const [chainId, meta] of Object.entries(chainMetadata)) {
-      // Check if this chain:
-      // 1. Is in the same list
-      // 2. Has the same title (fingerprint starts with same title|)
-      if (meta.listId === listId && meta.fingerprint?.startsWith(titlePart + '|')) {
-        console.log('[TaskColoring] Found chain via title-only fallback:', chainId, 'title:', titlePart);
-        return { chainId, meta };
-      }
-    }
-  }
-
-  // If no listId provided, try title-only match across all chains (less safe but necessary)
-  if (titlePart && !listId) {
-    for (const [chainId, meta] of Object.entries(chainMetadata)) {
-      if (meta.fingerprint?.startsWith(titlePart + '|')) {
-        console.log('[TaskColoring] Found chain via title-only fallback (no listId):', chainId, 'title:', titlePart);
-        return { chainId, meta };
-      }
     }
   }
 
@@ -635,10 +608,9 @@ function findChainByFingerprint(fingerprint, chainMetadata, listId = null) {
  * @param {string} taskId - Task ID
  * @param {HTMLElement} element - DOM element
  * @param {Object} cache - Color cache
- * @param {string} listId - Optional list ID for title-only fallback matching
  * @returns {Promise<{chainId: string, color: string, listId: string}|null>}
  */
-async function getChainColorForTask(taskId, element, cache, listId = null) {
+async function getChainColorForTask(taskId, element, cache) {
   if (!taskId) return null;
 
   // Check if taskId is already in a chain
@@ -667,11 +639,10 @@ async function getChainColorForTask(taskId, element, cache, listId = null) {
   }
 
   // TaskId not in a chain - try to find matching chain by fingerprint
-  // Pass listId for title-only fallback (handles moved tasks with different times)
   if (element) {
     const { fingerprint } = extractTaskFingerprint(element);
     if (fingerprint) {
-      const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata, listId);
+      const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata);
 
       if (existingChain) {
         // Found existing chain with same fingerprint - add this taskId to it
@@ -2001,8 +1972,8 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
 
   // PRIORITY 2: Chain-based recurring color for ALL instances
   // Uses taskId → chainId mapping (persists across moves)
-  // Falls back to fingerprint matching for new instances, with title-only fallback for moved tasks
-  const chainData = await getChainColorForTask(taskId, element, cache, listId);
+  // Falls back to fingerprint matching for new instances
+  const chainData = await getChainColorForTask(taskId, element, cache);
 
   if (chainData?.color) {
     // Found chain color - use it
