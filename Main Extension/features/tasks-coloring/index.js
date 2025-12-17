@@ -608,18 +608,22 @@ function findChainByFingerprint(fingerprint, chainMetadata, listId = null, chain
   // changing its fingerprint (e.g., "test|2pm" → "test|3pm")
   // Safety: Only match within the SAME list to avoid false positives
   const titlePart = fingerprint.split('|')[0];
+  console.log('[TaskColoring] 🔍 Title+listId fallback check:', { titlePart, listId, hasChainMetadata: !!chainMetadata });
   if (titlePart && listId) {
     for (const [chainId, meta] of Object.entries(chainMetadata)) {
       // Check if this chain:
       // 1. Is in the SAME list (critical for safety)
       // 2. Has the same title (fingerprint starts with "title|")
-      // 3. Has a color assigned (only match chains that were actually colored)
-      const hasColor = !chainColors || chainColors[chainId];
-      if (meta.listId === listId && meta.fingerprint?.startsWith(titlePart + '|') && hasColor) {
+      // Note: We match even if chain has no color yet - this allows chain membership
+      // to be built, and if chain gets colored later, this taskId will be included
+      if (meta.listId === listId && meta.fingerprint?.startsWith(titlePart + '|')) {
         console.log('[TaskColoring] ✅ Found chain via title+listId fallback:', chainId, 'title:', titlePart, 'listId:', listId);
         return { chainId, meta };
       }
     }
+    console.log('[TaskColoring] ❌ No title+listId match found. Looking for title:', titlePart, 'in list:', listId);
+  } else if (!listId) {
+    console.log('[TaskColoring] ⚠️ Cannot use title+listId fallback - no listId available');
   }
 
   return null;
