@@ -613,15 +613,23 @@ function findChainByFingerprint(fingerprint, chainMetadata) {
 async function getChainColorForTask(taskId, element, cache) {
   if (!taskId) return null;
 
+  // DEBUG: Log chain lookup attempt
+  console.log('[TaskColoring] 🔍 Chain lookup for taskId:', taskId);
+  console.log('[TaskColoring] 🔍 taskIdToChain keys:', Object.keys(cache.taskIdToChain || {}));
+  console.log('[TaskColoring] 🔍 chainColors keys:', Object.keys(cache.chainColors || {}));
+
   // Check if taskId is already in a chain
   // Use lookupWithBase64Fallback to handle encoding differences
   // (taskId might be base64 encoded when stored but decoded when looked up, or vice versa)
   let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
 
+  console.log('[TaskColoring] 🔍 lookupWithBase64Fallback result:', chainId);
+
   if (chainId) {
     // TaskId is in a chain - return chain data
     const chainColor = cache.chainColors?.[chainId];
     const chainMeta = cache.chainMetadata?.[chainId];
+    console.log('[TaskColoring] ✅ Found chain:', chainId, 'color:', chainColor);
 
     // Update lastSeen (non-blocking)
     if (chainMeta && window.cc3Storage?.setChainMetadata) {
@@ -639,10 +647,14 @@ async function getChainColorForTask(taskId, element, cache) {
   }
 
   // TaskId not in a chain - try to find matching chain by fingerprint
+  console.log('[TaskColoring] ❌ taskId not in chain, trying fingerprint fallback');
   if (element) {
     const { fingerprint } = extractTaskFingerprint(element);
+    console.log('[TaskColoring] 🔍 Extracted fingerprint:', fingerprint);
+    console.log('[TaskColoring] 🔍 chainMetadata fingerprints:', Object.entries(cache.chainMetadata || {}).map(([id, m]) => `${id}: ${m.fingerprint}`));
     if (fingerprint) {
       const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata);
+      console.log('[TaskColoring] 🔍 findChainByFingerprint result:', existingChain?.chainId || 'null');
 
       if (existingChain) {
         // Found existing chain with same fingerprint - add this taskId to it
@@ -664,6 +676,7 @@ async function getChainColorForTask(taskId, element, cache) {
     }
   }
 
+  console.log('[TaskColoring] ❌ No chain found for task, returning null');
   return null;
 }
 
@@ -1818,6 +1831,7 @@ async function refreshColorCache() {
 
   // Return cached data if still fresh
   if (taskToListMapCache && now - cacheLastUpdated < CACHE_LIFETIME) {
+    console.log('[TaskColoring] 📦 Using cached data (age:', now - cacheLastUpdated, 'ms)');
     return {
       taskToListMap: taskToListMapCache,
       listColors: listColorsCache,
@@ -1833,6 +1847,7 @@ async function refreshColorCache() {
   }
 
   // Fetch all data in parallel
+  console.log('[TaskColoring] 🔄 Fetching fresh data from storage...');
   const [localData, syncData] = await Promise.all([
     chrome.storage.local.get(['cf.taskToListMap', 'cf.taskIdToChainId', 'cf.recurringChains']),
     chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.recurringChainColors', 'cf.taskListColors', 'cf.taskListTextColors', 'settings']),
@@ -1857,6 +1872,12 @@ async function refreshColorCache() {
   taskIdToChainCache = localData['cf.taskIdToChainId'] || {};
   chainMetadataCache = localData['cf.recurringChains'] || {};
   chainColorsCache = syncData['cf.recurringChainColors'] || {};
+
+  console.log('[TaskColoring] 🔄 Fresh chain data:', {
+    taskIdToChain: Object.keys(taskIdToChainCache),
+    chainColors: Object.keys(chainColorsCache),
+    chainMetadata: Object.keys(chainMetadataCache),
+  });
 
   cacheLastUpdated = now;
 
