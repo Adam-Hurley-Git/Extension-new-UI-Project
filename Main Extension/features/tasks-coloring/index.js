@@ -2570,6 +2570,18 @@ function initTasksColoring() {
       taskElementReferences.clear();
       // Invalidate cache to ensure fresh data
       invalidateColorCache();
+
+      // CRITICAL: Clear all marker classes and data attributes from task elements
+      // This forces applyPaintIfNeeded() to actually repaint instead of skipping
+      // because Google may have overwritten our inline styles during drag
+      const allPaintedTasks = document.querySelectorAll('.cf-task-colored');
+      for (const el of allPaintedTasks) {
+        el.classList.remove('cf-task-colored');
+        delete el.dataset.cfTaskBgColor;
+        delete el.dataset.cfTaskTextActual;
+        delete el.dataset.cfTaskTextColor;
+      }
+
       // Immediate repaint + delayed repaints to catch Google's DOM updates
       repaintSoon(true);
       setTimeout(() => {
