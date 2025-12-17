@@ -214,6 +214,8 @@ let initialized = false;
 // Store references to listeners/observers for cleanup
 let clickHandler = null;
 let dragEndHandler = null;
+let mouseDownHandler = null;
+let mouseUpHandler = null;
 let gridObserver = null;
 let urlObserver = null;
 let popstateHandler = null;
@@ -818,6 +820,16 @@ function cleanupListeners() {
   if (dragEndHandler) {
     document.removeEventListener('dragend', dragEndHandler, true);
     dragEndHandler = null;
+  }
+
+  if (mouseDownHandler) {
+    document.removeEventListener('mousedown', mouseDownHandler, true);
+    mouseDownHandler = null;
+  }
+
+  if (mouseUpHandler) {
+    document.removeEventListener('mouseup', mouseUpHandler, true);
+    mouseUpHandler = null;
   }
 
   if (gridObserver) {
@@ -2628,48 +2640,83 @@ function initTasksColoring() {
   };
   document.addEventListener('click', clickHandler, true);
 
-  // TASK MOVE DETECTION: Listen for dragend to repaint after task is moved
+  // TASK MOVE DETECTION: Listen for dragend AND mouseup to repaint after task is moved
   // When a task is dragged to a new time, Google Calendar updates the DOM
   // but our MutationObserver may not catch it (style changes vs DOM changes)
   // This ensures colors are reapplied after any drag operation
+  //
+  // Note: Google Calendar may use custom drag handling (not native HTML5 drag),
+  // so we also listen for mouseup as a fallback
+
+  const triggerRepaintAfterMove = () => {
+    console.log('[TaskColoring] Triggering repaint after potential task move');
+    // Clear element references since positions may have changed
+    taskElementReferences.clear();
+    // Invalidate cache to ensure fresh data
+    invalidateColorCache();
+
+    // CRITICAL: Clear all marker classes and data attributes from task elements
+    // This forces applyPaintIfNeeded() to actually repaint instead of skipping
+    // because Google may have overwritten our inline styles during drag
+    const allPaintedTasks = document.querySelectorAll('.cf-task-colored');
+    for (const el of allPaintedTasks) {
+      el.classList.remove('cf-task-colored');
+      delete el.dataset.cfTaskBgColor;
+      delete el.dataset.cfTaskTextActual;
+      delete el.dataset.cfTaskTextColor;
+    }
+
+    // Immediate repaint + delayed repaints to catch Google's DOM updates
+    repaintSoon(true);
+    setTimeout(() => {
+      invalidateColorCache();
+      repaintSoon(true);
+    }, 150);
+    setTimeout(() => {
+      invalidateColorCache();
+      repaintSoon(true);
+    }, 400);
+    setTimeout(() => {
+      invalidateColorCache();
+      repaintSoon(true);
+    }, 800);
+  };
+
   dragEndHandler = (e) => {
-    // Check if the drag happened on the calendar grid (not other UI elements)
+    // Check if the drag happened on the calendar grid
     const grid = e.target.closest('[role="grid"], [role="main"], .tEhMVd');
     if (grid) {
-      console.log('[TaskColoring] Drag ended on calendar, triggering repaint');
-      // Clear element references since positions may have changed
-      taskElementReferences.clear();
-      // Invalidate cache to ensure fresh data
-      invalidateColorCache();
-
-      // CRITICAL: Clear all marker classes and data attributes from task elements
-      // This forces applyPaintIfNeeded() to actually repaint instead of skipping
-      // because Google may have overwritten our inline styles during drag
-      const allPaintedTasks = document.querySelectorAll('.cf-task-colored');
-      for (const el of allPaintedTasks) {
-        el.classList.remove('cf-task-colored');
-        delete el.dataset.cfTaskBgColor;
-        delete el.dataset.cfTaskTextActual;
-        delete el.dataset.cfTaskTextColor;
-      }
-
-      // Immediate repaint + delayed repaints to catch Google's DOM updates
-      repaintSoon(true);
-      setTimeout(() => {
-        invalidateColorCache();
-        repaintSoon(true);
-      }, 150);
-      setTimeout(() => {
-        invalidateColorCache();
-        repaintSoon(true);
-      }, 400);
-      setTimeout(() => {
-        invalidateColorCache();
-        repaintSoon(true);
-      }, 800);
+      console.log('[TaskColoring] Drag ended on calendar (dragend event)');
+      triggerRepaintAfterMove();
     }
   };
   document.addEventListener('dragend', dragEndHandler, true);
+
+  // FALLBACK: Also listen for mouseup on calendar grid
+  // This catches cases where Google Calendar uses custom drag handling
+  let mouseDownOnTask = false;
+
+  mouseDownHandler = (e) => {
+    // Check if mousedown is on a task element
+    const task = e.target.closest('[data-eventid^="tasks."], [data-eventid^="tasks_"], [data-eventid^="ttb_"]');
+    if (task) {
+      mouseDownOnTask = true;
+    }
+  };
+
+  mouseUpHandler = (e) => {
+    if (mouseDownOnTask) {
+      mouseDownOnTask = false;
+      // Small delay to let Google Calendar update the DOM first
+      setTimeout(() => {
+        console.log('[TaskColoring] Mouse up after task interaction (mouseup event)');
+        triggerRepaintAfterMove();
+      }, 50);
+    }
+  };
+
+  document.addEventListener('mousedown', mouseDownHandler, true);
+  document.addEventListener('mouseup', mouseUpHandler, true);
 
   const grid = getGridRoot();
   let mutationTimeout;
