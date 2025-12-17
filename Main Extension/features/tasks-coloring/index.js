@@ -213,6 +213,7 @@ let initialized = false;
 
 // Store references to listeners/observers for cleanup
 let clickHandler = null;
+let dragEndHandler = null;
 let gridObserver = null;
 let urlObserver = null;
 let popstateHandler = null;
@@ -612,13 +613,23 @@ function findChainByFingerprint(fingerprint, chainMetadata) {
 async function getChainColorForTask(taskId, element, cache) {
   if (!taskId) return null;
 
+  // DEBUG: Log chain lookup attempt
+  console.log('[TaskColoring] 🔍 Chain lookup for taskId:', taskId);
+  console.log('[TaskColoring] 🔍 taskIdToChain keys:', Object.keys(cache.taskIdToChain || {}));
+  console.log('[TaskColoring] 🔍 chainColors keys:', Object.keys(cache.chainColors || {}));
+
   // Check if taskId is already in a chain
-  let chainId = cache.taskIdToChain?.[taskId];
+  // Use lookupWithBase64Fallback to handle encoding differences
+  // (taskId might be base64 encoded when stored but decoded when looked up, or vice versa)
+  let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+
+  console.log('[TaskColoring] 🔍 lookupWithBase64Fallback result:', chainId);
 
   if (chainId) {
     // TaskId is in a chain - return chain data
     const chainColor = cache.chainColors?.[chainId];
     const chainMeta = cache.chainMetadata?.[chainId];
+    console.log('[TaskColoring] ✅ Found chain:', chainId, 'color:', chainColor);
 
     // Update lastSeen (non-blocking)
     if (chainMeta && window.cc3Storage?.setChainMetadata) {
@@ -636,10 +647,14 @@ async function getChainColorForTask(taskId, element, cache) {
   }
 
   // TaskId not in a chain - try to find matching chain by fingerprint
+  console.log('[TaskColoring] ❌ taskId not in chain, trying fingerprint fallback');
   if (element) {
     const { fingerprint } = extractTaskFingerprint(element);
+    console.log('[TaskColoring] 🔍 Extracted fingerprint:', fingerprint);
+    console.log('[TaskColoring] 🔍 chainMetadata fingerprints:', Object.entries(cache.chainMetadata || {}).map(([id, m]) => `${id}: ${m.fingerprint}`));
     if (fingerprint) {
       const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata);
+      console.log('[TaskColoring] 🔍 findChainByFingerprint result:', existingChain?.chainId || 'null');
 
       if (existingChain) {
         // Found existing chain with same fingerprint - add this taskId to it
@@ -661,6 +676,7 @@ async function getChainColorForTask(taskId, element, cache) {
     }
   }
 
+  console.log('[TaskColoring] ❌ No chain found for task, returning null');
   return null;
 }
 
@@ -747,6 +763,11 @@ function cleanupListeners() {
   if (clickHandler) {
     document.removeEventListener('click', clickHandler, true);
     clickHandler = null;
+  }
+
+  if (dragEndHandler) {
+    document.removeEventListener('dragend', dragEndHandler, true);
+    dragEndHandler = null;
   }
 
   if (gridObserver) {
@@ -1149,7 +1170,7 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
 
           // Get or create chain for this task
           const cache = await refreshColorCache();
-          let chainId = cache.taskIdToChain?.[taskId];
+          let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
 
           if (!chainId) {
             // Build chain membership for this task
@@ -1171,7 +1192,7 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
                 // Match by title (same recurring series)
                 if (elFingerprint.title === title) {
                   const elTaskId = await getResolvedTaskId(el);
-                  if (elTaskId && !cache.taskIdToChain?.[elTaskId]) {
+                  if (elTaskId && !lookupWithBase64Fallback(cache.taskIdToChain, elTaskId)) {
                     // Add this taskId to the same chain
                     await window.cc3Storage.setTaskIdToChain(elTaskId, chainId);
                     console.log('[TaskColoring] Added visible instance to chain:', elTaskId, '→', chainId);
@@ -1218,7 +1239,7 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
 
         // Clear chain color if task is in a chain
         const cache = await refreshColorCache();
-        const chainId = cache.taskIdToChain?.[taskId];
+        const chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
         if (chainId) {
           console.log('[TaskColoring] Clearing chain color:', chainId);
           await window.cc3Storage.clearChainColor(chainId);
@@ -1810,6 +1831,7 @@ async function refreshColorCache() {
 
   // Return cached data if still fresh
   if (taskToListMapCache && now - cacheLastUpdated < CACHE_LIFETIME) {
+    console.log('[TaskColoring] 📦 Using cached data (age:', now - cacheLastUpdated, 'ms)');
     return {
       taskToListMap: taskToListMapCache,
       listColors: listColorsCache,
@@ -1825,6 +1847,7 @@ async function refreshColorCache() {
   }
 
   // Fetch all data in parallel
+  console.log('[TaskColoring] 🔄 Fetching fresh data from storage...');
   const [localData, syncData] = await Promise.all([
     chrome.storage.local.get(['cf.taskToListMap', 'cf.taskIdToChainId', 'cf.recurringChains']),
     chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.recurringChainColors', 'cf.taskListColors', 'cf.taskListTextColors', 'settings']),
@@ -1849,6 +1872,12 @@ async function refreshColorCache() {
   taskIdToChainCache = localData['cf.taskIdToChainId'] || {};
   chainMetadataCache = localData['cf.recurringChains'] || {};
   chainColorsCache = syncData['cf.recurringChainColors'] || {};
+
+  console.log('[TaskColoring] 🔄 Fresh chain data:', {
+    taskIdToChain: Object.keys(taskIdToChainCache),
+    chainColors: Object.keys(chainColorsCache),
+    chainMetadata: Object.keys(chainMetadataCache),
+  });
 
   cacheLastUpdated = now;
 
@@ -2055,7 +2084,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
 
         // Build chain membership so listId persists when task is moved
         // This is non-blocking to avoid slowing down paint
-        if (taskId && !cache.taskIdToChain?.[taskId]) {
+        if (taskId && !lookupWithBase64Fallback(cache.taskIdToChain, taskId)) {
           buildChainMembership(taskId, element, cache).catch(() => {});
         }
       }
@@ -2548,6 +2577,49 @@ function initTasksColoring() {
     }
   };
   document.addEventListener('click', clickHandler, true);
+
+  // TASK MOVE DETECTION: Listen for dragend to repaint after task is moved
+  // When a task is dragged to a new time, Google Calendar updates the DOM
+  // but our MutationObserver may not catch it (style changes vs DOM changes)
+  // This ensures colors are reapplied after any drag operation
+  dragEndHandler = (e) => {
+    // Check if the drag happened on the calendar grid (not other UI elements)
+    const grid = e.target.closest('[role="grid"], [role="main"], .tEhMVd');
+    if (grid) {
+      console.log('[TaskColoring] Drag ended on calendar, triggering repaint');
+      // Clear element references since positions may have changed
+      taskElementReferences.clear();
+      // Invalidate cache to ensure fresh data
+      invalidateColorCache();
+
+      // CRITICAL: Clear all marker classes and data attributes from task elements
+      // This forces applyPaintIfNeeded() to actually repaint instead of skipping
+      // because Google may have overwritten our inline styles during drag
+      const allPaintedTasks = document.querySelectorAll('.cf-task-colored');
+      for (const el of allPaintedTasks) {
+        el.classList.remove('cf-task-colored');
+        delete el.dataset.cfTaskBgColor;
+        delete el.dataset.cfTaskTextActual;
+        delete el.dataset.cfTaskTextColor;
+      }
+
+      // Immediate repaint + delayed repaints to catch Google's DOM updates
+      repaintSoon(true);
+      setTimeout(() => {
+        invalidateColorCache();
+        repaintSoon(true);
+      }, 150);
+      setTimeout(() => {
+        invalidateColorCache();
+        repaintSoon(true);
+      }, 400);
+      setTimeout(() => {
+        invalidateColorCache();
+        repaintSoon(true);
+      }, 800);
+    }
+  };
+  document.addEventListener('dragend', dragEndHandler, true);
 
   const grid = getGridRoot();
   let mutationTimeout;
