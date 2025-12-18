@@ -690,17 +690,9 @@ async function getChainColorForTask(taskId, element, cache) {
         listIdForFallback = recurringTaskFingerprintCache.get(fingerprint);
       }
 
-      // Try title-only fingerprint cache lookup (for moved tasks)
-      if (!listIdForFallback && title) {
-        const titlePrefix = title + '|';
-        for (const [fp, lid] of recurringTaskFingerprintCache.entries()) {
-          if (fp.startsWith(titlePrefix)) {
-            listIdForFallback = lid;
-            console.log('[TaskColoring] 🔍 Found listId from fingerprint cache title match:', title, '→', lid);
-            break;
-          }
-        }
-      }
+      // NOTE: Title-only fallback removed - it caused cross-list color pollution
+      // when different lists had tasks with the same title. The system should work
+      // correctly using: 1) taskIdToChain mapping, 2) exact fingerprint cache lookup
 
       console.log('[TaskColoring] 🔍 listIdForFallback:', listIdForFallback);
 
