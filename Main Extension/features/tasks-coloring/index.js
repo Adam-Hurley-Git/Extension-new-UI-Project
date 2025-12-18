@@ -1789,6 +1789,9 @@ async function unpaintTasksFromList(listId) {
 function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOpacity = 1, isCompleted = false, borderColorOverride = null) {
   if (!node || !color) return;
 
+  // DEBUG: Log border color application
+  console.log('[TaskColoring] applyPaint called with borderColorOverride:', borderColorOverride, 'bgOpacity:', bgOpacity);
+
   node.classList.add(MARK);
   let text = textColorOverride || pickContrastingText(color);
 
@@ -1843,6 +1846,7 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
 
     // Apply border color: use custom border color if set, otherwise use background color
     const borderColorToApply = borderColorOverride || bgColorValue;
+    console.log('[TaskColoring] Applying border color (bgOpacity > 0):', borderColorToApply, 'override was:', borderColorOverride);
     node.dataset.cfTaskBorderColor = borderColorToApply;
     node.style.setProperty('border-color', borderColorToApply, 'important');
 
@@ -1860,6 +1864,7 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
 
     // Apply custom border color if set, otherwise restore Google's default
     if (borderColorOverride) {
+      console.log('[TaskColoring] Applying border color (bgOpacity = 0):', borderColorOverride);
       node.dataset.cfTaskBorderColor = borderColorOverride;
       node.style.setProperty('border-color', borderColorOverride, 'important');
     } else if (node.dataset.cfGoogleBorder) {
@@ -2101,6 +2106,15 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   const completedStyling = listId ? cache.completedStyling?.[listId] : null;
   const pendingTextColor = listId && cache.listTextColors ? cache.listTextColors[listId] : null;
   const pendingBorderColor = listId && cache.listBorderColors ? cache.listBorderColors[listId] : null;
+
+  // DEBUG: Log border color resolution
+  console.log('[TaskColoring] Border color lookup:', {
+    taskId,
+    listId,
+    hasBorderColorsInCache: !!cache.listBorderColors,
+    borderColorsCache: cache.listBorderColors,
+    pendingBorderColor,
+  });
 
   // Support dual-format lookup for manual colors (base64 and decoded)
   let manualColor = lookupWithBase64Fallback(manualColors, taskId);
