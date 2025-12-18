@@ -2021,8 +2021,30 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   // but ttb_ resolution returns BASE64 IDs (from resolveCalendarEventToTaskId)
   let listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
 
-  // RECURRING TASK FALLBACK: Try fingerprint matching (title + time)
-  // This handles recurring task instances that aren't in the API mapping
+  // RECURRING TASK FALLBACK #1: Check if taskId is in a chain (persists across moves)
+  // The chain stores the correct listId even when fingerprint changes after move
+  if (!listId && taskId) {
+    // Check cache first
+    let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+
+    // If not in cache, check storage directly (cache may be stale after move)
+    if (!chainId) {
+      const storageData = await chrome.storage.local.get(['cf.taskIdToChainId']);
+      const storedMapping = storageData['cf.taskIdToChainId'] || {};
+      chainId = lookupWithBase64Fallback(storedMapping, taskId);
+    }
+
+    if (chainId) {
+      const chainMeta = cache.chainMetadata?.[chainId];
+      if (chainMeta?.listId) {
+        listId = chainMeta.listId;
+        console.log('[TaskColoring] ✅ Using listId from chain mapping for task:', taskId, '→', listId);
+      }
+    }
+  }
+
+  // RECURRING TASK FALLBACK #2: Try fingerprint matching (title + time)
+  // This handles recurring task instances that aren't in the API mapping OR a chain yet
   if (!listId && element) {
     listId = getListIdFromFingerprint(element);
     if (listId) {
