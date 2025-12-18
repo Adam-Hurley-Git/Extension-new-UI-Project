@@ -40,6 +40,7 @@
         "lib/storage.js",
         "content/featureRegistry.js",
         "features/shared/utils.js",
+        "shared/components/ColorSwatchModal.js",
         "features/calendar-coloring/utils/dateUtils.js",
         "features/calendar-coloring/core/monthColoring.js",
         "features/calendar-coloring/core/dayColoring.js",
