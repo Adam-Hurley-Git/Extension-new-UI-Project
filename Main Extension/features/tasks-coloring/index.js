@@ -2650,36 +2650,36 @@ function initTasksColoring() {
 
   const triggerRepaintAfterMove = () => {
     console.log('[TaskColoring] Triggering repaint after potential task move');
-    // Clear element references since positions may have changed
-    taskElementReferences.clear();
-    // Invalidate cache to ensure fresh data
-    invalidateColorCache();
 
-    // CRITICAL: Clear all marker classes and data attributes from task elements
-    // This forces applyPaintIfNeeded() to actually repaint instead of skipping
-    // because Google may have overwritten our inline styles during drag
-    const allPaintedTasks = document.querySelectorAll('.cf-task-colored');
-    for (const el of allPaintedTasks) {
-      el.classList.remove('cf-task-colored');
-      delete el.dataset.cfTaskBgColor;
-      delete el.dataset.cfTaskTextActual;
-      delete el.dataset.cfTaskTextColor;
-    }
+    // Helper to clear markers and repaint
+    const clearMarkersAndRepaint = () => {
+      // Clear element references since positions may have changed
+      taskElementReferences.clear();
+      // Invalidate cache to ensure fresh data
+      invalidateColorCache();
 
-    // Immediate repaint + delayed repaints to catch Google's DOM updates
-    repaintSoon(true);
-    setTimeout(() => {
-      invalidateColorCache();
+      // CRITICAL: Clear all marker classes and data attributes from task elements
+      // This forces applyPaintIfNeeded() to actually repaint instead of skipping
+      // because Google may have overwritten our inline styles during drag
+      const allPaintedTasks = document.querySelectorAll('.cf-task-colored');
+      for (const el of allPaintedTasks) {
+        el.classList.remove('cf-task-colored');
+        delete el.dataset.cfTaskBgColor;
+        delete el.dataset.cfTaskTextActual;
+        delete el.dataset.cfTaskTextColor;
+      }
+
       repaintSoon(true);
-    }, 150);
-    setTimeout(() => {
-      invalidateColorCache();
-      repaintSoon(true);
-    }, 400);
-    setTimeout(() => {
-      invalidateColorCache();
-      repaintSoon(true);
-    }, 800);
+    };
+
+    // Multiple repaint waves to catch Google's async DOM updates
+    // Each wave clears markers again in case Google overwrote our styles
+    clearMarkersAndRepaint(); // Immediate
+    setTimeout(clearMarkersAndRepaint, 100);
+    setTimeout(clearMarkersAndRepaint, 250);
+    setTimeout(clearMarkersAndRepaint, 500);
+    setTimeout(clearMarkersAndRepaint, 800);
+    setTimeout(clearMarkersAndRepaint, 1200);
   };
 
   dragEndHandler = (e) => {
