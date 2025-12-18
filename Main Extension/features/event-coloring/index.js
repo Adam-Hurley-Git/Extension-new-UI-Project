@@ -1030,7 +1030,7 @@
         border-radius: 12px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
         z-index: 100000;
-        width: 320px;
+        width: 380px;
         max-width: 90vw;
         max-height: 80vh;
         overflow: hidden;
@@ -1117,11 +1117,12 @@
       }
       .csm-palette {
         display: grid;
-        grid-template-columns: repeat(8, 1fr);
-        gap: 6px;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
       }
       .csm-swatch {
         width: 100%;
+        max-width: 36px;
         aspect-ratio: 1;
         border-radius: 6px;
         cursor: pointer;
