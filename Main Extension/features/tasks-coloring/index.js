@@ -1406,6 +1406,141 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
   checkboxContainer.appendChild(checkbox);
   checkboxContainer.appendChild(checkboxLabel);
 
+  // Create "Use List Colors" button
+  const useListColorsBtn = document.createElement('button');
+  useListColorsBtn.textContent = 'Use List Colors';
+  useListColorsBtn.style.cssText = `
+    padding: 4px 10px !important;
+    border: 1px solid #dadce0 !important;
+    border-radius: 4px !important;
+    background: #f8f9fa !important;
+    color: #3c4043 !important;
+    cursor: pointer !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    transition: all 0.2s ease !important;
+  `;
+  useListColorsBtn.addEventListener('mouseover', () => {
+    useListColorsBtn.style.background = '#e8eaed';
+    useListColorsBtn.style.borderColor = '#5f6368';
+  });
+  useListColorsBtn.addEventListener('mouseout', () => {
+    useListColorsBtn.style.background = '#f8f9fa';
+    useListColorsBtn.style.borderColor = '#dadce0';
+  });
+
+  useListColorsBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    // Get task element to find listId
+    const taskElement = document.querySelector(`[data-eventid="tasks.${taskId}"], [data-eventid="tasks_${taskId}"], [data-eventid^="ttb_"][data-eventid*="${taskId}"], [data-taskid="${taskId}"]`);
+    const cache = await refreshColorCache();
+
+    // Try to get listId from various sources
+    let listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+
+    // Fallback: Try chain metadata
+    if (!listId) {
+      const chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+      if (chainId) {
+        const chainMeta = cache.chainMetadata?.[chainId];
+        if (chainMeta?.listId) {
+          listId = chainMeta.listId;
+        }
+      }
+    }
+
+    // Fallback: Try fingerprint
+    if (!listId && taskElement) {
+      listId = getListIdFromFingerprint(taskElement);
+    }
+
+    // Check if list has any colors configured
+    if (!listId) {
+      console.warn('[TaskColoring] Could not determine listId for task:', taskId);
+      alert('Could not determine which list this task belongs to.');
+      return;
+    }
+
+    const listBgColor = cache.listColors?.[listId];
+    const listTextColor = cache.listTextColors?.[listId];
+    const listBorderColor = cache.listBorderColors?.[listId];
+    const listCompletedStyling = cache.completedStyling?.[listId];
+
+    if (!listBgColor && !listTextColor && !listBorderColor && !listCompletedStyling) {
+      alert('No list colors configured for this task\'s list. Please set list colors first.');
+      return;
+    }
+
+    console.log('[TaskColoring] Applying list colors for task:', taskId, '→ listId:', listId);
+
+    // Check if "Apply to all instances" is checked
+    if (checkbox.checked) {
+      // Clear chain color if task is in a chain
+      const chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+      if (chainId) {
+        console.log('[TaskColoring] Clearing chain color:', chainId);
+        await window.cc3Storage.clearChainColor(chainId);
+      }
+
+      // Clear legacy recurring color
+      if (taskElement) {
+        const fingerprint = extractTaskFingerprint(taskElement);
+        if (fingerprint.fingerprint) {
+          console.log('[TaskColoring] Clearing legacy recurring color:', fingerprint.fingerprint);
+          await window.cc3Storage.clearRecurringTaskColor(fingerprint.fingerprint);
+
+          // Find and add all matching instances to taskToListMap
+          const allTaskElements = document.querySelectorAll('[data-eventid^="tasks."], [data-eventid^="tasks_"], [data-eventid^="ttb_"]');
+          for (const el of allTaskElements) {
+            const elFingerprint = extractTaskFingerprint(el);
+            if (elFingerprint.title === fingerprint.title) {
+              const elTaskId = await getResolvedTaskId(el);
+              if (elTaskId) {
+                // Clear any manual color for this instance
+                await clearTaskColor(elTaskId);
+                // Ensure it's in the taskToListMap
+                const existingListId = lookupWithBase64Fallback(cache.taskToListMap, elTaskId);
+                if (!existingListId) {
+                  await window.cc3Storage.setTaskToListMapping(elTaskId, listId);
+                  console.log('[TaskColoring] Added recurring instance to taskToListMap:', elTaskId, '→', listId);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Clear manual color for this task
+    await clearTaskColor(taskId);
+
+    // Ensure task is in taskToListMap (for DOM-only tasks)
+    const existingListId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+    if (!existingListId) {
+      await window.cc3Storage.setTaskToListMapping(taskId, listId);
+      console.log('[TaskColoring] Added task to taskToListMap:', taskId, '→', listId);
+    }
+
+    // Update color picker to show list color (visual feedback)
+    if (listBgColor) {
+      if (colorPicker) {
+        colorPicker.setColor(listBgColor);
+      } else {
+        colorInput.value = listBgColor;
+      }
+    }
+
+    // Invalidate cache and repaint
+    invalidateColorCache();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await paintTaskImmediately(taskId, null);
+
+    console.log('[TaskColoring] Successfully applied list colors for task:', taskId);
+  });
+
   // Create TWO-ROW layout
   const colorPickerRow = document.createElement('div');
   colorPickerRow.style.cssText = `
@@ -1452,8 +1587,9 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
   colorPickerRow.appendChild(applyBtn);
   colorPickerRow.appendChild(clearBtn);
 
-  // Row 2: Checkbox
+  // Row 2: Checkbox + Use List Colors button
   checkboxRow.appendChild(checkboxContainer);
+  checkboxRow.appendChild(useListColorsBtn);
 
   // Assemble the two rows
   colorRow.appendChild(colorPickerRow);
