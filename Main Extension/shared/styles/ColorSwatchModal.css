@@ -1,0 +1,297 @@
+/**
+ * ColorSwatchModal Styles
+ * Reusable color picker modal with palette tabs
+ */
+
+/* Backdrop */
+.csm-backdrop {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.csm-backdrop.active {
+  display: block;
+  opacity: 1;
+}
+
+/* Modal */
+.csm-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  width: 320px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.csm-modal.open {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Tabs */
+.csm-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 12px 0;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e8eaed;
+}
+
+.csm-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #5f6368;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  transition: all 0.15s ease;
+}
+
+.csm-tab:hover {
+  background: #e8eaed;
+  color: #202124;
+}
+
+.csm-tab.active {
+  background: #ffffff;
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+/* Content */
+.csm-content {
+  padding: 16px;
+  max-height: calc(80vh - 60px);
+  overflow-y: auto;
+}
+
+/* Helper text */
+.csm-helper {
+  font-size: 12px;
+  color: #5f6368;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+/* Hex input row */
+.csm-hex-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.csm-color-input {
+  width: 60%;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.csm-color-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.csm-color-input::-webkit-color-swatch {
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+}
+
+.csm-hex-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  text-transform: uppercase;
+  transition: border-color 0.15s ease;
+}
+
+.csm-hex-input:focus {
+  outline: none;
+  border-color: #1a73e8;
+}
+
+/* Panels */
+.csm-panel {
+  display: none;
+}
+
+.csm-panel.active {
+  display: block;
+}
+
+/* Palette grid */
+.csm-palette {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+/* Color swatch */
+.csm-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  border: 2px solid transparent;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.csm-swatch:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  z-index: 1;
+}
+
+.csm-swatch:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #1a73e8;
+}
+
+.csm-swatch.selected {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px #1a73e8;
+}
+
+.csm-swatch-custom {
+  position: relative;
+}
+
+/* Empty state */
+.csm-empty-state {
+  text-align: center;
+  padding: 24px 16px;
+  color: #5f6368;
+}
+
+.csm-empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.csm-empty-text {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #202124;
+}
+
+.csm-empty-subtext {
+  font-size: 12px;
+  color: #80868b;
+}
+
+/* Injected modal variant (for calendar page) */
+.csm-modal.csm-injected {
+  position: absolute;
+  width: 280px;
+}
+
+.csm-modal.csm-injected .csm-palette {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .csm-modal {
+    background: #2d2d2d;
+    color: #e8eaed;
+  }
+
+  .csm-tabs {
+    background: #3c3c3c;
+    border-bottom-color: #4a4a4a;
+  }
+
+  .csm-tab {
+    color: #9aa0a6;
+  }
+
+  .csm-tab:hover {
+    background: #4a4a4a;
+    color: #e8eaed;
+  }
+
+  .csm-tab.active {
+    background: #2d2d2d;
+    color: #8ab4f8;
+  }
+
+  .csm-helper {
+    color: #9aa0a6;
+  }
+
+  .csm-hex-input {
+    background: #3c3c3c;
+    border-color: #4a4a4a;
+    color: #e8eaed;
+  }
+
+  .csm-hex-input:focus {
+    border-color: #8ab4f8;
+  }
+
+  .csm-empty-text {
+    color: #e8eaed;
+  }
+
+  .csm-empty-subtext {
+    color: #9aa0a6;
+  }
+}
+
+/* Animation for checkmark on selected */
+.csm-swatch.selected::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.csm-swatch.selected::before {
+  content: '\2713';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+  font-weight: bold;
+  color: #1a73e8;
+  z-index: 1;
+}
+
+/* Make swatch position relative for pseudo-elements */
+.csm-swatch {
+  position: relative;
+}

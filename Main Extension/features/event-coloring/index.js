@@ -669,6 +669,12 @@
       });
     }
 
+    // Add "Custom Color" section with "+" button for full color picker
+    const customColorSection = createCustomColorSection(colorPickerElement, scenario);
+    if (customColorSection) {
+      parentContainer.appendChild(customColorSection);
+    }
+
     // Add click handlers to Google color buttons (to clear custom colors)
     setupGoogleColorButtonHandlers(colorPickerElement);
 
@@ -819,6 +825,353 @@
     });
 
     return button;
+  }
+
+  /**
+   * Create the "Custom Color" section with the "+" button for full color picker
+   */
+  function createCustomColorSection(pickerElement, scenario) {
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-top: 16px; padding: 0 12px;';
+    section.className = 'cf-custom-color-section';
+
+    // Label
+    const label = document.createElement('div');
+    label.textContent = 'Custom';
+    label.style.cssText = `
+      font-size: 11px;
+      font-weight: 600;
+      color: #5f6368;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    `;
+
+    // Container for button
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    `;
+
+    // Create the "+" button
+    const customButton = document.createElement('div');
+    customButton.className = 'cf-custom-color-btn';
+    customButton.setAttribute('role', 'button');
+    customButton.setAttribute('tabindex', '0');
+    customButton.setAttribute('aria-label', 'Choose custom color');
+    customButton.title = 'Choose any color';
+    customButton.textContent = '+';
+    customButton.style.cssText = `
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px dashed #9aa0a6;
+      background: #f8f9fa;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 500;
+      color: #5f6368;
+      transition: all 0.15s ease;
+    `;
+
+    customButton.addEventListener('mouseenter', () => {
+      customButton.style.borderColor = '#1a73e8';
+      customButton.style.background = '#e8f0fe';
+      customButton.style.color = '#1a73e8';
+      customButton.style.transform = 'scale(1.1)';
+    });
+
+    customButton.addEventListener('mouseleave', () => {
+      customButton.style.borderColor = '#9aa0a6';
+      customButton.style.background = '#f8f9fa';
+      customButton.style.color = '#5f6368';
+      customButton.style.transform = 'scale(1)';
+    });
+
+    customButton.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const container = pickerElement.closest(
+        COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR + ', ' +
+        COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
+      ) || pickerElement;
+
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario) ||
+                     lastClickedEventId ||
+                     getEventIdFromContext();
+
+      if (!eventId) {
+        console.error('[EventColoring] Could not find event ID for custom color');
+        return;
+      }
+
+      // Close color picker menus
+      closeColorPickerMenus();
+
+      // Open the color swatch modal
+      openCustomColorModal(eventId);
+    });
+
+    customButton.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        customButton.click();
+      }
+    });
+
+    buttonContainer.appendChild(customButton);
+    section.appendChild(label);
+    section.appendChild(buttonContainer);
+
+    return section;
+  }
+
+  /**
+   * Close color picker menus
+   */
+  function closeColorPickerMenus() {
+    document.querySelectorAll('[role="menu"], [role="dialog"]').forEach((el) => {
+      // Don't close our custom dialogs
+      if (!el.closest('.cf-recurring-dialog-container') && !el.closest('.csm-modal')) {
+        el.remove();
+      }
+    });
+  }
+
+  /**
+   * Open the custom color swatch modal
+   */
+  let activeColorModal = null;
+
+  function openCustomColorModal(eventId) {
+    // Close any existing modal
+    if (activeColorModal) {
+      activeColorModal.close();
+      activeColorModal = null;
+    }
+
+    // Inject modal CSS if not already done
+    injectModalCSS();
+
+    // Get current color for this event
+    const colorData = findColorForEvent(eventId);
+    const currentColor = colorData?.hex || '#4285f4';
+
+    // Check if ColorSwatchModal is available
+    if (typeof window.ColorSwatchModal !== 'function') {
+      console.error('[EventColoring] ColorSwatchModal not loaded');
+      return;
+    }
+
+    activeColorModal = new window.ColorSwatchModal({
+      id: `cf-event-color-modal-${Date.now()}`,
+      currentColor,
+      helperText: 'Choose a custom color for this event',
+      onColorSelect: async (color) => {
+        console.log('[EventColoring] Custom color selected:', color);
+        await handleColorSelection(eventId, color);
+        activeColorModal?.close();
+        activeColorModal = null;
+      },
+      onClose: () => {
+        activeColorModal = null;
+      },
+    });
+
+    activeColorModal.open();
+  }
+
+  /**
+   * Inject CSS for the ColorSwatchModal into the page
+   */
+  let modalCSSInjected = false;
+
+  function injectModalCSS() {
+    if (modalCSSInjected) return;
+
+    const styleId = 'cf-color-swatch-modal-css';
+    if (document.getElementById(styleId)) {
+      modalCSSInjected = true;
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* ColorSwatchModal Styles - Injected by EventColoring */
+      .csm-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 99999;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .csm-backdrop.active {
+        display: block;
+        opacity: 1;
+      }
+      .csm-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.95);
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        z-index: 100000;
+        width: 320px;
+        max-width: 90vw;
+        max-height: 80vh;
+        overflow: hidden;
+        opacity: 0;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+      .csm-modal.open {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+      .csm-tabs {
+        display: flex;
+        gap: 4px;
+        padding: 12px 12px 0;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e8eaed;
+      }
+      .csm-tab {
+        flex: 1;
+        padding: 8px 12px;
+        border: none;
+        background: transparent;
+        color: #5f6368;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border-radius: 6px 6px 0 0;
+        transition: all 0.15s ease;
+      }
+      .csm-tab:hover {
+        background: #e8eaed;
+        color: #202124;
+      }
+      .csm-tab.active {
+        background: #ffffff;
+        color: #1a73e8;
+        font-weight: 600;
+      }
+      .csm-content {
+        padding: 16px;
+        max-height: calc(80vh - 60px);
+        overflow-y: auto;
+      }
+      .csm-helper {
+        font-size: 12px;
+        color: #5f6368;
+        margin-bottom: 12px;
+        line-height: 1.4;
+      }
+      .csm-hex-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .csm-color-input {
+        width: 60%;
+        height: 32px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        padding: 0;
+      }
+      .csm-hex-input {
+        flex: 1;
+        height: 32px;
+        padding: 0 8px;
+        border: 1px solid #dadce0;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: monospace;
+        text-transform: uppercase;
+        transition: border-color 0.15s ease;
+      }
+      .csm-hex-input:focus {
+        outline: none;
+        border-color: #1a73e8;
+      }
+      .csm-panel {
+        display: none;
+      }
+      .csm-panel.active {
+        display: block;
+      }
+      .csm-palette {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 6px;
+      }
+      .csm-swatch {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: transform 0.1s ease, box-shadow 0.1s ease;
+        border: 2px solid transparent;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        position: relative;
+      }
+      .csm-swatch:hover {
+        transform: scale(1.1);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        z-index: 1;
+      }
+      .csm-swatch.selected {
+        border-color: #1a73e8;
+        box-shadow: 0 0 0 2px #1a73e8;
+      }
+      .csm-swatch.selected::after {
+        content: '\\2713';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      }
+      .csm-empty-state {
+        text-align: center;
+        padding: 24px 16px;
+        color: #5f6368;
+      }
+      .csm-empty-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+      }
+      .csm-empty-text {
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: #202124;
+      }
+      .csm-empty-subtext {
+        font-size: 12px;
+        color: #80868b;
+      }
+    `;
+    document.head.appendChild(style);
+    modalCSSInjected = true;
+    console.log('[EventColoring] Modal CSS injected');
   }
 
   function setupGoogleColorButtonHandlers(pickerElement) {

@@ -10,6 +10,7 @@ import {
 import EventIdUtils from '../utils/eventIdUtils.js';
 import ScenarioDetector from '../utils/scenarioDetector.js';
 import { showRecurringEventDialog } from '../components/RecurringEventDialog.js';
+import { ColorSwatchModal, COLOR_PALETTES } from '../../../shared/components/ColorSwatchModal.js';
 
 /**
  * ColorPickerInjector - Handles injection of custom colors into Google Calendar
@@ -19,6 +20,8 @@ export class ColorPickerInjector {
     this.storageService = storageService;
     this.observerId = 'colorPickerInjector';
     this.isInjecting = false;
+    this.activeModal = null;
+    this.cssInjected = false;
   }
 
   /**
@@ -26,6 +29,290 @@ export class ColorPickerInjector {
    */
   init() {
     console.log('[CF] ColorPickerInjector initialized');
+    this.injectModalCSS();
+  }
+
+  /**
+   * Inject CSS for the ColorSwatchModal into the page
+   */
+  injectModalCSS() {
+    if (this.cssInjected) return;
+
+    const styleId = 'cf-color-swatch-modal-css';
+    if (document.getElementById(styleId)) {
+      this.cssInjected = true;
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* ColorSwatchModal Styles - Injected */
+      .csm-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 99999;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .csm-backdrop.active {
+        display: block;
+        opacity: 1;
+      }
+      .csm-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.95);
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        z-index: 100000;
+        width: 320px;
+        max-width: 90vw;
+        max-height: 80vh;
+        overflow: hidden;
+        opacity: 0;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+      .csm-modal.open {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+      .csm-tabs {
+        display: flex;
+        gap: 4px;
+        padding: 12px 12px 0;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e8eaed;
+      }
+      .csm-tab {
+        flex: 1;
+        padding: 8px 12px;
+        border: none;
+        background: transparent;
+        color: #5f6368;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border-radius: 6px 6px 0 0;
+        transition: all 0.15s ease;
+      }
+      .csm-tab:hover {
+        background: #e8eaed;
+        color: #202124;
+      }
+      .csm-tab.active {
+        background: #ffffff;
+        color: #1a73e8;
+        font-weight: 600;
+      }
+      .csm-content {
+        padding: 16px;
+        max-height: calc(80vh - 60px);
+        overflow-y: auto;
+      }
+      .csm-helper {
+        font-size: 12px;
+        color: #5f6368;
+        margin-bottom: 12px;
+        line-height: 1.4;
+      }
+      .csm-hex-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .csm-color-input {
+        width: 60%;
+        height: 32px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        padding: 0;
+      }
+      .csm-hex-input {
+        flex: 1;
+        height: 32px;
+        padding: 0 8px;
+        border: 1px solid #dadce0;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: monospace;
+        text-transform: uppercase;
+        transition: border-color 0.15s ease;
+      }
+      .csm-hex-input:focus {
+        outline: none;
+        border-color: #1a73e8;
+      }
+      .csm-panel {
+        display: none;
+      }
+      .csm-panel.active {
+        display: block;
+      }
+      .csm-palette {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 6px;
+      }
+      .csm-swatch {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: transform 0.1s ease, box-shadow 0.1s ease;
+        border: 2px solid transparent;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        position: relative;
+      }
+      .csm-swatch:hover {
+        transform: scale(1.1);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        z-index: 1;
+      }
+      .csm-swatch.selected {
+        border-color: #1a73e8;
+        box-shadow: 0 0 0 2px #1a73e8;
+      }
+      .csm-swatch.selected::after {
+        content: '\\2713';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      }
+      .csm-empty-state {
+        text-align: center;
+        padding: 24px 16px;
+        color: #5f6368;
+      }
+      .csm-empty-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+      }
+      .csm-empty-text {
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: #202124;
+      }
+      .csm-empty-subtext {
+        font-size: 12px;
+        color: #80868b;
+      }
+      /* Custom color button (+) */
+      .cf-custom-color-btn {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px dashed #9aa0a6;
+        background: #f8f9fa;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 500;
+        color: #5f6368;
+        transition: all 0.15s ease;
+      }
+      .cf-custom-color-btn:hover {
+        border-color: #1a73e8;
+        background: #e8f0fe;
+        color: #1a73e8;
+        transform: scale(1.1);
+      }
+    `;
+    document.head.appendChild(style);
+    this.cssInjected = true;
+    console.log('[CF] Modal CSS injected');
+  }
+
+  /**
+   * Create the "+" button for opening custom color picker
+   * @param {HTMLElement} container - Color picker container
+   * @param {string} scenario - Current scenario (EVENTEDIT or LISTVIEW)
+   * @returns {HTMLElement} The button element
+   */
+  createCustomColorButton(container, scenario) {
+    const button = document.createElement('div');
+    button.className = 'cf-custom-color-btn';
+    button.setAttribute('role', 'button');
+    button.setAttribute('tabindex', '0');
+    button.setAttribute('aria-label', 'Choose custom color');
+    button.setAttribute('title', 'Choose custom color');
+    button.textContent = '+';
+
+    button.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+      if (!eventId) {
+        console.error('[CF] Could not find event ID for custom color');
+        return;
+      }
+
+      // Close existing menus first
+      this.closeMenus();
+
+      // Open the color swatch modal
+      this.openCustomColorModal(eventId);
+    });
+
+    button.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        button.click();
+      }
+    });
+
+    return button;
+  }
+
+  /**
+   * Open the custom color swatch modal
+   * @param {string} eventId - The event ID to apply color to
+   */
+  openCustomColorModal(eventId) {
+    // Close any existing modal
+    if (this.activeModal) {
+      this.activeModal.close();
+      this.activeModal = null;
+    }
+
+    // Get current color for this event
+    this.storageService.findEventColor?.(eventId).then((colorData) => {
+      const currentColor = colorData?.hex || '#4285f4';
+
+      this.activeModal = new ColorSwatchModal({
+        id: `cf-event-color-modal-${Date.now()}`,
+        currentColor,
+        helperText: 'Choose a custom color for this event',
+        onColorSelect: async (color) => {
+          console.log('[CF] Custom color selected:', color);
+          await this.handleColorSelect(eventId, color);
+          this.activeModal?.close();
+          this.activeModal = null;
+        },
+        onClose: () => {
+          this.activeModal = null;
+        },
+      });
+
+      this.activeModal.open();
+    });
   }
 
   /**
@@ -51,22 +338,19 @@ export class ColorPickerInjector {
       const existingSeparator = document.querySelector(
         '.' + COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.SEPARATOR
       );
+      const existingCustomColorSection = document.querySelector('.cf-custom-color-section');
 
-      if (existingCustomSection || existingSeparator) {
+      if (existingCustomSection || existingSeparator || existingCustomColorSection) {
         this.isInjecting = false;
         return;
       }
 
       // Get categories from storage
       const categories = await this.storageService.getEventColorCategories?.();
-      if (!categories || Object.keys(categories).length === 0) {
-        console.log('[CF] No color categories found');
-        this.isInjecting = false;
-        return;
-      }
+      const categoryList = categories ? Object.values(categories) : [];
 
-      // Inject categories
-      this.injectColorCategories(Object.values(categories));
+      // Inject categories (even if empty, we still inject the "+" button)
+      this.injectColorCategories(categoryList);
 
       // Update checkmarks and Google color labels
       await this.hideCheckmarkAndModifyBuiltInColors();
@@ -145,8 +429,55 @@ export class ColorPickerInjector {
       }
     });
 
+    // Add "Custom Color" section with "+" button
+    const customColorSection = this.createCustomColorSection(container, scenario);
+    if (customColorSection) {
+      wrapper.appendChild(customColorSection);
+    }
+
     // Update checkmarks
     this.hideCheckmarkAndModifyBuiltInColors();
+  }
+
+  /**
+   * Create the "Custom Color" section with the "+" button
+   */
+  createCustomColorSection(container, scenario) {
+    const section = document.createElement('div');
+    section.className = 'cf-custom-color-section';
+    section.style.marginTop = '16px';
+
+    // Label
+    const label = document.createElement('div');
+    label.className = 'color-category-label';
+    label.textContent = 'Custom';
+    label.style.cssText = `
+      font-size: 12px;
+      font-weight: 500;
+      color: #202124;
+      margin: 0 12px 12px 0;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    `;
+
+    // Container for button
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+      padding: 0 12px 0 0;
+    `;
+
+    // Add the "+" button
+    const customButton = this.createCustomColorButton(container, scenario);
+    buttonContainer.appendChild(customButton);
+
+    section.appendChild(label);
+    section.appendChild(buttonContainer);
+
+    return section;
   }
 
   /**

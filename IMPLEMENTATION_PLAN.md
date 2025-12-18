@@ -14,18 +14,22 @@ Unify task coloring and event coloring into a cohesive UI system with enhanced c
 **Goal:** Create a reusable custom swatch modal component with palettes
 
 ### Stage 1.1: Extract & Refactor Swatch Modal
-- [ ] Extract `buildTaskListColorDetails` from popup.js into a shared module
-- [ ] Create `/Main Extension/shared/components/ColorSwatchModal.js`
-- [ ] Support Vibrant, Pastel, Dark, Custom palette tabs
-- [ ] Add full color picker input (hex, color wheel)
-- [ ] Include user's saved custom colors from Color Lab
-- [ ] Make it importable for both popup and content scripts
+- [x] Extract `buildTaskListColorDetails` from popup.js into a shared module
+- [x] Create `/Main Extension/shared/components/ColorSwatchModal.js`
+- [x] Support Vibrant, Pastel, Dark, Custom palette tabs
+- [x] Add full color picker input (hex, color wheel)
+- [x] Include user's saved custom colors from Color Lab
+- [x] Make it importable for both popup and content scripts
+- [x] Create `/Main Extension/shared/styles/ColorSwatchModal.css`
+- [x] Create `/Main Extension/shared/utils/colorUtils.js`
 
 ### Stage 1.2: Add "+" Custom Color Button to Event Color Picker
-- [ ] Modify `colorPickerInjector.js` to add "+" button after categories
-- [ ] "+" opens the new ColorSwatchModal (injected into calendar page)
-- [ ] On color select, apply to event via existing `handleColorSelect`
-- [ ] Style the "+" button to match existing category color buttons
+- [x] Modify `event-coloring/index.js` to add "+" button after categories
+- [x] "+" opens the new ColorSwatchModal (injected into calendar page)
+- [x] On color select, apply to event via existing `handleColorSelection`
+- [x] Style the "+" button to match existing category color buttons
+- [x] Inject modal CSS dynamically when needed
+- [x] Add ColorSwatchModal.js to manifest content_scripts
 
 ### Stage 1.3: Integrate with New UI Tasks
 - [ ] Modify task coloring modal injection for new UI (ttb_ prefix tasks)
