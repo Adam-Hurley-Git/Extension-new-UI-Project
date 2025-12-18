@@ -752,6 +752,45 @@
     });
   }
 
+  // Set border color for a task list
+  async function setTaskListBorderColor(listId, color) {
+    if (!listId || !color) return;
+
+    const { 'cf.taskListBorderColors': current } = await chrome.storage.sync.get('cf.taskListBorderColors');
+    const updated = { ...(current || {}), [listId]: color };
+
+    console.log('[Storage] Setting task list border color:', { listId, color, updated });
+
+    await chrome.storage.sync.set({ 'cf.taskListBorderColors': updated });
+
+    // Verify it was saved
+    const verify = await chrome.storage.sync.get('cf.taskListBorderColors');
+    console.log('[Storage] Verified border colors saved:', verify['cf.taskListBorderColors']);
+
+    return updated;
+  }
+
+  // Clear border color for a task list
+  async function clearTaskListBorderColor(listId) {
+    if (!listId) return;
+
+    const { 'cf.taskListBorderColors': current } = await chrome.storage.sync.get('cf.taskListBorderColors');
+    const updated = { ...(current || {}) };
+    delete updated[listId];
+
+    await chrome.storage.sync.set({ 'cf.taskListBorderColors': updated });
+    return updated;
+  }
+
+  // Get all task list border colors
+  async function getTaskListBorderColors() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get('cf.taskListBorderColors', (result) => {
+        resolve(result['cf.taskListBorderColors'] || {});
+      });
+    });
+  }
+
   // Get default color for specific task (checks priority: manual > list default > none)
   async function getDefaultColorForTask(taskId) {
     return new Promise((resolve) => {
@@ -1789,10 +1828,13 @@
     setTaskListColoringEnabled,
     setTaskListDefaultColor,
     setTaskListTextColor,
+    setTaskListBorderColor,
     clearTaskListDefaultColor,
     clearTaskListTextColor,
+    clearTaskListBorderColor,
     getTaskListColors,
     getTaskListTextColors,
+    getTaskListBorderColors,
     getDefaultColorForTask,
     getTaskListsMeta,
     getTaskToListMap,

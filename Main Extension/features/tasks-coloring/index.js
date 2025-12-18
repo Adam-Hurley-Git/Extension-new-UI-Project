@@ -227,6 +227,7 @@ let modalSettingsUnsubscribe = null;
 let taskToListMapCache = null;
 let listColorsCache = null;
 let listTextColorsCache = null;
+let listBorderColorsCache = null;
 let completedStylingCache = null;
 let manualColorsCache = null;
 let recurringTaskColorsCache = null; // Manual colors for ALL instances of recurring tasks
@@ -1173,7 +1174,7 @@ async function paintTaskImmediately(taskId, colorOverride = null, textColorOverr
     });
 
     if (colorInfo) {
-      applyPaint(target, colorInfo.backgroundColor, colorInfo.textColor, colorInfo.bgOpacity, colorInfo.textOpacity, isCompleted);
+      applyPaint(target, colorInfo.backgroundColor, colorInfo.textColor, colorInfo.bgOpacity, colorInfo.textOpacity, isCompleted, colorInfo.borderColor);
 
       if (!taskElementReferences.has(taskId)) {
         taskElementReferences.set(taskId, taskElement);
@@ -1703,6 +1704,7 @@ function clearPaint(node) {
   node.style.removeProperty('opacity');
   delete node.dataset.cfTaskTextColor;
   delete node.dataset.cfTaskBgColor;
+  delete node.dataset.cfTaskBorderColor;
   delete node.dataset.cfTaskTextActual;
   // Keep cfGoogleBg and cfGoogleBorder for future use
 
@@ -1784,8 +1786,11 @@ async function unpaintTasksFromList(listId) {
   return unpaintedCount;
 }
 
-function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOpacity = 1, isCompleted = false) {
+function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOpacity = 1, isCompleted = false, borderColorOverride = null) {
   if (!node || !color) return;
+
+  // DEBUG: Log border color application
+  console.log('[TaskColoring] applyPaint called with borderColorOverride:', borderColorOverride, 'bgOpacity:', bgOpacity);
 
   node.classList.add(MARK);
   let text = textColorOverride || pickContrastingText(color);
@@ -1838,7 +1843,13 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
     const bgColorValue = blendColorWithWhite(bgColorToApply, bgOpacity);
     node.dataset.cfTaskBgColor = bgColorValue;
     node.style.setProperty('background-color', bgColorValue, 'important');
-    node.style.setProperty('border-color', bgColorValue, 'important');
+
+    // Apply border color: use custom border color if set, otherwise use background color
+    const borderColorToApply = borderColorOverride || bgColorValue;
+    console.log('[TaskColoring] Applying border color (bgOpacity > 0):', borderColorToApply, 'override was:', borderColorOverride);
+    node.dataset.cfTaskBorderColor = borderColorToApply;
+    node.style.setProperty('border-color', borderColorToApply, 'important');
+
     node.style.setProperty('mix-blend-mode', 'normal', 'important');
     node.style.setProperty('filter', 'none', 'important');
     node.style.setProperty('opacity', '1', 'important');
@@ -1851,10 +1862,17 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
       node.style.removeProperty('background-color');
     }
 
-    if (node.dataset.cfGoogleBorder) {
+    // Apply custom border color if set, otherwise restore Google's default
+    if (borderColorOverride) {
+      console.log('[TaskColoring] Applying border color (bgOpacity = 0):', borderColorOverride);
+      node.dataset.cfTaskBorderColor = borderColorOverride;
+      node.style.setProperty('border-color', borderColorOverride, 'important');
+    } else if (node.dataset.cfGoogleBorder) {
       node.style.setProperty('border-color', node.dataset.cfGoogleBorder, 'important');
+      delete node.dataset.cfTaskBorderColor;
     } else {
       node.style.removeProperty('border-color');
+      delete node.dataset.cfTaskBorderColor;
     }
 
     // Don't set these properties - let Google's defaults work
@@ -1906,18 +1924,21 @@ function applyPaintIfNeeded(node, colors, isCompleted = false) {
   const textOpacity = typeof colors.textOpacity === 'number' ? colors.textOpacity : 1;
   const fallbackText = pickContrastingText(colors.backgroundColor);
   const textColor = colors.textColor || fallbackText;
+  const borderColor = colors.borderColor || null;
   // Use blendColorWithWhite to match what applyPaint stores
   const desiredBg = blendColorWithWhite(colors.backgroundColor, bgOpacity);
   const desiredText = colorToRgba(textColor, textOpacity);
+  const desiredBorder = borderColor || desiredBg; // Border defaults to bg color if not set
   const currentBg = node.dataset.cfTaskBgColor;
   const currentText = node.dataset.cfTaskTextActual;
+  const currentBorder = node.dataset.cfTaskBorderColor;
 
-  if (node.classList.contains(MARK) && currentBg === desiredBg && currentText === desiredText) {
+  if (node.classList.contains(MARK) && currentBg === desiredBg && currentText === desiredText && currentBorder === desiredBorder) {
     return;
   }
 
   clearPaint(node);
-  applyPaint(node, colors.backgroundColor, colors.textColor, bgOpacity, textOpacity, isCompleted);
+  applyPaint(node, colors.backgroundColor, colors.textColor, bgOpacity, textOpacity, isCompleted, borderColor);
 }
 /**
  * PERFORMANCE: Load all color/mapping data into memory cache
@@ -1935,6 +1956,7 @@ async function refreshColorCache() {
       manualColors: manualColorsCache,
       recurringTaskColors: recurringTaskColorsCache,
       listTextColors: listTextColorsCache,
+      listBorderColors: listBorderColorsCache,
       completedStyling: completedStylingCache,
       // Chain data
       taskIdToChain: taskIdToChainCache,
@@ -1947,7 +1969,7 @@ async function refreshColorCache() {
   console.log('[TaskColoring] 🔄 Fetching fresh data from storage...');
   const [localData, syncData] = await Promise.all([
     chrome.storage.local.get(['cf.taskToListMap', 'cf.taskIdToChainId', 'cf.recurringChains']),
-    chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.recurringChainColors', 'cf.taskListColors', 'cf.taskListTextColors', 'settings']),
+    chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.recurringChainColors', 'cf.taskListColors', 'cf.taskListTextColors', 'cf.taskListBorderColors', 'settings']),
   ]);
 
   // Update cache
@@ -1963,6 +1985,7 @@ async function refreshColorCache() {
     ...settingsPending,
     ...(syncData['cf.taskListTextColors'] || {}),
   };
+  listBorderColorsCache = syncData['cf.taskListBorderColors'] || {};
   completedStylingCache = syncData.settings?.taskListColoring?.completedStyling || {};
 
   // Chain data cache
@@ -1984,6 +2007,7 @@ async function refreshColorCache() {
     manualColors: manualColorsCache,
     recurringTaskColors: recurringTaskColorsCache,
     listTextColors: listTextColorsCache,
+    listBorderColors: listBorderColorsCache,
     completedStyling: completedStylingCache,
     // Chain data
     taskIdToChain: taskIdToChainCache,
@@ -2000,6 +2024,7 @@ function invalidateColorCache() {
   taskToListMapCache = null;
   listColorsCache = null;
   listTextColorsCache = null;
+  listBorderColorsCache = null;
   completedStylingCache = null;
   manualColorsCache = null;
   recurringTaskColorsCache = null;
@@ -2080,6 +2105,16 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   const overrideTextColor = options.overrideTextColor;
   const completedStyling = listId ? cache.completedStyling?.[listId] : null;
   const pendingTextColor = listId && cache.listTextColors ? cache.listTextColors[listId] : null;
+  const pendingBorderColor = listId && cache.listBorderColors ? cache.listBorderColors[listId] : null;
+
+  // DEBUG: Log border color resolution
+  console.log('[TaskColoring] Border color lookup:', {
+    taskId,
+    listId,
+    hasBorderColorsInCache: !!cache.listBorderColors,
+    borderColorsCache: cache.listBorderColors,
+    pendingBorderColor,
+  });
 
   // Support dual-format lookup for manual colors (base64 and decoded)
   let manualColor = lookupWithBase64Fallback(manualColors, taskId);
@@ -2095,6 +2130,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
       return {
         backgroundColor: manualColor,
         textColor: overrideTextColor || pickContrastingText(manualColor),
+        borderColor: pendingBorderColor || null, // Use list border color if set
         bgOpacity,
         textOpacity,
       };
@@ -2104,6 +2140,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     return buildColorInfo({
       baseColor: manualColor,
       pendingTextColor: null, // Don't use list text color for manual backgrounds
+      pendingBorderColor, // Use list border color if set
       overrideTextColor,
       isCompleted: false,
       completedStyling: null,
@@ -2126,6 +2163,8 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
 
     // Re-get completed styling with potentially updated listId
     const chainCompletedStyling = listId ? cache.completedStyling?.[listId] : null;
+    // Get border color for chain's listId
+    const chainBorderColor = listId && cache.listBorderColors ? cache.listBorderColors[listId] : null;
 
     if (isCompleted) {
       // For completed recurring manual tasks: use manual color with opacity from list settings
@@ -2133,6 +2172,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
       return {
         backgroundColor: recurringColor,
         textColor: overrideTextColor || pickContrastingText(recurringColor),
+        borderColor: chainBorderColor || null, // Use list border color if set
         bgOpacity,
         textOpacity,
       };
@@ -2142,6 +2182,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     return buildColorInfo({
       baseColor: recurringColor,
       pendingTextColor: null, // Don't use list text color for manual backgrounds
+      pendingBorderColor: chainBorderColor, // Use list border color if set
       overrideTextColor,
       isCompleted: false,
       completedStyling: null,
@@ -2174,6 +2215,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
             return {
               backgroundColor: recurringColor,
               textColor: overrideTextColor || pickContrastingText(recurringColor),
+              borderColor: pendingBorderColor || null, // Use list border color if set
               bgOpacity,
               textOpacity,
             };
@@ -2182,6 +2224,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
           return buildColorInfo({
             baseColor: recurringColor,
             pendingTextColor: null,
+            pendingBorderColor, // Use list border color if set
             overrideTextColor,
             isCompleted: false,
             completedStyling: null,
@@ -2202,13 +2245,14 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   if (listId) {
     const listBgColor = cache.listColors[listId];
     const hasTextColor = !!pendingTextColor;
+    const hasBorderColor = !!pendingBorderColor;
     // CRITICAL: Also check for mode setting, not just colors/opacity
     const hasCompletedStyling = isCompleted && completedStyling &&
       (completedStyling.mode || completedStyling.bgColor || completedStyling.textColor ||
        completedStyling.bgOpacity !== undefined || completedStyling.textOpacity !== undefined);
 
-    // Apply colors if we have ANY setting (background, text, or completed styling)
-    if (listBgColor || hasTextColor || hasCompletedStyling) {
+    // Apply colors if we have ANY setting (background, text, border, or completed styling)
+    if (listBgColor || hasTextColor || hasBorderColor || hasCompletedStyling) {
       // Store fingerprint for recurring task matching (if element provided)
       if (element) {
         storeFingerprintForRecurringTasks(element, listId);
@@ -2230,6 +2274,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
       return buildColorInfo({
         baseColor: listBgColor, // May be undefined - buildColorInfo will handle it
         pendingTextColor,
+        pendingBorderColor, // Pass border color to buildColorInfo
         overrideTextColor,
         isCompleted,
         completedStyling,
@@ -2240,7 +2285,7 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   return null;
 }
 
-function buildColorInfo({ baseColor, pendingTextColor, overrideTextColor, isCompleted, completedStyling }) {
+function buildColorInfo({ baseColor, pendingTextColor, pendingBorderColor, overrideTextColor, isCompleted, completedStyling }) {
   // COMPLETED TASKS
   if (isCompleted) {
     // Check mode: 'google' | 'inherit' | 'custom'
@@ -2262,6 +2307,7 @@ function buildColorInfo({ baseColor, pendingTextColor, overrideTextColor, isComp
       return {
         backgroundColor: 'rgba(255, 255, 255, 0)', // Transparent = use Google's original bg
         textColor: 'rgba(0, 0, 0, 0)', // Transparent = use Google's original text (will be handled in applyPaint)
+        borderColor: pendingBorderColor || null, // Use custom border color if set
         bgOpacity: normalizeOpacityValue(completedStyling?.bgOpacity, 0.3), // Default 30%
         textOpacity: normalizeOpacityValue(completedStyling?.textOpacity, 0.3), // Default 30%
       };
@@ -2282,6 +2328,7 @@ function buildColorInfo({ baseColor, pendingTextColor, overrideTextColor, isComp
       return {
         backgroundColor: bgColor,
         textColor,
+        borderColor: pendingBorderColor || null, // Use custom border color if set
         // Always allow opacity adjustment (even when using Google's default bg)
         // Default 30% for all completed task styling
         bgOpacity: normalizeOpacityValue(completedStyling?.bgOpacity, 0.3),
@@ -2301,6 +2348,7 @@ function buildColorInfo({ baseColor, pendingTextColor, overrideTextColor, isComp
       return {
         backgroundColor: bgColor,
         textColor,
+        borderColor: pendingBorderColor || null, // Use custom border color if set
         // Default 30% for all completed task styling (matches Google's fade)
         bgOpacity: normalizeOpacityValue(completedStyling.bgOpacity, 0.3),
         textOpacity: normalizeOpacityValue(completedStyling.textOpacity, 0.3),
@@ -2314,6 +2362,7 @@ function buildColorInfo({ baseColor, pendingTextColor, overrideTextColor, isComp
       return {
         backgroundColor: 'rgba(255, 255, 255, 0)', // Transparent - signals use Google bg
         textColor,
+        borderColor: pendingBorderColor || null, // Use custom border color if set
         bgOpacity: 0, // Restore Google's background
         textOpacity: 0.6, // Google's completed task text opacity
       };
@@ -2324,7 +2373,7 @@ function buildColorInfo({ baseColor, pendingTextColor, overrideTextColor, isComp
   }
 
   // PENDING TASKS: Use custom colors or transparent
-  const hasAnyColorSetting = baseColor || pendingTextColor || overrideTextColor;
+  const hasAnyColorSetting = baseColor || pendingTextColor || pendingBorderColor || overrideTextColor;
   if (!hasAnyColorSetting) return null;
 
   // Default to transparent if no background color
@@ -2336,6 +2385,7 @@ function buildColorInfo({ baseColor, pendingTextColor, overrideTextColor, isComp
   return {
     backgroundColor: bgColor,
     textColor,
+    borderColor: pendingBorderColor || null, // Use custom border color if set
     bgOpacity: baseColor ? 1 : 0, // 0 opacity if using default transparent background
     textOpacity: 1,
   };
