@@ -214,6 +214,8 @@ let initialized = false;
 // Store references to listeners/observers for cleanup
 let clickHandler = null;
 let dragEndHandler = null;
+let mouseDownHandler = null;
+let mouseUpHandler = null;
 let gridObserver = null;
 let urlObserver = null;
 let popstateHandler = null;
@@ -589,15 +591,41 @@ async function buildChainMembership(taskId, element, cache) {
  * Find a chain by fingerprint (for matching migrated chains or existing chains)
  * @param {string} fingerprint - Fingerprint to search for
  * @param {Object} chainMetadata - Chain metadata cache
+ * @param {string} listId - Optional list ID for safe title-only fallback (handles moved tasks)
+ * @param {Object} chainColors - Optional chain colors to only match chains that have colors
  * @returns {{chainId: string, meta: Object}|null} Chain info or null
  */
-function findChainByFingerprint(fingerprint, chainMetadata) {
+function findChainByFingerprint(fingerprint, chainMetadata, listId = null, chainColors = null) {
   if (!fingerprint || !chainMetadata) return null;
 
+  // PRIORITY 1: Exact fingerprint match
   for (const [chainId, meta] of Object.entries(chainMetadata)) {
     if (meta.fingerprint === fingerprint) {
       return { chainId, meta };
     }
+  }
+
+  // PRIORITY 2: Title + listId fallback for moved tasks
+  // This handles the case where a task was moved to a different time,
+  // changing its fingerprint (e.g., "test|2pm" → "test|3pm")
+  // Safety: Only match within the SAME list to avoid false positives
+  const titlePart = fingerprint.split('|')[0];
+  console.log('[TaskColoring] 🔍 Title+listId fallback check:', { titlePart, listId, hasChainMetadata: !!chainMetadata });
+  if (titlePart && listId) {
+    for (const [chainId, meta] of Object.entries(chainMetadata)) {
+      // Check if this chain:
+      // 1. Is in the SAME list (critical for safety)
+      // 2. Has the same title (fingerprint starts with "title|")
+      // Note: We match even if chain has no color yet - this allows chain membership
+      // to be built, and if chain gets colored later, this taskId will be included
+      if (meta.listId === listId && meta.fingerprint?.startsWith(titlePart + '|')) {
+        console.log('[TaskColoring] ✅ Found chain via title+listId fallback:', chainId, 'title:', titlePart, 'listId:', listId);
+        return { chainId, meta };
+      }
+    }
+    console.log('[TaskColoring] ❌ No title+listId match found. Looking for title:', titlePart, 'in list:', listId);
+  } else if (!listId) {
+    console.log('[TaskColoring] ⚠️ Cannot use title+listId fallback - no listId available');
   }
 
   return null;
@@ -649,15 +677,39 @@ async function getChainColorForTask(taskId, element, cache) {
   // TaskId not in a chain - try to find matching chain by fingerprint
   console.log('[TaskColoring] ❌ taskId not in chain, trying fingerprint fallback');
   if (element) {
-    const { fingerprint } = extractTaskFingerprint(element);
+    const { fingerprint, title } = extractTaskFingerprint(element);
     console.log('[TaskColoring] 🔍 Extracted fingerprint:', fingerprint);
     console.log('[TaskColoring] 🔍 chainMetadata fingerprints:', Object.entries(cache.chainMetadata || {}).map(([id, m]) => `${id}: ${m.fingerprint}`));
     if (fingerprint) {
-      const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata);
+      // Get listId from multiple sources for safe title+listId fallback
+      // This is critical for matching moved tasks without false positives
+      let listIdForFallback = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+
+      // Try fingerprint cache if not in API mapping
+      if (!listIdForFallback) {
+        listIdForFallback = recurringTaskFingerprintCache.get(fingerprint);
+      }
+
+      // Try title-only fingerprint cache lookup (for moved tasks)
+      if (!listIdForFallback && title) {
+        const titlePrefix = title + '|';
+        for (const [fp, lid] of recurringTaskFingerprintCache.entries()) {
+          if (fp.startsWith(titlePrefix)) {
+            listIdForFallback = lid;
+            console.log('[TaskColoring] 🔍 Found listId from fingerprint cache title match:', title, '→', lid);
+            break;
+          }
+        }
+      }
+
+      console.log('[TaskColoring] 🔍 listIdForFallback:', listIdForFallback);
+
+      // Pass listId and chainColors for safe title+listId fallback
+      const existingChain = findChainByFingerprint(fingerprint, cache.chainMetadata, listIdForFallback, cache.chainColors);
       console.log('[TaskColoring] 🔍 findChainByFingerprint result:', existingChain?.chainId || 'null');
 
       if (existingChain) {
-        // Found existing chain with same fingerprint - add this taskId to it
+        // Found existing chain with same fingerprint (or title+listId match) - add this taskId to it
         chainId = existingChain.chainId;
         await window.cc3Storage.setTaskIdToChain(taskId, chainId);
 
@@ -768,6 +820,16 @@ function cleanupListeners() {
   if (dragEndHandler) {
     document.removeEventListener('dragend', dragEndHandler, true);
     dragEndHandler = null;
+  }
+
+  if (mouseDownHandler) {
+    document.removeEventListener('mousedown', mouseDownHandler, true);
+    mouseDownHandler = null;
+  }
+
+  if (mouseUpHandler) {
+    document.removeEventListener('mouseup', mouseUpHandler, true);
+    mouseUpHandler = null;
   }
 
   if (gridObserver) {
@@ -2578,15 +2640,19 @@ function initTasksColoring() {
   };
   document.addEventListener('click', clickHandler, true);
 
-  // TASK MOVE DETECTION: Listen for dragend to repaint after task is moved
+  // TASK MOVE DETECTION: Listen for dragend AND mouseup to repaint after task is moved
   // When a task is dragged to a new time, Google Calendar updates the DOM
   // but our MutationObserver may not catch it (style changes vs DOM changes)
   // This ensures colors are reapplied after any drag operation
-  dragEndHandler = (e) => {
-    // Check if the drag happened on the calendar grid (not other UI elements)
-    const grid = e.target.closest('[role="grid"], [role="main"], .tEhMVd');
-    if (grid) {
-      console.log('[TaskColoring] Drag ended on calendar, triggering repaint');
+  //
+  // Note: Google Calendar may use custom drag handling (not native HTML5 drag),
+  // so we also listen for mouseup as a fallback
+
+  const triggerRepaintAfterMove = () => {
+    console.log('[TaskColoring] Triggering repaint after potential task move');
+
+    // Helper to clear markers and repaint
+    const clearMarkersAndRepaint = () => {
       // Clear element references since positions may have changed
       taskElementReferences.clear();
       // Invalidate cache to ensure fresh data
@@ -2603,23 +2669,54 @@ function initTasksColoring() {
         delete el.dataset.cfTaskTextColor;
       }
 
-      // Immediate repaint + delayed repaints to catch Google's DOM updates
       repaintSoon(true);
-      setTimeout(() => {
-        invalidateColorCache();
-        repaintSoon(true);
-      }, 150);
-      setTimeout(() => {
-        invalidateColorCache();
-        repaintSoon(true);
-      }, 400);
-      setTimeout(() => {
-        invalidateColorCache();
-        repaintSoon(true);
-      }, 800);
+    };
+
+    // Multiple repaint waves to catch Google's async DOM updates
+    // Each wave clears markers again in case Google overwrote our styles
+    clearMarkersAndRepaint(); // Immediate
+    setTimeout(clearMarkersAndRepaint, 100);
+    setTimeout(clearMarkersAndRepaint, 250);
+    setTimeout(clearMarkersAndRepaint, 500);
+    setTimeout(clearMarkersAndRepaint, 800);
+    setTimeout(clearMarkersAndRepaint, 1200);
+  };
+
+  dragEndHandler = (e) => {
+    // Check if the drag happened on the calendar grid
+    const grid = e.target.closest('[role="grid"], [role="main"], .tEhMVd');
+    if (grid) {
+      console.log('[TaskColoring] Drag ended on calendar (dragend event)');
+      triggerRepaintAfterMove();
     }
   };
   document.addEventListener('dragend', dragEndHandler, true);
+
+  // FALLBACK: Also listen for mouseup on calendar grid
+  // This catches cases where Google Calendar uses custom drag handling
+  let mouseDownOnTask = false;
+
+  mouseDownHandler = (e) => {
+    // Check if mousedown is on a task element
+    const task = e.target.closest('[data-eventid^="tasks."], [data-eventid^="tasks_"], [data-eventid^="ttb_"]');
+    if (task) {
+      mouseDownOnTask = true;
+    }
+  };
+
+  mouseUpHandler = (e) => {
+    if (mouseDownOnTask) {
+      mouseDownOnTask = false;
+      // Small delay to let Google Calendar update the DOM first
+      setTimeout(() => {
+        console.log('[TaskColoring] Mouse up after task interaction (mouseup event)');
+        triggerRepaintAfterMove();
+      }, 50);
+    }
+  };
+
+  document.addEventListener('mousedown', mouseDownHandler, true);
+  document.addEventListener('mouseup', mouseUpHandler, true);
 
   const grid = getGridRoot();
   let mutationTimeout;
