@@ -1255,9 +1255,14 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
             await window.cc3Storage.setChainColor(chainId, selectedColor);
             console.log('[TaskColoring] Set chain color:', chainId, '→', selectedColor);
 
-            // Scan DOM for other visible instances with same fingerprint/title and add them to chain
+            // Get the chain's listId to only add tasks from the same list
+            const chainMeta = cache.chainMetadata?.[chainId];
+            const chainListId = chainMeta?.listId;
+
+            // Scan DOM for other visible instances with same fingerprint and add them to chain
+            // CRITICAL: Only add tasks that match BOTH title AND listId to prevent cross-list pollution
             const { title } = fingerprint;
-            if (title) {
+            if (title && chainListId) {
               const allTaskElements = document.querySelectorAll('[data-eventid^="tasks."], [data-eventid^="tasks_"], [data-eventid^="ttb_"]');
               for (const el of allTaskElements) {
                 if (el === taskElement) continue; // Skip the clicked element
@@ -1265,10 +1270,32 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
                 // Match by title (same recurring series)
                 if (elFingerprint.title === title) {
                   const elTaskId = await getResolvedTaskId(el);
-                  if (elTaskId && !lookupWithBase64Fallback(cache.taskIdToChain, elTaskId)) {
-                    // Add this taskId to the same chain
+                  if (!elTaskId) continue;
+
+                  // Check storage directly for existing chain mapping (cache may be stale)
+                  const storageData = await chrome.storage.local.get(['cf.taskIdToChainId']);
+                  const storedMapping = storageData['cf.taskIdToChainId'] || {};
+                  const existingChainId = lookupWithBase64Fallback(storedMapping, elTaskId);
+
+                  if (existingChainId) {
+                    // Task already has a chain - don't overwrite
+                    console.log('[TaskColoring] ⚠️ Task already in chain, skipping:', elTaskId, '→', existingChainId);
+                    continue;
+                  }
+
+                  // Verify task belongs to the same list before adding to chain
+                  let elListId = lookupWithBase64Fallback(cache.taskToListMap, elTaskId);
+                  if (!elListId) {
+                    // Try fingerprint cache
+                    elListId = recurringTaskFingerprintCache.get(elFingerprint.fingerprint);
+                  }
+
+                  if (elListId === chainListId) {
+                    // Same list - safe to add to chain
                     await window.cc3Storage.setTaskIdToChain(elTaskId, chainId);
                     console.log('[TaskColoring] Added visible instance to chain:', elTaskId, '→', chainId);
+                  } else {
+                    console.log('[TaskColoring] ⚠️ Skipping task from different list:', elTaskId, 'listId:', elListId, 'vs chain listId:', chainListId);
                   }
                 }
               }
