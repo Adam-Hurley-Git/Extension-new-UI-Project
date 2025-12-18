@@ -598,36 +598,33 @@ async function buildChainMembership(taskId, element, cache) {
 function findChainByFingerprint(fingerprint, chainMetadata, listId = null, chainColors = null) {
   if (!fingerprint || !chainMetadata) return null;
 
-  // PRIORITY 1: Exact fingerprint match
-  for (const [chainId, meta] of Object.entries(chainMetadata)) {
-    if (meta.fingerprint === fingerprint) {
-      return { chainId, meta };
-    }
-  }
-
-  // PRIORITY 2: Title + listId fallback for moved tasks
-  // This handles the case where a task was moved to a different time,
-  // changing its fingerprint (e.g., "test|2pm" → "test|3pm")
-  // Safety: Only match within the SAME list to avoid false positives
-  const titlePart = fingerprint.split('|')[0];
-  console.log('[TaskColoring] 🔍 Title+listId fallback check:', { titlePart, listId, hasChainMetadata: !!chainMetadata });
-  if (titlePart && listId) {
+  // PRIORITY 1: Exact fingerprint + listId match (safest)
+  // Only match if BOTH fingerprint AND listId match to prevent cross-list pollution
+  if (listId) {
     for (const [chainId, meta] of Object.entries(chainMetadata)) {
-      // Check if this chain:
-      // 1. Is in the SAME list (critical for safety)
-      // 2. Has the same title (fingerprint starts with "title|")
-      // Note: We match even if chain has no color yet - this allows chain membership
-      // to be built, and if chain gets colored later, this taskId will be included
-      if (meta.listId === listId && meta.fingerprint?.startsWith(titlePart + '|')) {
-        console.log('[TaskColoring] ✅ Found chain via title+listId fallback:', chainId, 'title:', titlePart, 'listId:', listId);
+      if (meta.fingerprint === fingerprint && meta.listId === listId) {
+        console.log('[TaskColoring] ✅ Found chain via exact fingerprint+listId match:', chainId);
         return { chainId, meta };
       }
     }
-    console.log('[TaskColoring] ❌ No title+listId match found. Looking for title:', titlePart, 'in list:', listId);
-  } else if (!listId) {
-    console.log('[TaskColoring] ⚠️ Cannot use title+listId fallback - no listId available');
   }
 
+  // PRIORITY 2: Exact fingerprint match (only if no listId available)
+  // This is less safe but needed for tasks where we can't determine listId
+  if (!listId) {
+    for (const [chainId, meta] of Object.entries(chainMetadata)) {
+      if (meta.fingerprint === fingerprint) {
+        console.log('[TaskColoring] ⚠️ Found chain via fingerprint-only match (no listId):', chainId);
+        return { chainId, meta };
+      }
+    }
+  }
+
+  // NOTE: Title-only fallback removed - it caused wrong chain matches
+  // when same title exists across different chains/times. The system should
+  // rely on taskIdToChain mapping which persists across moves.
+
+  console.log('[TaskColoring] ❌ No chain found for fingerprint:', fingerprint, 'listId:', listId);
   return null;
 }
 
@@ -2153,34 +2150,46 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
 
   // LEGACY FALLBACK: Old fingerprint-based recurring colors (for backward compatibility)
   // This handles colors stored before the chain system was implemented
+  // IMPORTANT: Only use if task is NOT already in a chain (chain takes precedence)
   if (element && cache.recurringTaskColors && Object.keys(cache.recurringTaskColors).length > 0) {
-    const fingerprint = extractTaskFingerprint(element);
-    if (fingerprint.fingerprint) {
-      const recurringColor = cache.recurringTaskColors[fingerprint.fingerprint];
-      if (recurringColor) {
-        // Build chain membership for this task so it uses chains going forward
-        if (taskId) {
-          buildChainMembership(taskId, element, cache).catch(() => {});
-        }
+    // First check if this taskId already has a chain mapping in storage
+    // (this handles moved tasks whose fingerprint changed)
+    const storageData = await chrome.storage.local.get(['cf.taskIdToChainId']);
+    const storedMapping = storageData['cf.taskIdToChainId'] || {};
+    const existingChainId = lookupWithBase64Fallback(storedMapping, taskId);
 
-        if (isCompleted) {
-          const { bgOpacity, textOpacity } = getCompletedOpacities(completedStyling, cache);
-          return {
-            backgroundColor: recurringColor,
-            textColor: overrideTextColor || pickContrastingText(recurringColor),
-            bgOpacity,
-            textOpacity,
-          };
-        }
+    if (!existingChainId) {
+      // Task is NOT in any chain - safe to use legacy color
+      const fingerprint = extractTaskFingerprint(element);
+      if (fingerprint.fingerprint) {
+        const recurringColor = cache.recurringTaskColors[fingerprint.fingerprint];
+        if (recurringColor) {
+          // NOTE: Don't call buildChainMembership here - the current fingerprint may be
+          // wrong if task was moved. Let the task get properly added to a chain when
+          // it's explicitly colored via "Apply to all instances".
+          console.log('[TaskColoring] Using legacy recurring color for task:', taskId, fingerprint.fingerprint, '→', recurringColor);
 
-        return buildColorInfo({
-          baseColor: recurringColor,
-          pendingTextColor: null,
-          overrideTextColor,
-          isCompleted: false,
-          completedStyling: null,
-        });
+          if (isCompleted) {
+            const { bgOpacity, textOpacity } = getCompletedOpacities(completedStyling, cache);
+            return {
+              backgroundColor: recurringColor,
+              textColor: overrideTextColor || pickContrastingText(recurringColor),
+              bgOpacity,
+              textOpacity,
+            };
+          }
+
+          return buildColorInfo({
+            baseColor: recurringColor,
+            pendingTextColor: null,
+            overrideTextColor,
+            isCompleted: false,
+            completedStyling: null,
+          });
+        }
       }
+    } else {
+      console.log('[TaskColoring] ⚠️ Task has chain mapping, skipping legacy fallback:', taskId, '→', existingChainId);
     }
   }
 
@@ -2206,8 +2215,15 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
 
         // Build chain membership so listId persists when task is moved
         // This is non-blocking to avoid slowing down paint
+        // IMPORTANT: Check storage directly, not just cache (cache may be stale for moved tasks)
         if (taskId && !lookupWithBase64Fallback(cache.taskIdToChain, taskId)) {
-          buildChainMembership(taskId, element, cache).catch(() => {});
+          // Double-check storage before building chain (prevents wrong chain for moved tasks)
+          chrome.storage.local.get(['cf.taskIdToChainId']).then(storageData => {
+            const storedMapping = storageData['cf.taskIdToChainId'] || {};
+            if (!lookupWithBase64Fallback(storedMapping, taskId)) {
+              buildChainMembership(taskId, element, cache).catch(() => {});
+            }
+          }).catch(() => {});
         }
       }
 
