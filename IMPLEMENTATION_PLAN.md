@@ -175,7 +175,6 @@ Unify task coloring and event coloring into a cohesive UI system with enhanced c
 - [ ] **Recurring Events:** When applying template to recurring event, show existing `RecurringEventDialog`:
   - "Apply to this instance only" → save template colors for single instance
   - "Apply to all instances" → save template colors with `isRecurring: true`
-- [ ] **Recurring Tasks:** Same pattern for recurring task chains (use existing fingerprint system)
 
 ### Stage 4.4: Template Sharing (Optional/Future)
 - [ ] Export template as shareable code
@@ -248,16 +247,14 @@ cf.eventColors = {
 
 // Local Storage - Tasks (existing, extended for templates)
 cf.taskColors = { taskId: { background, text, border } }  // Single task instance
-cf.recurringChainColors = { chainId: { background, text, border } }  // All instances in chain
 ```
 
 ### Migration Requirements
 1. Existing `cf.eventColors` with `hex` -> migrate to `background` property
 2. Existing `cf.taskColors` (string hex) -> migrate to `{ background: hex }` object
-3. Existing `cf.recurringChainColors` (string hex) -> migrate to `{ background: hex }` object
-4. Preserve all existing functionality during migration
-5. Version flag to track migration status
-6. Backward compatibility: check for string vs object when reading colors
+3. Preserve all existing functionality during migration
+4. Version flag to track migration status
+5. Backward compatibility: check for string vs object when reading colors
 
 ### Shared Code Modules
 ```
@@ -278,12 +275,11 @@ cf.recurringChainColors = { chainId: { background, text, border } }  // All inst
 - [ ] Events color correctly in all views (day/week/month/schedule)
 - [ ] Recurring events handled properly
 - [ ] Recurring event "apply to all" works with new bg/text/border model
-- [ ] Recurring task chains work with templates
 - [ ] Calendar default colors apply
 - [ ] Templates apply all three color properties
-- [ ] Templates show recurring dialog for recurring events/tasks
+- [ ] Templates show recurring dialog for recurring events
 - [ ] Storage migration preserves existing colors
-- [ ] Existing recurring colors preserved after migration
+- [ ] Existing recurring event colors preserved after migration
 - [ ] No performance regression
 
 ---
@@ -326,10 +322,3 @@ cf.recurringChainColors = { chainId: { background, text, border } }  // All inst
 - **Storage:** `cf.eventColors[baseEventId]` with `isRecurring: true` flag
 - **Matching:** `findEventColor()` checks both direct ID and base ID for recurring matches
 - **Templates must:** Reuse `showRecurringEventDialog()` when applying to recurring events
-
-### Recurring Tasks (Already Implemented)
-- **Chain System:** `cf.recurringChainColors[chainId]` stores color for entire chain
-- **Fingerprint:** Format is `{title}|{time}` (e.g., "Daily standup|9am")
-- **Legacy:** `cf.recurringTaskColors[fingerprint]` for backward compatibility
-- **Priority:** Chain color > Legacy recurring > List default
-- **Templates must:** Detect recurring tasks and offer "all instances" option via similar dialog
