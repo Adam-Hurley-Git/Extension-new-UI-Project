@@ -1406,6 +1406,367 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
   checkboxContainer.appendChild(checkbox);
   checkboxContainer.appendChild(checkboxLabel);
 
+  // Create "Use List Colors" button
+  const useListColorsBtn = document.createElement('button');
+  useListColorsBtn.textContent = 'Use List Colors';
+  useListColorsBtn.style.cssText = `
+    padding: 4px 10px !important;
+    border: 1px solid #dadce0 !important;
+    border-radius: 4px !important;
+    background: #f8f9fa !important;
+    color: #3c4043 !important;
+    cursor: pointer !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    transition: all 0.2s ease !important;
+  `;
+  useListColorsBtn.addEventListener('mouseover', () => {
+    useListColorsBtn.style.background = '#e8eaed';
+    useListColorsBtn.style.borderColor = '#5f6368';
+  });
+  useListColorsBtn.addEventListener('mouseout', () => {
+    useListColorsBtn.style.background = '#f8f9fa';
+    useListColorsBtn.style.borderColor = '#dadce0';
+  });
+
+  useListColorsBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    // Get task element to find listId
+    const taskElement = document.querySelector(`[data-eventid="tasks.${taskId}"], [data-eventid="tasks_${taskId}"], [data-eventid^="ttb_"][data-eventid*="${taskId}"], [data-taskid="${taskId}"]`);
+    const cache = await refreshColorCache();
+
+    // Try to get listId from various sources
+    let listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+
+    // Fallback: Try chain metadata
+    if (!listId) {
+      const chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+      if (chainId) {
+        const chainMeta = cache.chainMetadata?.[chainId];
+        if (chainMeta?.listId) {
+          listId = chainMeta.listId;
+        }
+      }
+    }
+
+    // Fallback: Try fingerprint
+    if (!listId && taskElement) {
+      listId = getListIdFromFingerprint(taskElement);
+    }
+
+    // Get list metadata for dropdown
+    const taskListsMeta = await window.cc3Storage.getTaskListsMeta();
+
+    // Find lists that have colors configured
+    const listsWithColors = taskListsMeta.filter(list => {
+      return cache.listColors?.[list.id] ||
+             cache.listTextColors?.[list.id] ||
+             cache.listBorderColors?.[list.id] ||
+             cache.completedStyling?.[list.id];
+    });
+
+    if (listsWithColors.length === 0) {
+      alert('No lists have colors configured. Please set list colors in the extension settings first.');
+      return;
+    }
+
+    // If listId is unknown, show dropdown to select list
+    if (!listId) {
+      console.log('[TaskColoring] ListId unknown, showing list selection dropdown');
+
+      // Check if dropdown already exists (prevent duplicates)
+      const existingDropdown = colorRow.querySelector('.cf-list-select-container');
+      if (existingDropdown) {
+        existingDropdown.remove();
+      }
+
+      // Create dropdown container
+      const dropdownContainer = document.createElement('div');
+      dropdownContainer.className = 'cf-list-select-container';
+      dropdownContainer.style.cssText = `
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        padding: 8px 0 !important;
+        border-top: 1px solid #dadce0 !important;
+        margin-top: 8px !important;
+      `;
+
+      const selectLabel = document.createElement('span');
+      selectLabel.textContent = 'Select list:';
+      selectLabel.style.cssText = `
+        font-size: 11px !important;
+        color: #5f6368 !important;
+        white-space: nowrap !important;
+      `;
+
+      const select = document.createElement('select');
+      select.style.cssText = `
+        flex: 1 !important;
+        padding: 4px 8px !important;
+        border: 1px solid #dadce0 !important;
+        border-radius: 4px !important;
+        font-size: 11px !important;
+        background: #fff !important;
+        cursor: pointer !important;
+      `;
+
+      // Add placeholder option
+      const placeholderOption = document.createElement('option');
+      placeholderOption.value = '';
+      placeholderOption.textContent = '-- Choose a list --';
+      placeholderOption.disabled = true;
+      placeholderOption.selected = true;
+      select.appendChild(placeholderOption);
+
+      // Add list options (only lists with colors)
+      for (const list of listsWithColors) {
+        const option = document.createElement('option');
+        option.value = list.id;
+        option.textContent = list.title || 'Untitled List';
+        select.appendChild(option);
+      }
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = 'Apply';
+      confirmBtn.style.cssText = `
+        padding: 4px 10px !important;
+        border: none !important;
+        border-radius: 4px !important;
+        background: #1a73e8 !important;
+        color: white !important;
+        cursor: pointer !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+      `;
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = `
+        padding: 4px 10px !important;
+        border: 1px solid #dadce0 !important;
+        border-radius: 4px !important;
+        background: #f8f9fa !important;
+        color: #3c4043 !important;
+        cursor: pointer !important;
+        font-size: 11px !important;
+      `;
+
+      dropdownContainer.appendChild(selectLabel);
+      dropdownContainer.appendChild(select);
+      dropdownContainer.appendChild(confirmBtn);
+      dropdownContainer.appendChild(cancelBtn);
+      colorRow.appendChild(dropdownContainer);
+
+      // Handle cancel
+      cancelBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        dropdownContainer.remove();
+      });
+
+      // Handle confirm - apply selected list colors
+      confirmBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+
+        const selectedListId = select.value;
+        if (!selectedListId) {
+          alert('Please select a list.');
+          return;
+        }
+
+        dropdownContainer.remove();
+        await applyListColorsToTask(selectedListId, taskId, taskElement, checkbox.checked, cache, colorPicker, colorInput);
+      });
+
+      return; // Wait for user to select from dropdown
+    }
+
+    // ListId is known - check if it has colors
+    const listBgColor = cache.listColors?.[listId];
+    const listTextColor = cache.listTextColors?.[listId];
+    const listBorderColor = cache.listBorderColors?.[listId];
+    const listCompletedStyling = cache.completedStyling?.[listId];
+
+    if (!listBgColor && !listTextColor && !listBorderColor && !listCompletedStyling) {
+      // List has no colors - show dropdown to pick a different list
+      console.log('[TaskColoring] Task list has no colors, showing list selection dropdown');
+
+      const existingDropdown = colorRow.querySelector('.cf-list-select-container');
+      if (existingDropdown) {
+        existingDropdown.remove();
+      }
+
+      const dropdownContainer = document.createElement('div');
+      dropdownContainer.className = 'cf-list-select-container';
+      dropdownContainer.style.cssText = `
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        padding: 8px 0 !important;
+        border-top: 1px solid #dadce0 !important;
+        margin-top: 8px !important;
+      `;
+
+      const selectLabel = document.createElement('span');
+      selectLabel.textContent = 'No colors on current list. Select:';
+      selectLabel.style.cssText = `
+        font-size: 11px !important;
+        color: #5f6368 !important;
+        white-space: nowrap !important;
+      `;
+
+      const select = document.createElement('select');
+      select.style.cssText = `
+        flex: 1 !important;
+        padding: 4px 8px !important;
+        border: 1px solid #dadce0 !important;
+        border-radius: 4px !important;
+        font-size: 11px !important;
+        background: #fff !important;
+        cursor: pointer !important;
+      `;
+
+      const placeholderOption = document.createElement('option');
+      placeholderOption.value = '';
+      placeholderOption.textContent = '-- Choose a list --';
+      placeholderOption.disabled = true;
+      placeholderOption.selected = true;
+      select.appendChild(placeholderOption);
+
+      for (const list of listsWithColors) {
+        const option = document.createElement('option');
+        option.value = list.id;
+        option.textContent = list.title || 'Untitled List';
+        select.appendChild(option);
+      }
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = 'Apply';
+      confirmBtn.style.cssText = `
+        padding: 4px 10px !important;
+        border: none !important;
+        border-radius: 4px !important;
+        background: #1a73e8 !important;
+        color: white !important;
+        cursor: pointer !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+      `;
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = `
+        padding: 4px 10px !important;
+        border: 1px solid #dadce0 !important;
+        border-radius: 4px !important;
+        background: #f8f9fa !important;
+        color: #3c4043 !important;
+        cursor: pointer !important;
+        font-size: 11px !important;
+      `;
+
+      dropdownContainer.appendChild(selectLabel);
+      dropdownContainer.appendChild(select);
+      dropdownContainer.appendChild(confirmBtn);
+      dropdownContainer.appendChild(cancelBtn);
+      colorRow.appendChild(dropdownContainer);
+
+      cancelBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        dropdownContainer.remove();
+      });
+
+      confirmBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+
+        const selectedListId = select.value;
+        if (!selectedListId) {
+          alert('Please select a list.');
+          return;
+        }
+
+        dropdownContainer.remove();
+        await applyListColorsToTask(selectedListId, taskId, taskElement, checkbox.checked, cache, colorPicker, colorInput);
+      });
+
+      return;
+    }
+
+    // ListId known and has colors - apply directly
+    await applyListColorsToTask(listId, taskId, taskElement, checkbox.checked, cache, colorPicker, colorInput);
+  });
+
+  // Helper function to apply list colors to a task
+  async function applyListColorsToTask(listId, taskId, taskElement, applyToAll, cache, colorPicker, colorInput) {
+    console.log('[TaskColoring] Applying list colors for task:', taskId, '→ listId:', listId);
+
+    // Check if "Apply to all instances" is checked
+    if (applyToAll) {
+      // Clear chain color if task is in a chain
+      const chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+      if (chainId) {
+        console.log('[TaskColoring] Clearing chain color:', chainId);
+        await window.cc3Storage.clearChainColor(chainId);
+      }
+
+      // Clear legacy recurring color
+      if (taskElement) {
+        const fingerprint = extractTaskFingerprint(taskElement);
+        if (fingerprint.fingerprint) {
+          console.log('[TaskColoring] Clearing legacy recurring color:', fingerprint.fingerprint);
+          await window.cc3Storage.clearRecurringTaskColor(fingerprint.fingerprint);
+
+          // Find and add all matching instances to taskToListMap
+          const allTaskElements = document.querySelectorAll('[data-eventid^="tasks."], [data-eventid^="tasks_"], [data-eventid^="ttb_"]');
+          for (const el of allTaskElements) {
+            const elFingerprint = extractTaskFingerprint(el);
+            if (elFingerprint.title === fingerprint.title) {
+              const elTaskId = await getResolvedTaskId(el);
+              if (elTaskId) {
+                // Clear any manual color for this instance
+                await clearTaskColor(elTaskId);
+                // Ensure it's in the taskToListMap with the selected listId
+                await window.cc3Storage.setTaskToListMapping(elTaskId, listId);
+                console.log('[TaskColoring] Added recurring instance to taskToListMap:', elTaskId, '→', listId);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Clear manual color for this task
+    await clearTaskColor(taskId);
+
+    // Add/update task in taskToListMap with the selected listId
+    await window.cc3Storage.setTaskToListMapping(taskId, listId);
+    console.log('[TaskColoring] Added task to taskToListMap:', taskId, '→', listId);
+
+    // Update color picker to show list color (visual feedback)
+    const listBgColor = cache.listColors?.[listId];
+    if (listBgColor) {
+      if (colorPicker) {
+        colorPicker.setColor(listBgColor);
+      } else if (colorInput) {
+        colorInput.value = listBgColor;
+      }
+    }
+
+    // Invalidate cache and repaint
+    invalidateColorCache();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await paintTaskImmediately(taskId, null);
+
+    console.log('[TaskColoring] Successfully applied list colors for task:', taskId);
+  }
+
   // Create TWO-ROW layout
   const colorPickerRow = document.createElement('div');
   colorPickerRow.style.cssText = `
@@ -1452,8 +1813,9 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
   colorPickerRow.appendChild(applyBtn);
   colorPickerRow.appendChild(clearBtn);
 
-  // Row 2: Checkbox
+  // Row 2: Checkbox + Use List Colors button
   checkboxRow.appendChild(checkboxContainer);
+  checkboxRow.appendChild(useListColorsBtn);
 
   // Assemble the two rows
   colorRow.appendChild(colorPickerRow);

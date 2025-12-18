@@ -843,6 +843,22 @@
     });
   }
 
+  // Set task to list mapping (for DOM-only tasks not in API)
+  async function setTaskToListMapping(taskId, listId) {
+    if (!taskId || !listId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.taskToListMap', (result) => {
+        const current = result['cf.taskToListMap'] || {};
+        const updated = { ...current, [taskId]: listId };
+
+        chrome.storage.local.set({ 'cf.taskToListMap': updated }, () => {
+          resolve(updated);
+        });
+      });
+    });
+  }
+
   // ========================================
   // CALENDAR EVENT MAPPING FUNCTIONS (NEW UI)
   // ========================================
@@ -1838,6 +1854,7 @@
     getDefaultColorForTask,
     getTaskListsMeta,
     getTaskToListMap,
+    setTaskToListMapping,
     // Calendar event mapping functions (NEW UI)
     setCalendarEventMapping,
     getCalendarEventMapping,
