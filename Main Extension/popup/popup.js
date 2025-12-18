@@ -1373,9 +1373,10 @@ checkAuthAndSubscription();
       }
 
       // Get saved list colors
-      const [listColors, listTextColors] = await Promise.all([
+      const [listColors, listTextColors, listBorderColors] = await Promise.all([
         window.cc3Storage.getTaskListColors(),
         window.cc3Storage.getTaskListTextColors(),
+        window.cc3Storage.getTaskListBorderColors(),
       ]);
 
       // Clear existing items
@@ -1386,6 +1387,7 @@ checkAuthAndSubscription();
         const item = createTaskListItem(list, {
           background: listColors[list.id],
           text: listTextColors[list.id],
+          border: listBorderColors[list.id],
         });
         taskListItems.appendChild(item);
       }
@@ -2164,8 +2166,10 @@ checkAuthAndSubscription();
 
     const backgroundSwatch = createSwatchDisplay('Background');
     const textSwatch = createSwatchDisplay('Text color');
+    const borderSwatch = createSwatchDisplay('Border');
     swatchRow.appendChild(backgroundSwatch.wrapper);
     swatchRow.appendChild(textSwatch.wrapper);
+    swatchRow.appendChild(borderSwatch.wrapper);
 
     header.appendChild(titleGroup);
     header.appendChild(swatchRow);
@@ -2180,18 +2184,27 @@ checkAuthAndSubscription();
         target.chip.textContent = '';
         target.chip.style.color = getReadableTextColor(color, 100);
         target.value.textContent = color.toUpperCase();
+        // For border type, also add a visible border to the chip
+        if (type === 'border') {
+          target.chip.style.border = `2px solid ${color}`;
+        }
       } else {
         target.chip.style.backgroundColor = '#f3f4f6';
         target.chip.style.color = '#6b7280';
-        target.chip.textContent = type === 'text' ? 'A' : '';
+        target.chip.textContent = type === 'text' ? 'A' : (type === 'border' ? '▢' : '');
         target.chip.classList.remove('has-color');
         target.value.textContent = 'Auto';
+        // Reset border style for border type
+        if (type === 'border') {
+          target.chip.style.border = '1px solid #d1d5db';
+        }
       }
     };
 
     // Track current pending colors for instant inherit unlock
     let currentBgColor = colorConfig.background;
     let currentTextColor = colorConfig.text;
+    let currentBorderColor = colorConfig.border;
 
     const backgroundControl = createTaskListColorControl({
       list,
@@ -2239,8 +2252,25 @@ checkAuthAndSubscription();
       },
     });
 
+    const borderControl = createTaskListColorControl({
+      list,
+      label: 'List border color',
+      prefix: 'taskListBorder',
+      currentColor: colorConfig.border,
+      setColor: (listId, color) => window.cc3Storage.setTaskListBorderColor(listId, color),
+      clearColor: (listId) => window.cc3Storage.clearTaskListBorderColor(listId),
+      toastLabel: 'Border color',
+      messageType: 'TASK_LISTS_UPDATED',
+      helperText: 'Sets a custom border color for task chips in this list.',
+      onColorChange: (value) => {
+        currentBorderColor = value;
+        updateSwatchDisplay(borderSwatch, value, 'border');
+      },
+    });
+
     controlsWrapper.appendChild(backgroundControl);
     controlsWrapper.appendChild(textControl);
+    controlsWrapper.appendChild(borderControl);
 
     // Add reset buttons container for PENDING tasks only
     const resetButtonsContainer = document.createElement('div');
@@ -2277,7 +2307,7 @@ checkAuthAndSubscription();
     };
     resetPendingButton.onclick = async () => {
       // Confirm with user before resetting
-      if (!confirm(`Reset "${list.title}" pending tasks to Google's default?\n\nThis will remove:\n• Background color\n• Text color\n\nCompleted task styling will be preserved.\nManually colored tasks will be preserved.\n\nCalendar page will refresh automatically.`)) {
+      if (!confirm(`Reset "${list.title}" pending tasks to Google's default?\n\nThis will remove:\n• Background color\n• Text color\n• Border color\n\nCompleted task styling will be preserved.\nManually colored tasks will be preserved.\n\nCalendar page will refresh automatically.`)) {
         return;
       }
 
@@ -2285,6 +2315,7 @@ checkAuthAndSubscription();
       await Promise.all([
         window.cc3Storage.clearTaskListDefaultColor(list.id),
         window.cc3Storage.clearTaskListTextColor(list.id),
+        window.cc3Storage.clearTaskListBorderColor(list.id),
       ]);
 
       // Reload settings from storage
@@ -2344,6 +2375,7 @@ checkAuthAndSubscription();
 
     updateSwatchDisplay(backgroundSwatch, colorConfig.background, 'background');
     updateSwatchDisplay(textSwatch, colorConfig.text, 'text');
+    updateSwatchDisplay(borderSwatch, colorConfig.border, 'border');
 
     // Asynchronously load completed tasks section
     createCompletedTasksSection(list, colorConfig).then((section) => {
