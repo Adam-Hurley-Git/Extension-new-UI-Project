@@ -701,7 +701,26 @@ async function getChainColorForTask(taskId, element, cache) {
       console.log('[TaskColoring] 🔍 findChainByFingerprint result:', existingChain?.chainId || 'null');
 
       if (existingChain) {
-        // Found existing chain with same fingerprint (or title+listId match) - add this taskId to it
+        // Found existing chain with same fingerprint - but ONLY add this taskId if not already mapped
+        // This prevents overwriting correct mappings when task is moved (fingerprint changes)
+
+        // Read directly from storage to check for existing mapping (cache may be stale)
+        const storageData = await chrome.storage.local.get(['cf.taskIdToChainId']);
+        const storedMapping = storageData['cf.taskIdToChainId'] || {};
+        const existingChainId = lookupWithBase64Fallback(storedMapping, taskId);
+
+        if (existingChainId) {
+          // TaskId already has a chain mapping in storage - use it, don't overwrite
+          console.log('[TaskColoring] ⚠️ taskId already mapped in storage, using existing:', taskId, '→', existingChainId);
+          const existingMeta = cache.chainMetadata?.[existingChainId];
+          return {
+            chainId: existingChainId,
+            color: cache.chainColors?.[existingChainId] || null,
+            listId: existingMeta?.listId || null,
+          };
+        }
+
+        // No existing mapping - safe to add this taskId to the found chain
         chainId = existingChain.chainId;
         await window.cc3Storage.setTaskIdToChain(taskId, chainId);
 
