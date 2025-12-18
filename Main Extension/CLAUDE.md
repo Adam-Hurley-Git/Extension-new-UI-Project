@@ -1,11 +1,223 @@
 # ColorKit Chrome Extension - Full Codebase Reference
 
-**Last Updated**: November 20, 2025
+**Last Updated**: December 18, 2025
 **Extension Version**: 0.0.3 (Chrome Web Store Ready)
 **Manifest Version**: 3
 **Minimum Chrome Version**: 121
 
 This document provides comprehensive context about the ColorKit Chrome extension codebase for AI assistants and developers.
+
+---
+
+## Recent Changes (December 2025)
+
+### ✅ Fixed Recurring Task Coloring & Chain System
+
+**Problem**: Recurring tasks with the same title from different lists (or same list with different times) were getting wrong colors after being moved or when using "Apply to all instances".
+
+**Root Cause**: Multiple issues in the chain-based recurring task coloring system:
+1. Title-only matching was causing cross-list color pollution
+2. Fingerprint fallback was overwriting correct chain mappings for moved tasks
+3. "Apply to all instances" was adding tasks from wrong lists to chains
+4. Cache staleness caused wrong chain assignments during repaint after move
+
+**Files Changed**: `features/tasks-coloring/index.js`
+
+#### Chain System Overview
+
+The recurring task coloring uses a **chain-based system**:
+
+```javascript
+// Chain ID format: listId|fingerprint (e.g., "MTVxbW...|Meeting|2pm")
+// Fingerprint format: title|time (e.g., "Meeting|2pm")
+
+// Storage structure:
+{
+  "cf.taskIdToChainId": {
+    "taskId_abc": "listId|Meeting|2pm",    // Maps taskId → chainId
+    "taskId_xyz": "listId|Meeting|2pm"     // Multiple taskIds can share a chain
+  },
+  "cf.recurringChains": {
+    "listId|Meeting|2pm": {
+      "fingerprint": "Meeting|2pm",
+      "listId": "listId",
+      "lastSeen": 1702900000000
+    }
+  },
+  "cf.recurringChainColors": {
+    "listId|Meeting|2pm": "#ff0000"        // Color for the entire chain
+  }
+}
+```
+
+#### Fixes Applied
+
+**1. Removed Title-Only ListId Fallback** (Commit `8df353c`)
+
+```javascript
+// REMOVED - was grabbing wrong listId from different lists
+if (!listIdForFallback && title) {
+  for (const [fp, lid] of recurringTaskFingerprintCache.entries()) {
+    if (fp.startsWith(titlePrefix)) {  // ← Title-only matching = wrong!
+      listIdForFallback = lid;
+      break;
+    }
+  }
+}
+```
+
+**2. Prevent Fingerprint Fallback from Overwriting Chain Mappings** (Commit `a1d82d5`)
+
+When a task is moved, its fingerprint changes. The fingerprint fallback was overwriting the correct chain mapping with a wrong chain:
+
+```javascript
+// Before: Would overwrite moved task's chain with wrong chain
+if (existingChain) {
+  await window.cc3Storage.setTaskIdToChain(taskId, chainId);  // ← Overwrites!
+}
+
+// After: Check storage first, don't overwrite existing mappings
+if (existingChain) {
+  const storageData = await chrome.storage.local.get(['cf.taskIdToChainId']);
+  const existingChainId = lookupWithBase64Fallback(storedMapping, taskId);
+
+  if (existingChainId) {
+    // Task already mapped - use existing chain, don't overwrite
+    return { chainId: existingChainId, color: cache.chainColors?.[existingChainId] };
+  }
+  // Only add to chain if not already mapped
+  await window.cc3Storage.setTaskIdToChain(taskId, chainId);
+}
+```
+
+**3. Use Chain's ListId for List Coloring** (Commit `170cc37`)
+
+Moved tasks were getting wrong list colors because fingerprint lookup found wrong listId:
+
+```javascript
+// NEW: Check chain mapping first for correct listId
+if (!listId && taskId) {
+  let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+  if (!chainId) {
+    // Check storage directly (cache may be stale)
+    const storageData = await chrome.storage.local.get(['cf.taskIdToChainId']);
+    chainId = lookupWithBase64Fallback(storageData['cf.taskIdToChainId'], taskId);
+  }
+  if (chainId) {
+    const chainMeta = cache.chainMetadata?.[chainId];
+    if (chainMeta?.listId) {
+      listId = chainMeta.listId;  // Use chain's listId (correct for moved tasks)
+    }
+  }
+}
+```
+
+**4. Fix "Apply to all instances" Cross-List Pollution** (Commit `45ae4e0`)
+
+Was matching by title only, adding tasks from wrong lists to the chain:
+
+```javascript
+// Before: Title-only matching
+if (elFingerprint.title === title) {
+  await window.cc3Storage.setTaskIdToChain(elTaskId, chainId);  // ← Wrong list tasks added!
+}
+
+// After: Require same listId + check existing chain mappings
+if (elFingerprint.title === title) {
+  // Check if already in a chain
+  const existingChainId = lookupWithBase64Fallback(storedMapping, elTaskId);
+  if (existingChainId) continue;  // Skip - already mapped
+
+  // Verify same list
+  if (elListId === chainListId) {
+    await window.cc3Storage.setTaskIdToChain(elTaskId, chainId);  // ← Safe!
+  }
+}
+```
+
+**5. Fix findChainByFingerprint to Require ListId Match** (Commit `586e491`)
+
+```javascript
+// Before: First fingerprint match wins (ignores listId)
+for (const [chainId, meta] of Object.entries(chainMetadata)) {
+  if (meta.fingerprint === fingerprint) {
+    return { chainId, meta };  // ← Wrong chain if different list has same fingerprint
+  }
+}
+
+// After: Require BOTH fingerprint AND listId to match
+if (listId) {
+  for (const [chainId, meta] of Object.entries(chainMetadata)) {
+    if (meta.fingerprint === fingerprint && meta.listId === listId) {
+      return { chainId, meta };  // ← Only matches same list
+    }
+  }
+}
+```
+
+**6. Legacy Fallback Safety** (Commit `586e491`)
+
+Removed dangerous `buildChainMembership` call from legacy fallback that was creating wrong chains for moved tasks:
+
+```javascript
+// Before: Would create wrong chain using current (moved) fingerprint
+if (recurringColor) {
+  buildChainMembership(taskId, element, cache);  // ← Creates wrong chain!
+}
+
+// After: Check existing chain first, don't auto-build
+if (recurringColor) {
+  const existingChainId = lookupWithBase64Fallback(storedMapping, taskId);
+  if (existingChainId) {
+    // Task already in chain - skip legacy, use chain
+    console.log('[TaskColoring] Task has chain mapping, skipping legacy fallback');
+  } else {
+    // Return legacy color without building chain
+    return { backgroundColor: recurringColor, ... };
+  }
+}
+```
+
+**7. Instant Repaint After Task Move** (Commit `208afe5`)
+
+Google Calendar uses custom drag handling (not HTML5 drag), so `dragend` doesn't fire. Added mouseup detection:
+
+```javascript
+let mouseDownOnTask = false;
+
+mouseDownHandler = (e) => {
+  const task = e.target.closest('[data-eventid^="tasks."], [data-eventid^="ttb_"]');
+  if (task) mouseDownOnTask = true;
+};
+
+mouseUpHandler = (e) => {
+  if (mouseDownOnTask) {
+    mouseDownOnTask = false;
+    // Multiple repaint waves to catch Google's async DOM updates
+    const clearMarkersAndRepaint = () => {
+      taskElementReferences.clear();
+      invalidateColorCache();
+      document.querySelectorAll('.cf-task-colored').forEach(el => {
+        el.classList.remove('cf-task-colored');
+        delete el.dataset.cfTaskBgColor;
+      });
+      repaintSoon(true);
+    };
+    clearMarkersAndRepaint();
+    setTimeout(clearMarkersAndRepaint, 100);
+    setTimeout(clearMarkersAndRepaint, 250);
+    // ... more waves at 500, 800, 1200ms
+  }
+};
+```
+
+#### Key Principles Established
+
+1. **TaskId → ChainId mapping is the source of truth** - persists across moves
+2. **Always check storage, not just cache** - cache may be stale after task move
+3. **Never overwrite existing chain mappings** - fingerprint fallback should not reassign tasks
+4. **Require listId match for fingerprint lookups** - prevents cross-list pollution
+5. **Chain's listId is authoritative** - use it for list coloring even after fingerprint changes
 
 ---
 
