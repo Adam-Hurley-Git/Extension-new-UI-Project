@@ -1690,10 +1690,26 @@ function clearPaint(node) {
     node.style.removeProperty('background-color');
   }
 
-  if (node.dataset.cfGoogleBorder) {
-    node.style.setProperty('border-color', node.dataset.cfGoogleBorder, 'important');
-  } else {
-    node.style.removeProperty('border-color');
+  // Restore outline (used for border coloring since border-color doesn't work)
+  if (node.dataset.cfGoogleOutline !== undefined) {
+    const o = node.dataset.cfGoogleOutline;
+    if (o && o !== 'none') {
+      node.style.setProperty('outline', o, 'important');
+    } else {
+      node.style.removeProperty('outline');
+    }
+    delete node.dataset.cfGoogleOutline;
+  }
+
+  // Restore outline-offset
+  if (node.dataset.cfGoogleOutlineOffset !== undefined) {
+    const oo = node.dataset.cfGoogleOutlineOffset;
+    if (oo) {
+      node.style.setProperty('outline-offset', oo, 'important');
+    } else {
+      node.style.removeProperty('outline-offset');
+    }
+    delete node.dataset.cfGoogleOutlineOffset;
   }
 
   node.style.removeProperty('color');
@@ -1844,11 +1860,21 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
     node.dataset.cfTaskBgColor = bgColorValue;
     node.style.setProperty('background-color', bgColorValue, 'important');
 
-    // Apply border color: use custom border color if set, otherwise use background color
+    // Apply border color using outline method (border-color doesn't work - Google tasks have border-width: 0)
     const borderColorToApply = borderColorOverride || bgColorValue;
-    console.log('[TaskColoring] Applying border color (bgOpacity > 0):', borderColorToApply, 'override was:', borderColorOverride);
-    node.dataset.cfTaskBorderColor = borderColorToApply;
-    node.style.setProperty('border-color', borderColorToApply, 'important');
+    console.log('[TaskColoring] Applying border via outline (bgOpacity > 0):', borderColorToApply, 'override was:', borderColorOverride);
+
+    // Save original outline values once so we can restore them later
+    if (node.dataset.cfGoogleOutline === undefined) {
+      const cs = getComputedStyle(node);
+      node.dataset.cfGoogleOutline = cs.outline || '';
+      node.dataset.cfGoogleOutlineOffset = cs.outlineOffset || '';
+    }
+
+    // Apply visible border using outline (outline-offset: -2px makes it appear inside the element)
+    node.style.setProperty('outline', `2px solid ${borderColorToApply}`, 'important');
+    node.style.setProperty('outline-offset', '-2px', 'important');
+    node.dataset.cfTaskBorderColor = borderColorToApply.toLowerCase();
 
     node.style.setProperty('mix-blend-mode', 'normal', 'important');
     node.style.setProperty('filter', 'none', 'important');
@@ -1862,16 +1888,43 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
       node.style.removeProperty('background-color');
     }
 
-    // Apply custom border color if set, otherwise restore Google's default
+    // Apply custom border using outline method (border-color doesn't work)
     if (borderColorOverride) {
-      console.log('[TaskColoring] Applying border color (bgOpacity = 0):', borderColorOverride);
-      node.dataset.cfTaskBorderColor = borderColorOverride;
-      node.style.setProperty('border-color', borderColorOverride, 'important');
-    } else if (node.dataset.cfGoogleBorder) {
-      node.style.setProperty('border-color', node.dataset.cfGoogleBorder, 'important');
-      delete node.dataset.cfTaskBorderColor;
+      console.log('[TaskColoring] Applying border via outline (bgOpacity = 0):', borderColorOverride);
+
+      // Save original outline values once so we can restore them later
+      if (node.dataset.cfGoogleOutline === undefined) {
+        const cs = getComputedStyle(node);
+        node.dataset.cfGoogleOutline = cs.outline || '';
+        node.dataset.cfGoogleOutlineOffset = cs.outlineOffset || '';
+      }
+
+      // Apply visible border using outline (outline-offset: -2px makes it appear inside the element)
+      node.style.setProperty('outline', `2px solid ${borderColorOverride}`, 'important');
+      node.style.setProperty('outline-offset', '-2px', 'important');
+      node.dataset.cfTaskBorderColor = borderColorOverride.toLowerCase();
     } else {
-      node.style.removeProperty('border-color');
+      // No custom border - restore Google's default outline
+      if (node.dataset.cfGoogleOutline !== undefined) {
+        const o = node.dataset.cfGoogleOutline;
+        if (o && o !== 'none') {
+          node.style.setProperty('outline', o, 'important');
+        } else {
+          node.style.removeProperty('outline');
+        }
+        delete node.dataset.cfGoogleOutline;
+      }
+
+      if (node.dataset.cfGoogleOutlineOffset !== undefined) {
+        const oo = node.dataset.cfGoogleOutlineOffset;
+        if (oo) {
+          node.style.setProperty('outline-offset', oo, 'important');
+        } else {
+          node.style.removeProperty('outline-offset');
+        }
+        delete node.dataset.cfGoogleOutlineOffset;
+      }
+
       delete node.dataset.cfTaskBorderColor;
     }
 
@@ -1928,10 +1981,11 @@ function applyPaintIfNeeded(node, colors, isCompleted = false) {
   // Use blendColorWithWhite to match what applyPaint stores
   const desiredBg = blendColorWithWhite(colors.backgroundColor, bgOpacity);
   const desiredText = colorToRgba(textColor, textOpacity);
-  const desiredBorder = borderColor || desiredBg; // Border defaults to bg color if not set
+  // Border defaults to bg color if not set, normalize to lowercase for comparison
+  const desiredBorder = (borderColor || desiredBg).toLowerCase();
   const currentBg = node.dataset.cfTaskBgColor;
   const currentText = node.dataset.cfTaskTextActual;
-  const currentBorder = node.dataset.cfTaskBorderColor;
+  const currentBorder = (node.dataset.cfTaskBorderColor || '').toLowerCase();
 
   if (node.classList.contains(MARK) && currentBg === desiredBg && currentText === desiredText && currentBorder === desiredBorder) {
     return;
