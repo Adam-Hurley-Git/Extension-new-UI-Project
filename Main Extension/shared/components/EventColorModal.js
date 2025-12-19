@@ -819,24 +819,25 @@ class EventColorModal {
       }
       .ecm-palette {
         display: grid;
-        grid-template-columns: repeat(9, 1fr);
-        gap: 4px;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
       }
 
       /* Swatches */
       .ecm-swatch {
         width: 100%;
+        max-width: 36px;
         aspect-ratio: 1;
-        border-radius: 4px;
+        border-radius: 6px;
         cursor: pointer;
         transition: transform 0.1s ease, box-shadow 0.1s ease;
-        border: 1px solid transparent;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        border: 2px solid transparent;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         position: relative;
       }
       .ecm-swatch:hover {
         transform: scale(1.1);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         z-index: 1;
       }
       .ecm-swatch.selected {
@@ -849,7 +850,7 @@ class EventColorModal {
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        font-size: 10px;
+        font-size: 11px;
         font-weight: bold;
         color: white;
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
