@@ -1923,6 +1923,7 @@
         'cf.taskIdToChainId',
         'cf.recurringChains',
         'cf.chainsMigrated',
+        'cf.newUITaskColors',
       ];
 
       try {
@@ -1946,6 +1947,103 @@
       console.error('CRITICAL RESET FAILURE:', error);
       return { success: false, results, error: error.message };
     }
+  }
+
+  // ========================================
+  // NEW UI TASK COLORS (ttb_ prefix tasks)
+  // Full bg/text/border support like events
+  // ========================================
+
+  /**
+   * Save full colors (background/text/border) for a NEW UI task
+   * @param {string} taskId - Task ID (resolved from ttb_ element)
+   * @param {Object} colors - { background, text, border }
+   * @param {Object} options - { applyToAll: boolean } for recurring tasks
+   */
+  async function saveNewUITaskColors(taskId, colors, options = {}) {
+    if (!taskId) return;
+
+    const { applyToAll = false } = options;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.newUITaskColors', (result) => {
+        const taskColors = result['cf.newUITaskColors'] || {};
+
+        const colorData = {
+          background: colors.background || null,
+          text: colors.text || null,
+          border: colors.border || null,
+          isRecurring: applyToAll,
+          appliedAt: Date.now(),
+        };
+
+        taskColors[taskId] = colorData;
+
+        chrome.storage.local.set({ 'cf.newUITaskColors': taskColors }, () => {
+          console.log('[Storage] Saved NEW UI task colors:', taskId, colorData);
+          resolve();
+        });
+      });
+    });
+  }
+
+  /**
+   * Get full colors for a NEW UI task
+   * @param {string} taskId - Task ID
+   * @returns {Promise<{background, text, border, isRecurring}|null>}
+   */
+  async function getNewUITaskColors(taskId) {
+    if (!taskId) return null;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.newUITaskColors', (result) => {
+        const taskColors = result['cf.newUITaskColors'] || {};
+        const colorData = taskColors[taskId];
+
+        if (colorData) {
+          resolve({
+            background: colorData.background || null,
+            text: colorData.text || null,
+            border: colorData.border || null,
+            isRecurring: colorData.isRecurring || false,
+          });
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get all NEW UI task colors (for cache refresh)
+   * @returns {Promise<Object>} Map of taskId → colorData
+   */
+  async function getAllNewUITaskColors() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.newUITaskColors', (result) => {
+        resolve(result['cf.newUITaskColors'] || {});
+      });
+    });
+  }
+
+  /**
+   * Clear colors for a NEW UI task
+   * @param {string} taskId - Task ID
+   */
+  async function clearNewUITaskColors(taskId) {
+    if (!taskId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.newUITaskColors', (result) => {
+        const taskColors = result['cf.newUITaskColors'] || {};
+        delete taskColors[taskId];
+
+        chrome.storage.local.set({ 'cf.newUITaskColors': taskColors }, () => {
+          console.log('[Storage] Cleared NEW UI task colors:', taskId);
+          resolve();
+        });
+      });
+    });
   }
 
   // Expose globally under cc3Storage
@@ -2042,6 +2140,11 @@
     getIsCustomColorsDisabled,
     setDisableCustomColors,
     addQuickAccessColor,
+    // NEW UI task colors (ttb_ prefix - full bg/text/border support)
+    saveNewUITaskColors,
+    getNewUITaskColors,
+    getAllNewUITaskColors,
+    clearNewUITaskColors,
     // Time blocking functions
     setTimeBlockingEnabled,
     setTimeBlockingGlobalColor,

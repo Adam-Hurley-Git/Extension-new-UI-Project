@@ -255,6 +255,27 @@ let taskIdToChainCache = null; // taskId → chainId mapping
 let chainMetadataCache = null; // chainId → { fingerprint, listId, lastSeen }
 let chainColorsCache = null; // chainId → color (manual "apply to all" colors)
 
+// NEW UI TASK COLORS CACHE (ttb_ prefix tasks with full bg/text/border)
+let newUITaskColorsCache = null; // taskId → { background, text, border, isRecurring }
+
+/**
+ * Check if a task element or data-eventid is from NEW UI (ttb_ prefix)
+ * @param {HTMLElement|string} elementOrEventId - DOM element or data-eventid string
+ * @returns {boolean} True if NEW UI task
+ */
+function isNewUITask(elementOrEventId) {
+  if (!elementOrEventId) return false;
+
+  // If it's a string, check directly
+  if (typeof elementOrEventId === 'string') {
+    return elementOrEventId.startsWith('ttb_');
+  }
+
+  // If it's an element, get the data-eventid
+  const eventId = elementOrEventId.getAttribute?.('data-eventid');
+  return eventId && eventId.startsWith('ttb_');
+}
+
 /**
  * Lookup value in map with base64 fallbacks
  * Tries: direct → decoded (atob) → encoded (btoa)
@@ -1494,6 +1515,14 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
     return;
   }
 
+  // Check if this is a NEW UI task (ttb_ prefix) - use EventColorModal instead
+  const taskElement = dialogEl.querySelector('[data-eventid^="ttb_"]');
+  if (taskElement && isNewUITask(taskElement)) {
+    console.log('[TaskColoring] NEW UI task detected, using EventColorModal');
+    await injectNewUITaskColorControls(dialogEl, taskId, taskElement, onChanged);
+    return;
+  }
+
   const existingColorPicker = dialogEl.querySelector('.cf-task-color-inline-row');
   if (existingColorPicker) return;
 
@@ -2154,6 +2183,256 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
   }
 }
 
+/**
+ * Inject color controls for NEW UI tasks (ttb_ prefix) using EventColorModal
+ * This provides full bg/text/border support like events
+ */
+async function injectNewUITaskColorControls(dialogEl, taskId, taskElement, onChanged) {
+  // Check if controls already exist
+  const existingControls = dialogEl.querySelector('.cf-newui-task-color-row');
+  if (existingControls) return;
+
+  // Get current colors from storage
+  const currentColors = await window.cc3Storage.getNewUITaskColors(taskId);
+
+  // Get task title from element
+  const titleEl = taskElement.querySelector('.XuJrye') || taskElement.querySelector('.I0UMhf');
+  const taskTitle = titleEl?.textContent?.replace(/^task:\s*/i, '').split(',')[0].trim() || 'Task';
+
+  // Get original colors from DOM for preview
+  const computedStyle = window.getComputedStyle(taskElement);
+  const originalBg = rgbToHex(computedStyle.backgroundColor) || '#039be5';
+  const textEl = taskElement.querySelector('.XuJrye, .I0UMhf, .lhydbb');
+  const originalText = textEl ? rgbToHex(window.getComputedStyle(textEl).color) : '#ffffff';
+
+  // Get list colors as fallback
+  const cache = await refreshColorCache();
+  const listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+  const listBgColor = listId ? cache.listColors?.[listId] : null;
+  const listTextColor = listId ? cache.listTextColors?.[listId] : null;
+  const listBorderColor = listId ? cache.listBorderColors?.[listId] : null;
+
+  // Create control row
+  const colorRow = document.createElement('div');
+  colorRow.className = 'cf-newui-task-color-row';
+  colorRow.style.cssText = `
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 8px 12px !important;
+    border-top: 1px solid #dadce0 !important;
+    margin-top: 8px !important;
+  `;
+
+  // Create color preview indicator
+  const colorPreview = document.createElement('div');
+  const previewBg = currentColors?.background || listBgColor || originalBg;
+  colorPreview.style.cssText = `
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    background-color: ${previewBg} !important;
+    border: 2px solid rgba(0, 0, 0, 0.1) !important;
+    flex-shrink: 0 !important;
+  `;
+  if (currentColors?.border || listBorderColor) {
+    colorPreview.style.outline = `2px solid ${currentColors?.border || listBorderColor}`;
+    colorPreview.style.outlineOffset = '-2px';
+  }
+
+  // Create "Customize Colors" button
+  const customizeBtn = document.createElement('button');
+  customizeBtn.type = 'button';
+  customizeBtn.textContent = 'Customize Colors';
+  customizeBtn.style.cssText = `
+    padding: 6px 12px !important;
+    border: 1px solid #dadce0 !important;
+    border-radius: 4px !important;
+    background: #f8f9fa !important;
+    color: #3c4043 !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+  `;
+  customizeBtn.addEventListener('mouseover', () => {
+    customizeBtn.style.background = '#e8eaed';
+    customizeBtn.style.borderColor = '#1a73e8';
+  });
+  customizeBtn.addEventListener('mouseout', () => {
+    customizeBtn.style.background = '#f8f9fa';
+    customizeBtn.style.borderColor = '#dadce0';
+  });
+
+  customizeBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    // Check if EventColorModal is available
+    if (!window.EventColorModal) {
+      console.error('[TaskColoring] EventColorModal not available for NEW UI task');
+      return;
+    }
+
+    // Get fresh colors
+    const freshColors = await window.cc3Storage.getNewUITaskColors(taskId);
+
+    const modal = new window.EventColorModal({
+      id: `cf-newui-task-modal-${Date.now()}`,
+      currentColors: {
+        background: freshColors?.background || null,
+        text: freshColors?.text || null,
+        border: freshColors?.border || null,
+      },
+      originalColors: {
+        background: listBgColor || originalBg,
+        text: listTextColor || originalText,
+        border: listBorderColor || null,
+      },
+      eventTitle: taskTitle,
+      onApply: async (colors) => {
+        console.log('[TaskColoring] NEW UI task colors applied:', taskId, colors);
+
+        // Save to storage
+        await window.cc3Storage.saveNewUITaskColors(taskId, colors, { applyToAll: false });
+
+        // Update preview
+        if (colors.background) {
+          colorPreview.style.backgroundColor = colors.background;
+        }
+        if (colors.border) {
+          colorPreview.style.outline = `2px solid ${colors.border}`;
+          colorPreview.style.outlineOffset = '-2px';
+        } else {
+          colorPreview.style.outline = '';
+        }
+
+        // Invalidate cache and repaint
+        invalidateColorCache();
+        onChanged?.(taskId, colors);
+
+        // Repaint the task immediately
+        await new Promise(resolve => setTimeout(resolve, 50));
+        await paintTaskImmediately(taskId, null);
+      },
+      onClose: () => {
+        console.log('[TaskColoring] NEW UI task modal closed');
+      },
+    });
+
+    modal.open();
+  });
+
+  // Create "Clear" button
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.textContent = 'Clear';
+  clearBtn.style.cssText = `
+    padding: 6px 12px !important;
+    border: 1px solid #dadce0 !important;
+    border-radius: 4px !important;
+    background: transparent !important;
+    color: #5f6368 !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+  `;
+  clearBtn.addEventListener('mouseover', () => {
+    clearBtn.style.background = '#fce8e6';
+    clearBtn.style.color = '#c5221f';
+  });
+  clearBtn.addEventListener('mouseout', () => {
+    clearBtn.style.background = 'transparent';
+    clearBtn.style.color = '#5f6368';
+  });
+
+  clearBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    // Clear colors from storage
+    await window.cc3Storage.clearNewUITaskColors(taskId);
+
+    // Reset preview to list colors or original
+    colorPreview.style.backgroundColor = listBgColor || originalBg;
+    if (listBorderColor) {
+      colorPreview.style.outline = `2px solid ${listBorderColor}`;
+      colorPreview.style.outlineOffset = '-2px';
+    } else {
+      colorPreview.style.outline = '';
+    }
+
+    // Invalidate cache and repaint
+    invalidateColorCache();
+    onChanged?.(taskId, null);
+
+    // Repaint the task immediately
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await paintTaskImmediately(taskId, null);
+  });
+
+  // Create "Use List Colors" info label
+  const listColorsInfo = document.createElement('span');
+  listColorsInfo.style.cssText = `
+    font-size: 11px !important;
+    color: #5f6368 !important;
+    margin-left: auto !important;
+  `;
+  if (listBgColor || listTextColor || listBorderColor) {
+    listColorsInfo.textContent = '(List colors active)';
+  }
+
+  // Assemble row
+  colorRow.appendChild(colorPreview);
+  colorRow.appendChild(customizeBtn);
+  colorRow.appendChild(clearBtn);
+  colorRow.appendChild(listColorsInfo);
+
+  // Find insertion point in dialog
+  const modalContent = dialogEl.querySelector('[role="document"]') || dialogEl;
+  const footerArea = modalContent.querySelector('div.HcF6Td');
+
+  if (footerArea) {
+    footerArea.insertBefore(colorRow, footerArea.firstChild);
+  } else {
+    // Find container with buttons
+    const allDivs = modalContent.querySelectorAll('div');
+    let buttonContainer = null;
+    for (const div of allDivs) {
+      if (div.querySelector('button')) {
+        buttonContainer = div;
+        break;
+      }
+    }
+    if (buttonContainer) {
+      buttonContainer.appendChild(colorRow);
+    } else {
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'padding: 8px; border-top: 1px solid #dadce0; margin-top: 16px;';
+      wrapper.appendChild(colorRow);
+      modalContent.appendChild(wrapper);
+    }
+  }
+}
+
+/**
+ * Convert RGB string to hex
+ */
+function rgbToHex(rgb) {
+  if (!rgb) return null;
+  if (rgb.startsWith('#')) return rgb;
+
+  const match = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!match) return null;
+
+  const r = parseInt(match[1]).toString(16).padStart(2, '0');
+  const g = parseInt(match[2]).toString(16).padStart(2, '0');
+  const b = parseInt(match[3]).toString(16).padStart(2, '0');
+
+  return `#${r}${g}${b}`;
+}
+
 const MARK = 'cf-task-colored';
 let repaintQueued = false;
 let lastClickedTaskId = null;
@@ -2680,13 +2959,15 @@ async function refreshColorCache() {
       taskIdToChain: taskIdToChainCache,
       chainMetadata: chainMetadataCache,
       chainColors: chainColorsCache,
+      // NEW UI task colors (full bg/text/border)
+      newUITaskColors: newUITaskColorsCache,
     };
   }
 
   // Fetch all data in parallel
   console.log('[TaskColoring] 🔄 Fetching fresh data from storage...');
   const [localData, syncData] = await Promise.all([
-    chrome.storage.local.get(['cf.taskToListMap', 'cf.taskIdToChainId', 'cf.recurringChains']),
+    chrome.storage.local.get(['cf.taskToListMap', 'cf.taskIdToChainId', 'cf.recurringChains', 'cf.newUITaskColors']),
     chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.recurringChainColors', 'cf.taskListColors', 'cf.taskListTextColors', 'cf.taskListBorderColors', 'settings']),
   ]);
 
@@ -2711,11 +2992,15 @@ async function refreshColorCache() {
   chainMetadataCache = localData['cf.recurringChains'] || {};
   chainColorsCache = syncData['cf.recurringChainColors'] || {};
 
+  // NEW UI task colors cache (full bg/text/border support)
+  newUITaskColorsCache = localData['cf.newUITaskColors'] || {};
+
   console.log('[TaskColoring] 🔄 Fresh chain data:', {
     taskIdToChain: Object.keys(taskIdToChainCache),
     chainColors: Object.keys(chainColorsCache),
     chainMetadata: Object.keys(chainMetadataCache),
   });
+  console.log('[TaskColoring] 🔄 NEW UI task colors:', Object.keys(newUITaskColorsCache).length, 'entries');
 
   cacheLastUpdated = now;
 
@@ -2731,6 +3016,8 @@ async function refreshColorCache() {
     taskIdToChain: taskIdToChainCache,
     chainMetadata: chainMetadataCache,
     chainColors: chainColorsCache,
+    // NEW UI task colors (full bg/text/border)
+    newUITaskColors: newUITaskColorsCache,
   };
 }
 
@@ -2750,6 +3037,8 @@ function invalidateColorCache() {
   taskIdToChainCache = null;
   chainMetadataCache = null;
   chainColorsCache = null;
+  // NEW UI task colors cache
+  newUITaskColorsCache = null;
   // Also invalidate calendar mapping cache (NEW UI)
   invalidateCalendarMappingCache();
 }
@@ -2782,6 +3071,46 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   const cache = await refreshColorCache();
   const manualColors = manualColorsMap || cache.manualColors;
   const element = options.element; // DOM element for fingerprint matching
+
+  // PRIORITY 0: NEW UI task colors (full bg/text/border support) - HIGHEST PRIORITY
+  // Check if this is a NEW UI task with custom colors set
+  const newUIColors = cache.newUITaskColors?.[taskId];
+  if (newUIColors && (newUIColors.background || newUIColors.text || newUIColors.border)) {
+    console.log('[TaskColoring] ✅ Using NEW UI task colors for:', taskId, newUIColors);
+
+    const isCompleted = options.isCompleted === true;
+
+    // Get list colors as fallback for properties not set in NEW UI colors
+    let listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+    const listBgColor = listId ? cache.listColors?.[listId] : null;
+    const listTextColor = listId ? cache.listTextColors?.[listId] : null;
+    const listBorderColor = listId ? cache.listBorderColors?.[listId] : null;
+    const completedStyling = listId ? cache.completedStyling?.[listId] : null;
+
+    // Merge NEW UI colors with list fallback
+    const bgColor = newUIColors.background || listBgColor || null;
+    const textColor = newUIColors.text || listTextColor || (bgColor ? pickContrastingText(bgColor) : null);
+    const borderColor = newUIColors.border || listBorderColor || null;
+
+    if (isCompleted) {
+      const { bgOpacity, textOpacity } = getCompletedOpacities(completedStyling, cache);
+      return {
+        backgroundColor: bgColor,
+        textColor: textColor,
+        borderColor: borderColor,
+        bgOpacity,
+        textOpacity,
+      };
+    }
+
+    return {
+      backgroundColor: bgColor,
+      textColor: textColor,
+      borderColor: borderColor,
+      bgOpacity: bgColor ? 1 : 0,
+      textOpacity: 1,
+    };
+  }
 
   // Support both base64 and decoded task ID formats
   // cf.taskToListMap stores DECODED IDs (from buildTaskToListMapping)
