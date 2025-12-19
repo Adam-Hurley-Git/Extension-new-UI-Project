@@ -49,6 +49,7 @@ Unify task coloring and event coloring into a cohesive UI system with enhanced c
 
 ## Phase 2: Calendar List Coloring (Mirror Task List System)
 **Goal:** Add per-calendar default colors (bg/text/border) like task lists
+**Status:** Ready to implement - approach validated by Phase 3
 
 ### Stage 2.1: Storage Schema for Calendar Colors
 - [ ] Add to `defaultSettings.eventColoring`:
@@ -57,7 +58,7 @@ Unify task coloring and event coloring into a cohesive UI system with enhanced c
     // calendarId -> { background, text, border }
   }
   ```
-- [ ] Add storage functions to `storage.js`:
+- [ ] Add storage functions to `storage.js` (mirror task list pattern):
   - `getCalendarColors(calendarId)`
   - `setCalendarBackgroundColor(calendarId, color)`
   - `setCalendarTextColor(calendarId, color)`
@@ -80,10 +81,27 @@ Unify task coloring and event coloring into a cohesive UI system with enhanced c
 - [ ] Reuse `createTaskListColorControl` pattern for consistency
 
 ### Stage 2.4: Apply Calendar Colors to Events
-- [ ] In `colorRenderer.js`, check calendar ID of event
-- [ ] Color priority: Manual event color > Calendar default > Google default
-- [ ] Apply bg/text/border same as task list coloring does for tasks
+- [ ] In `colorRenderer.js` or `index.js`, check calendar ID of event
+- [ ] **Color priority:** Manual event color > Calendar default > Google default
+- [ ] Apply colors using same method as individual events:
+  ```javascript
+  // Background: set on [data-eventchip] element
+  element.style.backgroundColor = bgColor;
+
+  // Text: set on .I0UMhf, .lhydbb elements
+  textElements.forEach(el => el.style.color = textColor);
+
+  // Border: use outline (Google sets border-width: 0)
+  element.style.outline = `2px solid ${borderColor}`;
+  element.style.outlineOffset = '-2px';
+  ```
 - [ ] Handle 4px calendar stripe preservation (existing gradient logic)
+
+### Implementation Notes (from Phase 3):
+- Calendar ID can be extracted from event's data attributes or API response
+- Use `rgbToHex()` helper for color conversion
+- Outline method proven effective for borders
+- Text elements to target: `.I0UMhf`, `.lhydbb.gVNoLb`, `.lhydbb.K9QN7e`
 
 **Files Affected:**
 - `Main Extension/lib/storage.js`
@@ -94,53 +112,71 @@ Unify task coloring and event coloring into a cohesive UI system with enhanced c
 
 ---
 
-## Phase 3: Full Event Color Control (Text/Border/Background)
+## Phase 3: Full Event Color Control (Text/Border/Background) ✅ COMPLETED
 **Goal:** Events get same granular control as tasks
+**Status:** ✅ Completed - 2025-12-19
 
-### Stage 3.1: Extend Event Color Storage
-- [ ] Change `cf.eventColors` structure:
+### Stage 3.1: Extend Event Color Storage ✅
+- [x] Changed `cf.eventColors` structure:
   ```javascript
-  // Before:
-  { hex: "#...", isRecurring: bool }
-
-  // After:
+  // New structure supports all three properties:
   {
     background: "#..." | null,
     text: "#..." | null,
     border: "#..." | null,
-    isRecurring: bool
+    isRecurring: bool,
+    appliedAt: timestamp
   }
   ```
-- [ ] Add migration for existing event colors (map `hex` -> `background`)
-- [ ] Update all storage functions
+- [x] Added `saveEventColorsFullAdvanced()` function in `storage.js`
+- [x] Added `findEventColorFull()` function in `storage.js`
+- [x] Added `normalizeEventColorData()` for backward compatibility
+- [x] Existing `hex` format auto-migrates to `background` property
 
-### Stage 3.2: Update Event Color Picker UI
-- [ ] In injected color picker, add tabs or sections for:
-  - Background color
-  - Text color
-  - Border color
-- [ ] Each opens ColorSwatchModal targeting that property
-- [ ] Show current colors as small preview chips
+### Stage 3.2: Update Event Color Picker UI ✅
+- [x] Created `EventColorModal.js` component with:
+  - Property tabs: Background | Text | Border (with color indicators)
+  - Live preview showing actual event appearance
+  - Palette tabs: Vibrant | Pastel | Dark | Custom
+  - "No color" swatch to clear individual properties
+  - Hex input for manual color entry
+  - Apply/Cancel buttons
+- [x] Modal shows actual event title and colors on open
+- [x] Tab indicators update dynamically with selected colors
+- [x] Grid layout matches ColorSwatchModal (7 columns, 36px max-width swatches)
 
-### Stage 3.3: Apply Full Color Styling to Events
-- [ ] Modify `colorRenderer.js` to apply:
-  - `background-color` (with gradient for calendar stripe)
-  - `color` for text
-  - `border` or `outline` for border (test which works)
-- [ ] Maintain calendar stripe gradient on left edge
-- [ ] Handle multi-day events and different view layouts
+### Stage 3.3: Apply Full Color Styling to Events ✅
+- [x] Modified `index.js` to apply colors:
+  ```javascript
+  // Background: directly on [data-eventchip] element
+  element.style.backgroundColor = bgColor;
+
+  // Text: on .I0UMhf, .lhydbb elements
+  const textEls = element.querySelectorAll('.I0UMhf, .lhydbb.gVNoLb, .lhydbb.K9QN7e');
+  textEls.forEach(el => el.style.color = textColor);
+
+  // Border: using outline (Google sets border-width: 0)
+  element.style.outline = `2px solid ${borderColor}`;
+  element.style.outlineOffset = '-2px';
+  ```
+- [x] Calendar stripe (.jSrjCf) preserved - not modified
+- [x] Auto-contrast text color when no custom text set
+- [x] Works in day/week/month views
 
 ### Stage 3.4: Calendar Default Text/Border Colors
-- [ ] Similar to task lists: calendar defaults for text/border
-- [ ] Event manual color overrides calendar default
-- [ ] UI in popup to set per-calendar text/border defaults
+- [ ] Moved to Phase 2 (Calendar List Coloring)
 
-**Files Affected:**
-- `Main Extension/lib/storage.js`
-- `Main Extension/features/event-coloring/core/colorPickerInjector.js`
-- `Main Extension/features/event-coloring/core/colorRenderer.js`
-- `Main Extension/popup/popup.js`
-- `Main Extension/popup/popup.html`
+### Key Implementation Details:
+- **Border method:** `outline` with `outline-offset: -2px` (border-width is 0 in Google)
+- **Text selectors:** `.I0UMhf` (title), `.lhydbb.gVNoLb` (time), `.lhydbb.K9QN7e` (location)
+- **DOM color extraction:** `getEventColorsFromDOM()` reads actual colors for preview
+- **Color conversion:** `rgbToHex()` helper for computed style conversion
+
+**Files Created/Modified:**
+- `Main Extension/shared/components/EventColorModal.js` ✅ (new)
+- `Main Extension/lib/storage.js` ✅
+- `Main Extension/features/event-coloring/index.js` ✅
+- `Main Extension/manifest.json` ✅
 
 ---
 
@@ -311,17 +347,37 @@ cf.taskColors = { taskId: { background, text, border } }  // Single task instanc
 - [x] Phase 1.1: ColorSwatchModal component created
 - [x] Phase 1.2: Event coloring "+" button integrated
 - [x] Phase 1.3: Task coloring "+" button integrated
+- [x] **Phase 3: Full Event Color Control** ✅
+  - [x] EventColorModal.js with Background/Text/Border tabs
+  - [x] Live preview with actual event title and colors
+  - [x] Storage functions for full color support
+  - [x] Color rendering for bg/text/border on events
+  - [x] Backward compatibility with existing hex format
 
 ### Next Steps
-- [ ] Begin Phase 2: Calendar List Coloring
+- [ ] **Phase 2: Calendar List Coloring** (Ready to implement)
+  - Storage schema for per-calendar colors
+  - Fetch calendar list from Google API
+  - Popup UI for calendar color management
+  - Apply calendar default colors to events
+
+### Implementation Knowledge Gained
+From Phase 3 implementation, we now know:
+1. **Border coloring:** Use `outline` + `outline-offset: -2px` (not border-color)
+2. **Text elements:** Target `.I0UMhf`, `.lhydbb.gVNoLb`, `.lhydbb.K9QN7e`
+3. **Event detection:** Read from `[data-eventchip]` elements
+4. **Color extraction:** `window.getComputedStyle()` + `rgbToHex()` helper
+5. **Calendar stripe:** `.jSrjCf` element - preserve, don't modify
 
 ---
 
 ## Notes & Decisions
-- Border coloring will use `outline` method (not `border-color`) because Google sets `border-width: 0`
-- Calendar stripe (4px left gradient) will be preserved even with custom colors
-- No "completed event" styling needed (unlike completed tasks)
+- ✅ **Border coloring confirmed:** Uses `outline` method (not `border-color`) because Google sets `border-width: 0`
+- ✅ **Calendar stripe preserved:** `.jSrjCf` element untouched, background applied to parent
+- ✅ **No "completed event" styling needed** (unlike completed tasks)
 - Templates are stored in sync storage for cross-device access
+- ✅ **EventColorModal UI:** 7-column grid, 36px max-width swatches (matches ColorSwatchModal)
+- ✅ **Live preview:** Shows actual event title and colors from DOM on modal open
 
 ## Existing Recurring Systems (Must Integrate With)
 
