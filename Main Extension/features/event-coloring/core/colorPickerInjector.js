@@ -11,6 +11,7 @@ import EventIdUtils from '../utils/eventIdUtils.js';
 import ScenarioDetector from '../utils/scenarioDetector.js';
 import { showRecurringEventDialog } from '../components/RecurringEventDialog.js';
 import { ColorSwatchModal, COLOR_PALETTES } from '../../../shared/components/ColorSwatchModal.js';
+import { EventColorModal, createEventColorModal } from '../../../shared/components/EventColorModal.js';
 
 /**
  * ColorPickerInjector - Handles injection of custom colors into Google Calendar
@@ -282,7 +283,7 @@ export class ColorPickerInjector {
   }
 
   /**
-   * Open the custom color swatch modal
+   * Open the custom color swatch modal (with bg/text/border tabs)
    * @param {string} eventId - The event ID to apply color to
    */
   openCustomColorModal(eventId) {
@@ -292,19 +293,24 @@ export class ColorPickerInjector {
       this.activeModal = null;
     }
 
-    // Get current color for this event
-    this.storageService.findEventColor?.(eventId).then((colorData) => {
-      const currentColor = colorData?.hex || '#4285f4';
+    // Get current colors for this event (use new full format)
+    const getColors = this.storageService.findEventColorFull || this.storageService.findEventColor;
+    getColors?.(eventId).then((colorData) => {
+      // Normalize color data for the modal
+      const currentColors = {
+        background: colorData?.background || colorData?.hex || null,
+        text: colorData?.text || null,
+        border: colorData?.border || null,
+      };
 
-      this.activeModal = new ColorSwatchModal({
+      console.log('[CF] Opening EventColorModal with colors:', currentColors);
+
+      this.activeModal = new EventColorModal({
         id: `cf-event-color-modal-${Date.now()}`,
-        currentColor,
-        helperText: 'Choose a custom color for this event',
-        onColorSelect: async (color) => {
-          console.log('[CF] Custom color selected:', color);
-          await this.handleColorSelect(eventId, color);
-          this.activeModal?.close();
-          this.activeModal = null;
+        currentColors,
+        onApply: async (colors) => {
+          console.log('[CF] Event colors applied:', colors);
+          await this.handleFullColorSelect(eventId, colors);
         },
         onClose: () => {
           this.activeModal = null;
@@ -622,7 +628,7 @@ export class ColorPickerInjector {
   }
 
   /**
-   * Handle color selection
+   * Handle color selection (legacy single color)
    */
   async handleColorSelect(eventId, color) {
     try {
@@ -666,6 +672,61 @@ export class ColorPickerInjector {
       }
     } catch (error) {
       console.error('[CF] Error handling color select:', error);
+    }
+  }
+
+  /**
+   * Handle full color selection with background/text/border
+   * @param {string} eventId - Event ID
+   * @param {Object} colors - { background, text, border }
+   */
+  async handleFullColorSelect(eventId, colors) {
+    try {
+      console.log('[CF] handleFullColorSelect:', { eventId, colors });
+
+      // Check if this is a recurring event
+      const parsed = EventIdUtils.fromEncoded(eventId);
+
+      if (parsed.isRecurring) {
+        // Show recurring event dialog with custom message for full colors
+        showRecurringEventDialog({
+          eventId,
+          color: colors.background, // For display purposes
+          onConfirm: async (applyToAll) => {
+            console.log('[CF] Recurring dialog confirmed for full colors, applyToAll:', applyToAll);
+
+            // Save with new full color storage method
+            if (this.storageService.saveEventColorsFullAdvanced) {
+              await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+            } else if (this.storageService.saveEventColorAdvanced) {
+              // Fallback to old method with just background color
+              await this.storageService.saveEventColorAdvanced(eventId, colors.background, { applyToAll });
+            }
+
+            // Trigger re-render
+            this.triggerColorUpdate();
+          },
+          onClose: () => {
+            console.log('[CF] Recurring dialog closed');
+          },
+        });
+      } else {
+        // Single event - save directly with full colors
+        if (this.storageService.saveEventColorsFullAdvanced) {
+          await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+        } else {
+          // Fallback to old method
+          await this.storageService.saveEventColor(eventId, colors.background, false);
+        }
+
+        // Close menus
+        this.closeMenus();
+
+        // Trigger re-render
+        this.triggerColorUpdate();
+      }
+    } catch (error) {
+      console.error('[CF] Error handling full color select:', error);
     }
   }
 
