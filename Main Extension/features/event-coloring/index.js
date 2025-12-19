@@ -977,11 +977,17 @@
       title = titleEl.textContent?.trim() || 'Sample Event';
     }
 
-    // Get border/outline color if set
+    // Get border/outline color if actually set (check style and width too)
     let border = null;
+    const outlineStyle = computedStyle.outlineStyle;
+    const outlineWidth = computedStyle.outlineWidth;
     const outlineColor = computedStyle.outlineColor;
-    if (outlineColor && outlineColor !== 'rgb(0, 0, 0)' && outlineColor !== 'rgba(0, 0, 0, 0)') {
-      border = rgbToHex(outlineColor);
+
+    // Only consider it a border if outline-style is not 'none' and width > 0
+    if (outlineStyle && outlineStyle !== 'none' && outlineWidth && outlineWidth !== '0px') {
+      if (outlineColor && outlineColor !== 'rgb(0, 0, 0)' && outlineColor !== 'rgba(0, 0, 0, 0)') {
+        border = rgbToHex(outlineColor);
+      }
     }
 
     return { background, text, border, title };

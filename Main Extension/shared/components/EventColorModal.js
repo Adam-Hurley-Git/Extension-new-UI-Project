@@ -717,22 +717,22 @@ class EventColorModal {
         background: #039be5;
         border-radius: 4px;
         overflow: hidden;
-        min-height: 28px;
+        min-height: 36px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
         transition: all 0.15s ease;
       }
       .ecm-preview-stripe {
-        width: 4px;
+        width: 5px;
         background: #f4511e;
         flex-shrink: 0;
       }
       .ecm-preview-content {
-        padding: 4px 10px;
+        padding: 6px 14px;
         display: flex;
         align-items: center;
       }
       .ecm-preview-title {
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 500;
         color: #ffffff;
         white-space: nowrap;
@@ -771,8 +771,7 @@ class EventColorModal {
       /* Content Area */
       .ecm-content {
         padding: 12px 16px;
-        max-height: none;
-        overflow-y: visible;
+        overflow: hidden;
       }
       .ecm-color-info {
         margin-bottom: 12px;
