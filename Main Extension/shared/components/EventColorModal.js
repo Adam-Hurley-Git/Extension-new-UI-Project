@@ -5,36 +5,36 @@
  * @module EventColorModal
  */
 
-// Color Palettes (shared with ColorSwatchModal)
+// Color Palettes - 9 columns x 4 rows layout
 const EVENT_COLOR_PALETTES = {
   vibrant: [
-    '#d50000', '#ff1744', '#f44336', '#ff5722',
-    '#ff9800', '#ffc107',
-    '#ffeb3b', '#cddc39',
-    '#8bc34a', '#4caf50', '#00e676', '#1de9b6', '#009688',
-    '#00e5ff', '#00bcd4', '#00b0ff',
-    '#03a9f4', '#2196f3', '#2979ff', '#3d5afe',
-    '#651fff', '#3f51b5', '#673ab7', '#9c27b0', '#e91e63',
-    '#ff4081', '#f50057',
+    '#d50000', '#ff1744', '#f44336', '#ff5722', '#ff9800',
+    '#ffc107', '#ffeb3b', '#cddc39', '#8bc34a',
+    '#4caf50', '#00e676', '#1de9b6', '#009688', '#00e5ff',
+    '#00bcd4', '#00b0ff', '#03a9f4', '#2196f3',
+    '#2979ff', '#3d5afe', '#651fff', '#3f51b5', '#673ab7',
+    '#9c27b0', '#e91e63', '#ff4081', '#f50057',
     '#795548', '#9e9e9e', '#607d8b',
   ],
   pastel: [
     '#f8bbd9', '#f48fb1', '#f06292', '#ec407a', '#e1bee7',
-    '#d1c4e9', '#ce93d8', '#ba68c8', '#ab47bc', '#c8e6c9',
+    '#d1c4e9', '#ce93d8', '#ba68c8', '#ab47bc',
     '#c8e6c9', '#a5d6a7', '#81c784', '#66bb6a', '#dcedc8',
-    '#bbdefb', '#90caf9', '#64b5f6', '#42a5f5', '#b3e5fc',
-    '#b2ebf2', '#80deea', '#4dd0e1', '#26c6da', '#f0f4c3',
-    '#fff9c4', '#fff59d', '#fff176', '#ffee58', '#ffe0b2',
-    '#ffccbc', '#ffab91', '#ff8a65', '#ff7043', '#ffd180',
+    '#bbdefb', '#90caf9', '#64b5f6', '#42a5f5',
+    '#b3e5fc', '#b2ebf2', '#80deea', '#4dd0e1', '#26c6da',
+    '#f0f4c3', '#fff9c4', '#fff59d', '#fff176',
+    '#ffee58', '#ffe0b2', '#ffccbc', '#ffab91', '#ff8a65',
+    '#ff7043', '#ffd180',
   ],
   dark: [
     '#b71c1c', '#c62828', '#d32f2f', '#f44336', '#880e4f',
-    '#4a148c', '#6a1b9a', '#7b1fa2', '#8e24aa', '#311b92',
-    '#0d47a1', '#1565c0', '#1976d2', '#1e88e5', '#01579b',
-    '#004d40', '#00695c', '#00796b', '#00897b', '#1b5e20',
-    '#2e7d32', '#388e3c', '#43a047', '#4caf50', '#33691e',
-    '#3e2723', '#4e342e', '#5d4037', '#6d4c41', '#263238',
-    '#37474f', '#455a64', '#546e7a', '#607d8b', '#212121',
+    '#4a148c', '#6a1b9a', '#7b1fa2', '#8e24aa',
+    '#311b92', '#0d47a1', '#1565c0', '#1976d2', '#1e88e5',
+    '#01579b', '#004d40', '#00695c', '#00796b',
+    '#00897b', '#1b5e20', '#2e7d32', '#388e3c', '#43a047',
+    '#4caf50', '#33691e', '#3e2723', '#4e342e',
+    '#5d4037', '#6d4c41', '#263238', '#37474f', '#455a64',
+    '#546e7a', '#607d8b', '#212121',
   ],
 };
 
@@ -84,11 +84,20 @@ class EventColorModal {
    */
   constructor(options) {
     this.id = options.id || `ecm-${Date.now()}`;
+    // Custom colors that have been set by user
     this.currentColors = {
       background: options.currentColors?.background || null,
       text: options.currentColors?.text || null,
       border: options.currentColors?.border || null,
     };
+    // Original event colors from DOM (for accurate preview when no custom color set)
+    this.originalColors = {
+      background: options.originalColors?.background || '#039be5',
+      text: options.originalColors?.text || '#ffffff',
+      border: options.originalColors?.border || null,
+    };
+    // Event title for preview
+    this.eventTitle = options.eventTitle || 'Sample Event';
     // Working copy for live preview
     this.workingColors = { ...this.currentColors };
     this.onApply = options.onApply;
@@ -134,7 +143,7 @@ class EventColorModal {
           <div class="ecm-preview-event" id="${this.id}-preview">
             <div class="ecm-preview-stripe"></div>
             <div class="ecm-preview-content">
-              <span class="ecm-preview-title">Sample Event</span>
+              <span class="ecm-preview-title">${this.eventTitle}</span>
             </div>
           </div>
         </div>
@@ -241,15 +250,23 @@ class EventColorModal {
   }
 
   /**
+   * Get the effective color for a property (working > original)
+   */
+  getEffectiveColor(property) {
+    return this.workingColors[property] || this.originalColors[property] || null;
+  }
+
+  /**
    * Update the live preview
    */
   updatePreview() {
     const preview = this.element.querySelector(`#${this.id}-preview`);
     if (!preview) return;
 
-    const bg = this.workingColors.background || '#039be5';
-    const text = this.workingColors.text || getContrastColor(bg);
-    const border = this.workingColors.border;
+    // Use working colors if set, otherwise fall back to original event colors
+    const bg = this.getEffectiveColor('background') || '#039be5';
+    const text = this.workingColors.text || (this.currentColors.text ? this.currentColors.text : (this.originalColors.text || getContrastColor(bg)));
+    const border = this.getEffectiveColor('border');
 
     preview.style.backgroundColor = bg;
     preview.style.color = text;
@@ -270,39 +287,39 @@ class EventColorModal {
 
   /**
    * Update the property tab indicators
+   * Shows actual current colors (working > original) for accurate representation
    */
   updatePropertyIndicators() {
     const bgIndicator = this.element.querySelector(`#${this.id}-bg-indicator`);
     const textIndicator = this.element.querySelector(`#${this.id}-text-indicator`);
     const borderIndicator = this.element.querySelector(`#${this.id}-border-indicator`);
 
+    // Background indicator - use working color if set, else original event color
     if (bgIndicator) {
-      if (this.workingColors.background) {
-        bgIndicator.style.backgroundColor = this.workingColors.background;
-        bgIndicator.classList.add('has-color');
-      } else {
-        bgIndicator.style.backgroundColor = '#4caf50';
-        bgIndicator.classList.remove('has-color');
-      }
+      const bgColor = this.getEffectiveColor('background') || '#039be5';
+      bgIndicator.style.backgroundColor = bgColor;
+      bgIndicator.classList.toggle('has-color', !!this.workingColors.background);
     }
 
+    // Text indicator - use working color if set, else original event text color
     if (textIndicator) {
-      if (this.workingColors.text) {
-        textIndicator.style.backgroundColor = this.workingColors.text;
-        textIndicator.classList.add('has-color');
-      } else {
-        textIndicator.style.backgroundColor = '#ffc107';
-        textIndicator.classList.remove('has-color');
-      }
+      const textColor = this.getEffectiveColor('text') || '#ffffff';
+      textIndicator.style.backgroundColor = textColor;
+      textIndicator.classList.toggle('has-color', !!this.workingColors.text);
     }
 
+    // Border indicator - use working color if set, else original or show no border style
     if (borderIndicator) {
-      if (this.workingColors.border) {
-        borderIndicator.style.backgroundColor = this.workingColors.border;
+      const borderColor = this.getEffectiveColor('border');
+      if (borderColor) {
+        borderIndicator.style.backgroundColor = borderColor;
         borderIndicator.classList.add('has-color');
+        borderIndicator.classList.remove('no-border');
       } else {
-        borderIndicator.style.backgroundColor = '#f44336';
+        // No border set - show a "no border" style (gray with diagonal line)
+        borderIndicator.style.backgroundColor = '#e0e0e0';
         borderIndicator.classList.remove('has-color');
+        borderIndicator.classList.add('no-border');
       }
     }
   }
@@ -636,7 +653,7 @@ class EventColorModal {
         align-items: center;
         justify-content: center;
         gap: 6px;
-        padding: 10px 12px;
+        padding: 8px 10px;
         border: 2px solid #dadce0;
         background: #ffffff;
         color: #5f6368;
@@ -662,6 +679,19 @@ class EventColorModal {
         border-radius: 50%;
         border: 2px solid rgba(0, 0, 0, 0.1);
         flex-shrink: 0;
+        position: relative;
+        overflow: hidden;
+      }
+      .ecm-property-indicator.no-border::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: -2px;
+        width: 120%;
+        height: 2px;
+        background: #f44336;
+        transform: rotate(-45deg);
+        transform-origin: center;
       }
 
       /* Preview Section */
@@ -687,22 +717,22 @@ class EventColorModal {
         background: #039be5;
         border-radius: 4px;
         overflow: hidden;
-        min-height: 28px;
+        min-height: 36px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
         transition: all 0.15s ease;
       }
       .ecm-preview-stripe {
-        width: 4px;
+        width: 5px;
         background: #f4511e;
         flex-shrink: 0;
       }
       .ecm-preview-content {
-        padding: 4px 10px;
+        padding: 6px 14px;
         display: flex;
         align-items: center;
       }
       .ecm-preview-title {
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 500;
         color: #ffffff;
         white-space: nowrap;
@@ -740,9 +770,8 @@ class EventColorModal {
 
       /* Content Area */
       .ecm-content {
-        padding: 16px;
-        max-height: 280px;
-        overflow-y: auto;
+        padding: 12px 16px;
+        overflow: hidden;
       }
       .ecm-color-info {
         margin-bottom: 12px;
@@ -790,13 +819,14 @@ class EventColorModal {
       }
       .ecm-palette {
         display: grid;
-        grid-template-columns: repeat(8, 1fr);
+        grid-template-columns: repeat(7, 1fr);
         gap: 8px;
       }
 
       /* Swatches */
       .ecm-swatch {
         width: 100%;
+        max-width: 36px;
         aspect-ratio: 1;
         border-radius: 6px;
         cursor: pointer;
@@ -806,8 +836,8 @@ class EventColorModal {
         position: relative;
       }
       .ecm-swatch:hover {
-        transform: scale(1.15);
-        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+        transform: scale(1.1);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         z-index: 1;
       }
       .ecm-swatch.selected {
@@ -820,7 +850,7 @@ class EventColorModal {
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        font-size: 14px;
+        font-size: 11px;
         font-weight: bold;
         color: white;
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
