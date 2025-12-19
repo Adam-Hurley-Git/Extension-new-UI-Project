@@ -927,6 +927,3 @@ if (typeof window !== 'undefined') {
   window.EventColorModal = EventColorModal;
   window.createEventColorModal = createEventColorModal;
 }
-
-export { EventColorModal, createEventColorModal };
-export default EventColorModal;
