@@ -25,6 +25,46 @@ export class ColorRenderer {
   }
 
   /**
+   * Normalize event color data (handles both old and new formats)
+   * @param {Object|string} colorData - Raw color data
+   * @returns {Object} Normalized { background, text, border, hex, isRecurring }
+   */
+  normalizeColorData(colorData) {
+    if (!colorData) return null;
+
+    // Handle string format (very old)
+    if (typeof colorData === 'string') {
+      return {
+        background: colorData,
+        text: null,
+        border: null,
+        hex: colorData,
+        isRecurring: false,
+      };
+    }
+
+    // Handle old format with only hex
+    if (colorData.hex && !colorData.background && colorData.background !== null) {
+      return {
+        background: colorData.hex,
+        text: null,
+        border: null,
+        hex: colorData.hex,
+        isRecurring: colorData.isRecurring || false,
+      };
+    }
+
+    // New format - return as-is with defaults
+    return {
+      background: colorData.background || null,
+      text: colorData.text || null,
+      border: colorData.border || null,
+      hex: colorData.hex || colorData.background || null,
+      isRecurring: colorData.isRecurring || false,
+    };
+  }
+
+  /**
    * Update colors for all events from storage
    */
   async updateAllEventColors() {
@@ -56,13 +96,13 @@ export class ColorRenderer {
       const singleEvents = [];
 
       Object.entries(eventColors).forEach(([eventId, colorData]) => {
-        const color = typeof colorData === 'string' ? colorData : colorData.hex;
-        const isRecurring = typeof colorData === 'object' && colorData.isRecurring;
+        const normalized = this.normalizeColorData(colorData);
+        if (!normalized) return;
 
-        if (isRecurring) {
-          recurringEvents.push({ eventId, color, colorData });
+        if (normalized.isRecurring) {
+          recurringEvents.push({ eventId, colors: normalized });
         } else {
-          singleEvents.push({ eventId, color, colorData });
+          singleEvents.push({ eventId, colors: normalized });
         }
       });
 
@@ -70,13 +110,13 @@ export class ColorRenderer {
       requestAnimationFrame(() => {
         try {
           // Process recurring events first (they affect multiple elements)
-          recurringEvents.forEach(({ eventId, color, colorData }) => {
-            this.applyRecurringEventColor(eventId, color);
+          recurringEvents.forEach(({ eventId, colors }) => {
+            this.applyRecurringEventColorFull(eventId, colors);
           });
 
           // Process single events
-          singleEvents.forEach(({ eventId, color }) => {
-            this.applySingleEventColor(eventId, color);
+          singleEvents.forEach(({ eventId, colors }) => {
+            this.applySingleEventColorFull(eventId, colors);
           });
 
           // Update any open editor/viewer dialogs
@@ -94,7 +134,7 @@ export class ColorRenderer {
   }
 
   /**
-   * Apply color to a single event
+   * Apply color to a single event (legacy single color)
    */
   applySingleEventColor(eventId, color) {
     const element = document.querySelector(`[${DATA_ATTRIBUTES.EVENT_ID}="${eventId}"]`);
@@ -104,9 +144,34 @@ export class ColorRenderer {
   }
 
   /**
-   * Apply color to all instances of a recurring event
+   * Apply full colors to a single event
+   * @param {string} eventId - Event ID
+   * @param {Object} colors - { background, text, border }
+   */
+  applySingleEventColorFull(eventId, colors) {
+    const element = document.querySelector(`[${DATA_ATTRIBUTES.EVENT_ID}="${eventId}"]`);
+    if (element) {
+      this.updateColorOfEventElementFull(element, colors);
+    }
+  }
+
+  /**
+   * Apply color to all instances of a recurring event (legacy single color)
    */
   applyRecurringEventColor(eventId, color) {
+    this.applyRecurringEventColorFull(eventId, {
+      background: color,
+      text: null,
+      border: null,
+    });
+  }
+
+  /**
+   * Apply full colors to all instances of a recurring event
+   * @param {string} eventId - Event ID
+   * @param {Object} colors - { background, text, border }
+   */
+  applyRecurringEventColorFull(eventId, colors) {
     try {
       const parsedSource = EventIdUtils.fromEncoded(eventId);
       if (parsedSource.type !== 'calendar') return;
@@ -124,7 +189,7 @@ export class ColorRenderer {
 
           // Check if this element matches the recurring event (same base ID)
           if (EventIdUtils.matchesEvent(parsedElement, parsedSource)) {
-            this.updateColorOfEventElement(element, color);
+            this.updateColorOfEventElementFull(element, colors);
           }
         } catch (e) {
           // Skip elements with invalid IDs
@@ -136,50 +201,88 @@ export class ColorRenderer {
   }
 
   /**
-   * Update the color of a single event element
+   * Update the color of a single event element (legacy single color)
    */
   updateColorOfEventElement(element, color) {
     if (!element || !color) return;
 
+    // Use the new full color method with just background
+    this.updateColorOfEventElementFull(element, {
+      background: color,
+      text: null,
+      border: null,
+    });
+  }
+
+  /**
+   * Update the color of a single event element with full bg/text/border support
+   * @param {HTMLElement} element - Event element
+   * @param {Object} colors - { background, text, border }
+   */
+  updateColorOfEventElementFull(element, colors) {
+    if (!element) return;
+
+    const { background, text, border } = colors;
+
     // Mark as modified to prevent re-processing
     element.setAttribute(DATA_ATTRIBUTES.CF_COLORED, 'true');
 
-    // Get all descendant elements that might have color styles
-    const allElements = [element, ...Array.from(element.querySelectorAll('*'))];
-    const colorProperties = EVENT_SELECTORS.STYLE_PROPERTIES.COLORS;
+    // Apply background color to main element
+    if (background) {
+      element.style.backgroundColor = background;
+      // Also update border-color (even though border-width is 0, for consistency)
+      element.style.borderColor = background;
+    }
 
-    allElements.forEach(el => {
-      if (!(el instanceof HTMLElement)) return;
+    // Apply text color to text elements
+    // Selectors based on Google Calendar's DOM structure:
+    // - .I0UMhf = Event title
+    // - .lhydbb.gVNoLb = Time text
+    // - .lhydbb.K9QN7e = Location text
+    // - .KcY3wb = Title wrapper
+    if (text) {
+      const textSelectors = [
+        '.I0UMhf',           // Title
+        '.lhydbb.gVNoLb',    // Time
+        '.lhydbb.K9QN7e',    // Location
+        '.KcY3wb',           // Title wrapper
+        '.lhydbb.RIOtYe',    // Content container
+        '.EWOIrf',           // Alternative text element
+      ];
 
-      const computedStyle = window.getComputedStyle(el);
-
-      colorProperties.forEach(prop => {
-        const currentValue = computedStyle.getPropertyValue(
-          prop.replace(/([A-Z])/g, '-$1').toLowerCase()
-        );
-
-        // Only update if the element has a background or border color set
-        if (currentValue && currentValue !== 'rgba(0, 0, 0, 0)' && currentValue !== 'transparent') {
-          if (prop === 'backgroundColor') {
-            el.style.backgroundColor = color;
-          } else if (prop === 'borderColor') {
-            el.style.borderColor = color;
-          } else if (prop === 'borderLeftColor') {
-            el.style.borderLeftColor = color;
-          } else if (prop === 'borderRightColor') {
-            el.style.borderRightColor = color;
+      textSelectors.forEach(selector => {
+        const textElements = element.querySelectorAll(selector);
+        textElements.forEach(el => {
+          if (el instanceof HTMLElement) {
+            el.style.color = text;
           }
-        }
+        });
       });
-    });
 
-    // Also update any color chip elements
+      // Also set on main element for inherited text
+      element.style.color = text;
+    }
+
+    // Apply border using outline (since Google sets border-width: 0)
+    if (border) {
+      element.style.outline = `2px solid ${border}`;
+      element.style.outlineOffset = '-2px';
+    } else {
+      // Clear any existing outline
+      element.style.outline = '';
+      element.style.outlineOffset = '';
+    }
+
+    // Update any color chip elements (for visual consistency)
     const chips = element.querySelectorAll(EVENT_SELECTORS.CHIP.VISUAL);
     chips.forEach(chip => {
-      if (chip instanceof HTMLElement) {
-        chip.style.backgroundColor = color;
+      if (chip instanceof HTMLElement && background) {
+        chip.style.backgroundColor = background;
       }
     });
+
+    // IMPORTANT: Do NOT override the calendar stripe (.jSrjCf)
+    // This preserves the calendar source indicator on the left edge
   }
 
   /**

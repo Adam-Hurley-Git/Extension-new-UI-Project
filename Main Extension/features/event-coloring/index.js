@@ -945,7 +945,7 @@
   }
 
   /**
-   * Open the custom color swatch modal
+   * Open the custom color swatch modal (with bg/text/border tabs)
    */
   let activeColorModal = null;
 
@@ -959,32 +959,231 @@
     // Inject modal CSS if not already done
     injectModalCSS();
 
-    // Get current color for this event
+    // Get current colors for this event (support new format)
     const colorData = findColorForEvent(eventId);
-    const currentColor = colorData?.hex || '#4285f4';
+    const currentColors = {
+      background: colorData?.background || colorData?.hex || null,
+      text: colorData?.text || null,
+      border: colorData?.border || null,
+    };
 
-    // Check if ColorSwatchModal is available
-    if (typeof window.ColorSwatchModal !== 'function') {
-      console.error('[EventColoring] ColorSwatchModal not loaded');
-      return;
+    // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal
+    if (typeof window.EventColorModal === 'function') {
+      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors);
+
+      activeColorModal = new window.EventColorModal({
+        id: `cf-event-color-modal-${Date.now()}`,
+        currentColors,
+        onApply: async (colors) => {
+          console.log('[EventColoring] Event colors applied:', colors);
+          await handleFullColorSelection(eventId, colors);
+        },
+        onClose: () => {
+          activeColorModal = null;
+        },
+      });
+
+      activeColorModal.open();
+    } else if (typeof window.ColorSwatchModal === 'function') {
+      // Fallback to old single-color modal
+      console.log('[EventColoring] Falling back to ColorSwatchModal');
+
+      activeColorModal = new window.ColorSwatchModal({
+        id: `cf-event-color-modal-${Date.now()}`,
+        currentColor: currentColors.background || '#4285f4',
+        helperText: 'Choose a custom color for this event',
+        onColorSelect: async (color) => {
+          console.log('[EventColoring] Custom color selected:', color);
+          await handleColorSelection(eventId, color);
+          activeColorModal?.close();
+          activeColorModal = null;
+        },
+        onClose: () => {
+          activeColorModal = null;
+        },
+      });
+
+      activeColorModal.open();
+    } else {
+      console.error('[EventColoring] No color modal available');
+    }
+  }
+
+  /**
+   * Handle full color selection with background/text/border
+   */
+  async function handleFullColorSelection(eventId, colors) {
+    console.log('[EventColoring] Full color selected:', eventId, colors);
+
+    // Check if recurring event
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    if (parsed.isRecurring) {
+      // Show recurring event dialog
+      showRecurringEventDialog({
+        eventId,
+        color: colors.background, // For display
+        onConfirm: async (applyToAll) => {
+          console.log('[EventColoring] Recurring confirmed for full colors, applyToAll:', applyToAll);
+          await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
+
+          // Update the Google color swatch before closing
+          if (colors.background) {
+            updateGoogleColorSwatch(eventId, colors.background);
+          }
+
+          closeColorPicker();
+          refreshColors();
+        },
+        onClose: () => {
+          console.log('[EventColoring] Recurring dialog closed');
+        },
+      });
+    } else {
+      // Single event - save with full colors
+      await saveFullColors(eventId, colors);
+
+      // Update the Google color swatch
+      if (colors.background) {
+        updateGoogleColorSwatch(eventId, colors.background);
+      }
+
+      closeColorPicker();
+      applyFullColorsToEvent(eventId, colors);
     }
 
-    activeColorModal = new window.ColorSwatchModal({
-      id: `cf-event-color-modal-${Date.now()}`,
-      currentColor,
-      helperText: 'Choose a custom color for this event',
-      onColorSelect: async (color) => {
-        console.log('[EventColoring] Custom color selected:', color);
-        await handleColorSelection(eventId, color);
-        activeColorModal?.close();
-        activeColorModal = null;
-      },
-      onClose: () => {
-        activeColorModal = null;
-      },
-    });
+    // Close the modal
+    if (activeColorModal) {
+      activeColorModal.close();
+      activeColorModal = null;
+    }
+  }
 
-    activeColorModal.open();
+  /**
+   * Save full colors (bg/text/border) for a single event
+   */
+  async function saveFullColors(eventId, colors) {
+    const colorData = {
+      background: colors.background || null,
+      text: colors.text || null,
+      border: colors.border || null,
+      hex: colors.background || null, // Backward compatibility
+      isRecurring: false,
+      appliedAt: Date.now(),
+    };
+
+    // Use new storage method if available
+    if (window.cc3Storage.saveEventColorsFullAdvanced) {
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+    } else {
+      // Fallback: save as single color
+      await window.cc3Storage.saveEventColor(eventId, colors.background, false);
+    }
+
+    eventColors[eventId] = colorData;
+  }
+
+  /**
+   * Save full colors with recurring event support
+   */
+  async function saveFullColorsWithRecurringSupport(eventId, colors, applyToAll) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    const colorData = {
+      background: colors.background || null,
+      text: colors.text || null,
+      border: colors.border || null,
+      hex: colors.background || null,
+      isRecurring: applyToAll && parsed.isRecurring,
+      appliedAt: Date.now(),
+    };
+
+    if (applyToAll && parsed.isRecurring) {
+      const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
+
+      if (window.cc3Storage.saveEventColorsFullAdvanced) {
+        await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: true });
+      } else if (window.cc3Storage.saveEventColorAdvanced) {
+        await window.cc3Storage.saveEventColorAdvanced(eventId, colors.background, { applyToAll: true });
+      }
+
+      eventColors[baseStorageId] = colorData;
+
+      // Clean up individual instance colors
+      Object.keys(eventColors).forEach((storedId) => {
+        try {
+          const storedParsed = EventIdUtils.fromEncoded(storedId);
+          if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
+            delete eventColors[storedId];
+          }
+        } catch (e) {}
+      });
+    } else {
+      await saveFullColors(eventId, colors);
+    }
+  }
+
+  /**
+   * Apply full colors to an event element
+   */
+  function applyFullColorsToEvent(eventId, colors) {
+    const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+    elements.forEach((element) => {
+      if (!element.closest('[role="dialog"]')) {
+        applyFullColorsToElement(element, colors);
+      }
+    });
+  }
+
+  /**
+   * Apply full colors (bg/text/border) to a single element
+   */
+  function applyFullColorsToElement(element, colors) {
+    if (!element) return;
+
+    const { background, text, border } = colors;
+    const eventId = element.getAttribute('data-eventid');
+    const isEventChip = element.matches('[data-eventchip]');
+
+    if (isEventChip) {
+      // Apply background
+      if (background) {
+        const calendarColor = getCalendarColorForEvent(eventId);
+
+        if (calendarColor) {
+          const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${background} 4px)`;
+          element.style.setProperty('background', gradient, 'important');
+        } else {
+          element.style.setProperty('background-color', background, 'important');
+        }
+
+        element.style.borderColor = adjustColorBrightness(background, -15);
+      }
+
+      // Apply text color
+      const textColor = text || (background ? getTextColorForBackground(background) : null);
+      if (textColor) {
+        element.style.color = textColor;
+
+        // Update text color on child elements
+        element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
+          if (child instanceof HTMLElement) {
+            child.style.color = textColor;
+          }
+        });
+      }
+
+      // Apply border using outline
+      if (border) {
+        element.style.outline = `2px solid ${border}`;
+        element.style.outlineOffset = '-2px';
+      } else {
+        element.style.outline = '';
+        element.style.outlineOffset = '';
+      }
+
+      element.dataset.cfEventColored = 'true';
+    }
   }
 
   /**
@@ -1365,10 +1564,48 @@
     }
   }
 
+  /**
+   * Normalize color data from storage (handles old and new formats)
+   */
+  function normalizeColorData(colorData) {
+    if (!colorData) return null;
+
+    // Handle string format (very old)
+    if (typeof colorData === 'string') {
+      return {
+        background: colorData,
+        text: null,
+        border: null,
+        hex: colorData,
+        isRecurring: false,
+      };
+    }
+
+    // Handle old format with only hex
+    if (colorData.hex && !colorData.background && colorData.background !== null) {
+      return {
+        background: colorData.hex,
+        text: null,
+        border: null,
+        hex: colorData.hex,
+        isRecurring: colorData.isRecurring || false,
+      };
+    }
+
+    // New format - return as-is with defaults
+    return {
+      background: colorData.background || null,
+      text: colorData.text || null,
+      border: colorData.border || null,
+      hex: colorData.hex || colorData.background || null,
+      isRecurring: colorData.isRecurring || false,
+    };
+  }
+
   function findColorForEvent(eventId) {
     // Direct match
     if (eventColors[eventId]) {
-      return eventColors[eventId];
+      return normalizeColorData(eventColors[eventId]);
     }
 
     // Check for recurring event match
@@ -1376,10 +1613,11 @@
     if (parsed.type !== 'calendar') return null;
 
     for (const [storedId, colorData] of Object.entries(eventColors)) {
-      if (typeof colorData === 'object' && colorData.isRecurring) {
+      const normalized = normalizeColorData(colorData);
+      if (normalized && normalized.isRecurring) {
         const storedParsed = EventIdUtils.fromEncoded(storedId);
         if (EventIdUtils.matchesEvent(parsed, storedParsed)) {
-          return colorData;
+          return normalized;
         }
       }
     }
@@ -1413,28 +1651,28 @@
     const singleEvents = [];
 
     Object.entries(eventColors).forEach(([eventId, colorData]) => {
-      const color = typeof colorData === 'string' ? colorData : colorData?.hex;
-      const isRecurring = typeof colorData === 'object' && colorData.isRecurring;
+      const normalized = normalizeColorData(colorData);
+      if (!normalized) return;
 
-      if (isRecurring) {
-        recurringEvents.push({ eventId, color });
+      if (normalized.isRecurring) {
+        recurringEvents.push({ eventId, colors: normalized });
       } else {
-        singleEvents.push({ eventId, color });
+        singleEvents.push({ eventId, colors: normalized });
       }
     });
 
     // Apply recurring events (match all instances)
-    recurringEvents.forEach(({ eventId, color }) => {
-      applyRecurringEventColor(eventId, color);
+    recurringEvents.forEach(({ eventId, colors }) => {
+      applyRecurringEventColor(eventId, colors);
     });
 
     // Apply single events
-    singleEvents.forEach(({ eventId, color }) => {
-      applyColorToEvent(eventId, color);
+    singleEvents.forEach(({ eventId, colors }) => {
+      applyColorsToEvent(eventId, colors);
     });
   }
 
-  function applyRecurringEventColor(eventId, color) {
+  function applyRecurringEventColor(eventId, colors) {
     const parsed = EventIdUtils.fromEncoded(eventId);
     if (parsed.type !== 'calendar') return;
 
@@ -1449,23 +1687,36 @@
         if (elementParsed.type !== 'calendar') return;
 
         if (EventIdUtils.matchesEvent(elementParsed, parsed)) {
-          applyColorToElement(element, color);
+          applyColorsToElement(element, colors);
         }
       } catch (e) {}
     });
   }
 
   function applyColorToEvent(eventId, color) {
+    // Legacy method - convert to new format
+    applyColorsToEvent(eventId, { background: color, text: null, border: null });
+  }
+
+  function applyColorsToEvent(eventId, colors) {
     const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
     elements.forEach((element) => {
       if (!element.closest('[role="dialog"]')) {
-        applyColorToElement(element, color);
+        applyColorsToElement(element, colors);
       }
     });
   }
 
   function applyColorToElement(element, colorHex) {
-    if (!element || !colorHex) return;
+    // Legacy method - convert to new format
+    applyColorsToElement(element, { background: colorHex, text: null, border: null });
+  }
+
+  function applyColorsToElement(element, colors) {
+    if (!element) return;
+
+    const { background, text, border } = colors;
+    if (!background && !text && !border) return;
 
     // Only color the main event chip element - NOT child elements
     // This preserves the rounded corners and other styling
@@ -1476,47 +1727,62 @@
       const eventId = element.getAttribute('data-eventid');
       const calendarColor = getCalendarColorForEvent(eventId);
 
-      console.log('[EventColoring] Applying color to event chip:', {
-        eventId: eventId?.substring(0, 30) + '...',
-        calendarColor,
-        customColor: colorHex,
-        calendarColorsAvailable: Object.keys(calendarColors).length
-      });
+      // Apply background color
+      if (background) {
+        // Use a gradient to preserve the left 4px with calendar color
+        // and apply our custom color to the rest of the element
+        if (calendarColor) {
+          const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${background} 4px)`;
+          element.style.setProperty('background', gradient, 'important');
+        } else {
+          // Fallback: just apply the custom color if we don't have calendar color
+          element.style.setProperty('background-color', background, 'important');
+        }
 
-      // Use a gradient to preserve the left 4px with calendar color
-      // and apply our custom color to the rest of the element
-      if (calendarColor) {
-        const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${colorHex} 4px)`;
-        element.style.setProperty('background', gradient, 'important');
-        console.log('[EventColoring] Applied gradient:', gradient);
-      } else {
-        // Fallback: just apply the custom color if we don't have calendar color
-        element.style.setProperty('background-color', colorHex, 'important');
-        console.log('[EventColoring] Applied solid color (no calendar color found)');
+        element.style.borderColor = adjustColorBrightness(background, -15);
       }
 
-      element.style.borderColor = adjustColorBrightness(colorHex, -15);
       element.dataset.cfEventColored = 'true';
 
-      // Update text colors for readability
-      const textColor = getTextColorForBackground(colorHex);
-      element.style.color = textColor;
+      // Apply text color (custom or auto-contrast)
+      const textColor = text || (background ? getTextColorForBackground(background) : null);
+      if (textColor) {
+        element.style.color = textColor;
 
-      // Update text color on child text elements only (not background)
-      element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
-        if (child instanceof HTMLElement) {
-          child.style.color = textColor;
-        }
-      });
+        // Update text color on child text elements only (not background)
+        element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
+          if (child instanceof HTMLElement) {
+            child.style.color = textColor;
+          }
+        });
+      }
+
+      // Apply border using outline (since Google sets border-width: 0)
+      if (border) {
+        element.style.outline = `2px solid ${border}`;
+        element.style.outlineOffset = '-2px';
+      } else {
+        element.style.outline = '';
+        element.style.outlineOffset = '';
+      }
 
     } else if (element.matches('[data-draggable-id]')) {
       // For draggable items (different event type)
-      element.style.setProperty('background-color', colorHex, 'important');
-      element.style.borderColor = adjustColorBrightness(colorHex, -15);
+      if (background) {
+        element.style.setProperty('background-color', background, 'important');
+        element.style.borderColor = adjustColorBrightness(background, -15);
+      }
       element.dataset.cfEventColored = 'true';
 
-      const textColor = getTextColorForBackground(colorHex);
-      element.style.color = textColor;
+      const textColor = text || (background ? getTextColorForBackground(background) : null);
+      if (textColor) {
+        element.style.color = textColor;
+      }
+
+      if (border) {
+        element.style.outline = `2px solid ${border}`;
+        element.style.outlineOffset = '-2px';
+      }
     }
   }
 
