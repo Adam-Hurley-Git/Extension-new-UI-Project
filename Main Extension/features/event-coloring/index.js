@@ -945,6 +945,66 @@
   }
 
   /**
+   * Get the original colors of an event from the DOM
+   * @param {string} eventId - The event ID
+   * @returns {Object} - { background, text, border, title }
+   */
+  function getEventColorsFromDOM(eventId) {
+    const element = document.querySelector(`[data-eventid="${eventId}"]`);
+    if (!element) {
+      return { background: '#039be5', text: '#ffffff', border: null, title: 'Sample Event' };
+    }
+
+    // Get computed styles
+    const computedStyle = window.getComputedStyle(element);
+
+    // Get background color
+    let background = computedStyle.backgroundColor;
+    if (background === 'rgba(0, 0, 0, 0)' || background === 'transparent') {
+      background = '#039be5'; // Default calendar blue
+    } else {
+      // Convert rgb to hex
+      background = rgbToHex(background);
+    }
+
+    // Get text color from the title element
+    const titleEl = element.querySelector('.I0UMhf') || element.querySelector('.lhydbb');
+    let text = '#ffffff';
+    let title = 'Sample Event';
+    if (titleEl) {
+      const titleStyle = window.getComputedStyle(titleEl);
+      text = rgbToHex(titleStyle.color) || '#ffffff';
+      title = titleEl.textContent?.trim() || 'Sample Event';
+    }
+
+    // Get border/outline color if set
+    let border = null;
+    const outlineColor = computedStyle.outlineColor;
+    if (outlineColor && outlineColor !== 'rgb(0, 0, 0)' && outlineColor !== 'rgba(0, 0, 0, 0)') {
+      border = rgbToHex(outlineColor);
+    }
+
+    return { background, text, border, title };
+  }
+
+  /**
+   * Convert RGB string to hex
+   */
+  function rgbToHex(rgb) {
+    if (!rgb) return null;
+    if (rgb.startsWith('#')) return rgb;
+
+    const match = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!match) return null;
+
+    const r = parseInt(match[1]).toString(16).padStart(2, '0');
+    const g = parseInt(match[2]).toString(16).padStart(2, '0');
+    const b = parseInt(match[3]).toString(16).padStart(2, '0');
+
+    return `#${r}${g}${b}`;
+  }
+
+  /**
    * Open the custom color swatch modal (with bg/text/border tabs)
    */
   let activeColorModal = null;
@@ -959,7 +1019,7 @@
     // Inject modal CSS if not already done
     injectModalCSS();
 
-    // Get current colors for this event (support new format)
+    // Get current custom colors for this event (support new format)
     const colorData = findColorForEvent(eventId);
     const currentColors = {
       background: colorData?.background || colorData?.hex || null,
@@ -967,13 +1027,24 @@
       border: colorData?.border || null,
     };
 
+    // Get original event colors from DOM for accurate preview
+    const domColors = getEventColorsFromDOM(eventId);
+    const originalColors = {
+      background: domColors.background,
+      text: domColors.text,
+      border: domColors.border,
+    };
+    const eventTitle = domColors.title;
+
     // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal
     if (typeof window.EventColorModal === 'function') {
-      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors);
+      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors);
 
       activeColorModal = new window.EventColorModal({
         id: `cf-event-color-modal-${Date.now()}`,
         currentColors,
+        originalColors,
+        eventTitle,
         onApply: async (colors) => {
           console.log('[EventColoring] Event colors applied:', colors);
           await handleFullColorSelection(eventId, colors);
