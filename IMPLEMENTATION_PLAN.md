@@ -32,9 +32,11 @@ Unify task coloring and event coloring into a cohesive UI system with enhanced c
 - [x] Add ColorSwatchModal.js to manifest content_scripts
 
 ### Stage 1.3: Integrate with New UI Tasks
-- [ ] Modify task coloring modal injection for new UI (ttb_ prefix tasks)
-- [ ] Add same "+" custom color button to task color picker
-- [ ] Ensure palettes and Color Lab colors are accessible
+- [x] Modify task coloring modal injection for new UI (ttb_ prefix tasks)
+- [x] Add same "+" custom color button to task color picker
+- [x] Ensure palettes and Color Lab colors are accessible
+- [x] Add CSS injection for ColorSwatchModal in task coloring
+- [x] Create createTaskCustomColorButton() and openTaskCustomColorModal() functions
 
 **Files Affected:**
 - `Main Extension/popup/popup.js` (extract shared code)
@@ -300,15 +302,18 @@ cf.taskColors = { taskId: { background, text, border } }  // Single task instanc
 
 ## Current Progress
 
-**Last Updated:** [DATE]
+**Last Updated:** 2025-12-19
 
 ### Completed
 - [x] Analysis of existing task coloring feature
 - [x] Analysis of existing event coloring feature
 - [x] Plan document created
+- [x] Phase 1.1: ColorSwatchModal component created
+- [x] Phase 1.2: Event coloring "+" button integrated
+- [x] Phase 1.3: Task coloring "+" button integrated
 
 ### Next Steps
-- [ ] Begin Phase 1.1: Extract swatch modal component
+- [ ] Begin Phase 2: Calendar List Coloring
 
 ---
 
