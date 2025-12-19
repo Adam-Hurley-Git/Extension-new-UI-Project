@@ -222,6 +222,8 @@ let popstateHandler = null;
 let repaintIntervalId = null;
 let storageChangeHandler = null;
 let modalSettingsUnsubscribe = null;
+let taskModalCSSInjected = false;
+let activeTaskColorModal = null;
 
 // PERFORMANCE: In-memory cache to avoid constant storage reads
 let taskToListMapCache = null;
@@ -956,6 +958,284 @@ async function clearTaskColor(taskId) {
   return operation;
 }
 
+/**
+ * Inject CSS for ColorSwatchModal if not already injected
+ */
+function injectTaskModalCSS() {
+  if (taskModalCSSInjected) return;
+
+  const styleId = 'cf-task-color-swatch-modal-css';
+  if (document.getElementById(styleId)) {
+    taskModalCSSInjected = true;
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    /* ColorSwatchModal Styles - Injected by TaskColoring */
+    .csm-backdrop {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.3);
+      z-index: 99999;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .csm-backdrop.active {
+      display: block;
+      opacity: 1;
+    }
+    .csm-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.95);
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      z-index: 100000;
+      width: 380px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .csm-modal.open {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .csm-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 12px 12px 0;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e8eaed;
+    }
+    .csm-tab {
+      flex: 1;
+      padding: 8px 12px;
+      border: none;
+      background: transparent;
+      color: #5f6368;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 6px 6px 0 0;
+      transition: all 0.15s ease;
+    }
+    .csm-tab:hover {
+      background: #e8eaed;
+      color: #202124;
+    }
+    .csm-tab.active {
+      background: #ffffff;
+      color: #1a73e8;
+      font-weight: 600;
+    }
+    .csm-content {
+      padding: 16px;
+      max-height: calc(80vh - 60px);
+      overflow-y: auto;
+    }
+    .csm-helper {
+      font-size: 12px;
+      color: #5f6368;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+    .csm-hex-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .csm-color-input {
+      width: 60%;
+      height: 32px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .csm-hex-input {
+      flex: 1;
+      height: 32px;
+      padding: 0 8px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: monospace;
+      text-transform: uppercase;
+      transition: border-color 0.15s ease;
+    }
+    .csm-hex-input:focus {
+      outline: none;
+      border-color: #1a73e8;
+    }
+    .csm-panel {
+      display: none;
+    }
+    .csm-panel.active {
+      display: block;
+    }
+    .csm-palette {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+    }
+    .csm-swatch {
+      width: 100%;
+      max-width: 36px;
+      aspect-ratio: 1;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+      border: 2px solid transparent;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      position: relative;
+    }
+    .csm-swatch:hover {
+      transform: scale(1.1);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+    }
+    .csm-swatch.selected {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px #1a73e8;
+    }
+    .csm-swatch.selected::after {
+      content: '\\2713';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 12px;
+      font-weight: bold;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+    .csm-empty-state {
+      text-align: center;
+      padding: 24px 16px;
+      color: #5f6368;
+    }
+    .csm-empty-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .csm-empty-text {
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #202124;
+    }
+    .csm-empty-subtext {
+      font-size: 12px;
+      color: #80868b;
+    }
+  `;
+  document.head.appendChild(style);
+  taskModalCSSInjected = true;
+  console.log('[TaskColoring] Modal CSS injected');
+}
+
+/**
+ * Open custom color modal for task
+ * @param {string} taskId - The task ID
+ * @param {Function} onColorSelect - Callback when color is selected
+ * @param {string} currentColor - Current color value
+ */
+function openTaskCustomColorModal(taskId, onColorSelect, currentColor) {
+  // Close any existing modal
+  if (activeTaskColorModal) {
+    activeTaskColorModal.close();
+    activeTaskColorModal = null;
+  }
+
+  // Check if ColorSwatchModal is available
+  if (!window.ColorSwatchModal) {
+    console.warn('[TaskColoring] ColorSwatchModal not available');
+    return;
+  }
+
+  // Inject CSS if needed
+  injectTaskModalCSS();
+
+  activeTaskColorModal = new window.ColorSwatchModal({
+    id: `task-csm-${taskId}`,
+    currentColor: currentColor || '#4285f4',
+    helperText: 'Choose a custom color for this task',
+    onColorSelect: (color) => {
+      if (onColorSelect) {
+        onColorSelect(color);
+      }
+    },
+    onClose: () => {
+      activeTaskColorModal = null;
+    },
+  });
+
+  activeTaskColorModal.open();
+}
+
+/**
+ * Create the "+" custom color button for task picker
+ * @param {Function} onColorSelect - Callback when color is selected
+ * @param {Function} getCurrentColor - Function to get current color
+ * @returns {HTMLElement} The button element
+ */
+function createTaskCustomColorButton(onColorSelect, getCurrentColor) {
+  const customBtn = document.createElement('button');
+  customBtn.type = 'button';
+  customBtn.className = 'cf-task-custom-color-btn';
+  customBtn.textContent = '+';
+  customBtn.title = 'More colors';
+  customBtn.style.cssText = `
+    width: 28px;
+    height: 28px;
+    border: 2px dashed #dadce0;
+    border-radius: 50%;
+    background: #f8f9fa;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    color: #5f6368;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    padding: 0;
+    margin-left: 4px;
+  `;
+
+  customBtn.addEventListener('mouseenter', () => {
+    customBtn.style.borderColor = '#1a73e8';
+    customBtn.style.color = '#1a73e8';
+    customBtn.style.background = '#e8f0fe';
+  });
+
+  customBtn.addEventListener('mouseleave', () => {
+    customBtn.style.borderColor = '#dadce0';
+    customBtn.style.color = '#5f6368';
+    customBtn.style.background = '#f8f9fa';
+  });
+
+  customBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const currentColor = getCurrentColor ? getCurrentColor() : '#4285f4';
+    openTaskCustomColorModal('task', onColorSelect, currentColor);
+  });
+
+  return customBtn;
+}
+
 async function buildInlineTaskColorRow(initial) {
   const initialColor = initial || '#4285f4';
 
@@ -1034,6 +1314,16 @@ async function buildInlineTaskColorRow(initial) {
   });
 
   // Return API that matches the original interface
+  // Create the "+" custom color button
+  const customColorBtn = createTaskCustomColorButton(
+    (color) => {
+      // Update the color picker with the selected color
+      colorPicker.setColor(color);
+      currentColor = color;
+    },
+    () => colorPicker.getColor()
+  );
+
   return {
     colorPicker,
     colorInput: {
@@ -1057,6 +1347,7 @@ async function buildInlineTaskColorRow(initial) {
     },
     applyBtn,
     clearBtn,
+    customColorBtn,
     presetContainer: null, // Not needed with custom picker
   };
 }
@@ -1120,7 +1411,15 @@ async function buildFallbackColorRow(initial) {
     height: 24px;
   `;
 
-  return { colorInput, applyBtn, clearBtn, presetContainer: null };
+  // Create the "+" custom color button for fallback
+  const customColorBtn = createTaskCustomColorButton(
+    (color) => {
+      colorInput.value = color;
+    },
+    () => colorInput.value
+  );
+
+  return { colorInput, applyBtn, clearBtn, customColorBtn, presetContainer: null };
 }
 
 async function paintTaskImmediately(taskId, colorOverride = null, textColorOverride = null) {
@@ -1209,7 +1508,7 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
 
   const map = await loadMap();
   const initialColor = map[taskId] || '#4285f4';
-  const { colorPicker, colorInput, applyBtn, clearBtn, presetContainer } = await buildInlineTaskColorRow(initialColor);
+  const { colorPicker, colorInput, applyBtn, clearBtn, customColorBtn, presetContainer } = await buildInlineTaskColorRow(initialColor);
 
   // Immediately show the current task color in the calendar when modal opens
   if (map[taskId]) {
@@ -1812,6 +2111,9 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
   }
   colorPickerRow.appendChild(applyBtn);
   colorPickerRow.appendChild(clearBtn);
+  if (customColorBtn) {
+    colorPickerRow.appendChild(customColorBtn);
+  }
 
   // Row 2: Checkbox + Use List Colors button
   checkboxRow.appendChild(checkboxContainer);
