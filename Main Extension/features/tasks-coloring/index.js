@@ -3076,7 +3076,8 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
 
   // PRIORITY 0: NEW UI task colors (full bg/text/border support) - HIGHEST PRIORITY
   // Check if this is a NEW UI task with custom colors set
-  const newUIColors = cache.newUITaskColors?.[taskId];
+  // Use lookupWithBase64Fallback to handle format differences between save and lookup
+  const newUIColors = lookupWithBase64Fallback(cache.newUITaskColors, taskId);
   if (newUIColors && (newUIColors.background || newUIColors.text || newUIColors.border)) {
     console.log('[TaskColoring] ✅ Using NEW UI task colors for:', taskId, newUIColors);
 
@@ -4064,6 +4065,13 @@ function initTasksColoring() {
     }
     // Chain data (local storage)
     if (area === 'local' && (changes['cf.taskIdToChainId'] || changes['cf.recurringChains'])) {
+      invalidateColorCache();
+      if (!isResetting) {
+        repaintSoon();
+      }
+    }
+    // NEW UI task colors (local storage)
+    if (area === 'local' && changes['cf.newUITaskColors']) {
       invalidateColorCache();
       if (!isResetting) {
         repaintSoon();
