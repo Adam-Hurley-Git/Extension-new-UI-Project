@@ -2891,7 +2891,9 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
   node.style.setProperty('filter', 'none', 'important');
   node.style.setProperty('opacity', '1', 'important');
 
-  const textElements = node.querySelectorAll('span, div, p, h1, h2, h3, h4, h5, h6');
+  // Target both generic HTML elements AND Google Calendar-specific classes for NEW UI tasks
+  // Google Calendar uses: .I0UMhf (title), .KcY3wb, .lhydbb, .fFwDnf, .XuJrye (task info)
+  const textElements = node.querySelectorAll('span, div, p, h1, h2, h3, h4, h5, h6, .I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye');
   for (const textEl of textElements) {
     textEl.style.setProperty('color', textColorValue, 'important');
     textEl.style.setProperty('-webkit-text-fill-color', textColorValue, 'important');
@@ -3081,16 +3083,57 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     const isCompleted = options.isCompleted === true;
 
     // Get list colors as fallback for properties not set in NEW UI colors
+    // Need to use the same lookup logic as Priority 3 (chain + fingerprint fallbacks)
     let listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+
+    // FALLBACK 1: Check chain mapping for listId (persists across task moves)
+    if (!listId && taskId) {
+      let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+      if (!chainId) {
+        // Check storage directly (cache may be stale)
+        const storageData = await chrome.storage.local.get(['cf.taskIdToChainId']);
+        const storedMapping = storageData['cf.taskIdToChainId'] || {};
+        chainId = lookupWithBase64Fallback(storedMapping, taskId);
+      }
+      if (chainId) {
+        const chainMeta = cache.chainMetadata?.[chainId];
+        if (chainMeta?.listId) {
+          listId = chainMeta.listId;
+          console.log('[TaskColoring] ✅ Priority 0: Using listId from chain mapping:', listId);
+        }
+      }
+    }
+
+    // FALLBACK 2: Try fingerprint matching (for recurring tasks)
+    if (!listId && element) {
+      listId = getListIdFromFingerprint(element);
+      if (listId) {
+        console.log('[TaskColoring] ✅ Priority 0: Using listId from fingerprint:', listId);
+      }
+    }
+
     const listBgColor = listId ? cache.listColors?.[listId] : null;
     const listTextColor = listId ? cache.listTextColors?.[listId] : null;
     const listBorderColor = listId ? cache.listBorderColors?.[listId] : null;
     const completedStyling = listId ? cache.completedStyling?.[listId] : null;
 
+    console.log('[TaskColoring] Priority 0 list colors lookup:', {
+      listId,
+      listBgColor,
+      listTextColor,
+      listBorderColor,
+    });
+
     // Merge NEW UI colors with list fallback
     const bgColor = newUIColors.background || listBgColor || null;
     const textColor = newUIColors.text || listTextColor || (bgColor ? pickContrastingText(bgColor) : null);
     const borderColor = newUIColors.border || listBorderColor || null;
+
+    console.log('[TaskColoring] Priority 0 merged colors:', {
+      bgColor,
+      textColor,
+      borderColor,
+    });
 
     if (isCompleted) {
       const { bgOpacity, textOpacity } = getCompletedOpacities(completedStyling, cache);
