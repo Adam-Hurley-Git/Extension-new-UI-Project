@@ -3193,17 +3193,24 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     const listBorderColor = listId ? cache.listBorderColors?.[listId] : null;
     const completedStyling = listId ? cache.completedStyling?.[listId] : null;
 
-    // IMPORTANT: NEW UI custom colors are INDEPENDENT from list colors
-    // If user has set any custom color, DON'T mix with list colors to avoid visual conflicts
-    // Only use the custom values that were explicitly set, plus auto-calculated text if needed
-    const bgColor = newUIColors.background || null;
-    const textColor = newUIColors.text || (bgColor ? pickContrastingText(bgColor) : null);
-    const borderColor = newUIColors.border || null;
+    // Merge custom colors with list fallbacks:
+    // - If custom property is set → use custom (don't mix with list for that property)
+    // - If custom property is NOT set → use list color as fallback
+    // This allows setting just a custom border while keeping list bg/text
+    const bgColor = newUIColors.background || listBgColor || null;
+    const textColor = newUIColors.text || listTextColor || (bgColor ? pickContrastingText(bgColor) : null);
+    const borderColor = newUIColors.border || listBorderColor || null;
 
-    console.log('[TaskColoring] Priority 0 custom colors (no list fallback):', {
-      bgColor,
-      textColor,
-      borderColor,
+    console.log('[TaskColoring] Priority 0 merged colors:', {
+      customBg: newUIColors.background,
+      customText: newUIColors.text,
+      customBorder: newUIColors.border,
+      listBg: listBgColor,
+      listText: listTextColor,
+      listBorder: listBorderColor,
+      finalBg: bgColor,
+      finalText: textColor,
+      finalBorder: borderColor,
     });
 
     if (isCompleted) {
