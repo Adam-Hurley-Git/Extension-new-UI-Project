@@ -2791,13 +2791,30 @@ async function unpaintTasksFromList(listId) {
 }
 
 function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOpacity = 1, isCompleted = false, borderColorOverride = null) {
-  if (!node || !color) return;
+  if (!node) return;
+
+  // Allow styling when ANY color is set (background, text, or border)
+  // This enables border-only or text-only styling without requiring background
+  if (!color && !textColorOverride && !borderColorOverride) return;
 
   // DEBUG: Log border color application
-  console.log('[TaskColoring] applyPaint called with borderColorOverride:', borderColorOverride, 'bgOpacity:', bgOpacity);
+  console.log('[TaskColoring] applyPaint called with color:', color, 'borderColorOverride:', borderColorOverride, 'bgOpacity:', bgOpacity);
 
   node.classList.add(MARK);
-  let text = textColorOverride || pickContrastingText(color);
+
+  // Determine text color: use override, auto-contrast from background, or Google's default
+  let text = textColorOverride;
+  if (!text && color) {
+    text = pickContrastingText(color);
+  }
+  if (!text) {
+    // No text override and no background - use Google's captured text or default
+    if (node.dataset.cfGoogleText) {
+      text = node.dataset.cfGoogleText;
+    } else {
+      text = '#5f6368'; // Default gray text
+    }
+  }
 
   // CRITICAL FIX: If text is transparent (signals "use Google's text color")
   if (isTransparentColor(text)) {
@@ -2961,23 +2978,36 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
   }
 }
 function applyPaintIfNeeded(node, colors, isCompleted = false) {
-  if (!node || !colors || !colors.backgroundColor) return;
+  if (!node || !colors) return;
 
-  const bgOpacity = typeof colors.bgOpacity === 'number' ? colors.bgOpacity : 1;
+  // Allow styling when ANY color is set (background, text, or border)
+  if (!colors.backgroundColor && !colors.textColor && !colors.borderColor) return;
+
+  const bgOpacity = typeof colors.bgOpacity === 'number' ? colors.bgOpacity : (colors.backgroundColor ? 1 : 0);
   const textOpacity = typeof colors.textOpacity === 'number' ? colors.textOpacity : 1;
-  const fallbackText = pickContrastingText(colors.backgroundColor);
-  const textColor = colors.textColor || fallbackText;
-  const borderColor = colors.borderColor || null;
-  // Use blendColorWithWhite to match what applyPaint stores
-  const desiredBg = blendColorWithWhite(colors.backgroundColor, bgOpacity);
-  const desiredText = colorToRgba(textColor, textOpacity);
-  // Border defaults to bg color if not set, normalize to lowercase for comparison
-  const desiredBorder = (borderColor || desiredBg).toLowerCase();
-  const currentBg = node.dataset.cfTaskBgColor;
-  const currentText = node.dataset.cfTaskTextActual;
-  const currentBorder = (node.dataset.cfTaskBorderColor || '').toLowerCase();
 
-  if (node.classList.contains(MARK) && currentBg === desiredBg && currentText === desiredText && currentBorder === desiredBorder) {
+  // Determine text color: use provided, auto-contrast from bg, or null (will use Google's default)
+  let textColor = colors.textColor;
+  if (!textColor && colors.backgroundColor) {
+    textColor = pickContrastingText(colors.backgroundColor);
+  }
+
+  const borderColor = colors.borderColor || null;
+
+  // Use blendColorWithWhite to match what applyPaint stores (only if bg is set)
+  const desiredBg = colors.backgroundColor ? blendColorWithWhite(colors.backgroundColor, bgOpacity) : null;
+  const desiredText = textColor ? colorToRgba(textColor, textOpacity) : null;
+  // Border comparison - only if set
+  const desiredBorder = borderColor ? borderColor.toLowerCase() : (desiredBg ? desiredBg.toLowerCase() : null);
+  const currentBg = node.dataset.cfTaskBgColor || null;
+  const currentText = node.dataset.cfTaskTextActual || null;
+  const currentBorder = node.dataset.cfTaskBorderColor || null;
+
+  // Check if already painted with same colors
+  if (node.classList.contains(MARK) &&
+      currentBg === desiredBg &&
+      currentText === desiredText &&
+      currentBorder === desiredBorder) {
     return;
   }
 
@@ -3163,19 +3193,14 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
     const listBorderColor = listId ? cache.listBorderColors?.[listId] : null;
     const completedStyling = listId ? cache.completedStyling?.[listId] : null;
 
-    console.log('[TaskColoring] Priority 0 list colors lookup:', {
-      listId,
-      listBgColor,
-      listTextColor,
-      listBorderColor,
-    });
+    // IMPORTANT: NEW UI custom colors are INDEPENDENT from list colors
+    // If user has set any custom color, DON'T mix with list colors to avoid visual conflicts
+    // Only use the custom values that were explicitly set, plus auto-calculated text if needed
+    const bgColor = newUIColors.background || null;
+    const textColor = newUIColors.text || (bgColor ? pickContrastingText(bgColor) : null);
+    const borderColor = newUIColors.border || null;
 
-    // Merge NEW UI colors with list fallback
-    const bgColor = newUIColors.background || listBgColor || null;
-    const textColor = newUIColors.text || listTextColor || (bgColor ? pickContrastingText(bgColor) : null);
-    const borderColor = newUIColors.border || listBorderColor || null;
-
-    console.log('[TaskColoring] Priority 0 merged colors:', {
+    console.log('[TaskColoring] Priority 0 custom colors (no list fallback):', {
       bgColor,
       textColor,
       borderColor,
@@ -3633,12 +3658,15 @@ async function doRepaint(bypassThrottling = false) {
 
   const processedTaskIds = new Set();
 
+  // Helper to check if colors object has any paintable color
+  const hasAnyColor = (colors) => colors && (colors.backgroundColor || colors.textColor || colors.borderColor);
+
   // First: Process stored element references (fast path)
   for (const [taskId, element] of taskElementReferences.entries()) {
     if (element.isConnected) {
       const isCompleted = isTaskElementCompleted(element);
       const colors = await getColorForTask(taskId, null, { element, isCompleted });
-      if (colors && colors.backgroundColor) {
+      if (hasAnyColor(colors)) {
         const target = getPaintTarget(element);
         if (target) {
           applyPaintIfNeeded(target, colors, isCompleted);
@@ -3683,11 +3711,11 @@ async function doRepaint(bypassThrottling = false) {
       }
       const colors = await getColorForTask(id, null, { element: chip, isCompleted });
 
-      if (isCompleted && colors && colors.backgroundColor) {
+      if (isCompleted && hasAnyColor(colors)) {
         completedColoredCount++;
       }
 
-      if (colors && colors.backgroundColor) {
+      if (hasAnyColor(colors)) {
         processedCount++;
         // Always process tasks that have colors (manual or list default)
         const target = getPaintTarget(chip);
@@ -3759,7 +3787,7 @@ async function doRepaint(bypassThrottling = false) {
           if (target) {
             const isCompleted = isTaskElementCompleted(element);
             const colors = await getColorForTask(taskId, null, { element, isCompleted });
-            if (colors && colors.backgroundColor) {
+            if (hasAnyColor(colors)) {
               applyPaintIfNeeded(target, colors, isCompleted);
               taskElementReferences.set(taskId, element);
             }
