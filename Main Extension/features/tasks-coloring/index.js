@@ -143,7 +143,7 @@ async function findTaskElementOnCalendarGrid(taskId) {
       continue; // Skip modal elements
     }
     const resolvedId = await getResolvedTaskId(ttbElement);
-    if (resolvedId === taskId) {
+    if (taskIdsMatch(resolvedId, taskId)) {
       return ttbElement;
     }
   }
@@ -306,6 +306,46 @@ function lookupWithBase64Fallback(map, taskId) {
   } catch (e) {}
 
   return null;
+}
+
+/**
+ * Compare two task IDs with base64 format flexibility
+ * Returns true if IDs match in any format (direct, decoded, or encoded)
+ * @param {string} id1 - First task ID
+ * @param {string} id2 - Second task ID
+ * @returns {boolean} True if IDs match
+ */
+function taskIdsMatch(id1, id2) {
+  if (!id1 || !id2) return false;
+
+  // Direct match
+  if (id1 === id2) return true;
+
+  // Try decoding id1 and comparing
+  try {
+    const decoded1 = atob(id1);
+    if (decoded1 === id2) return true;
+  } catch (e) {}
+
+  // Try decoding id2 and comparing
+  try {
+    const decoded2 = atob(id2);
+    if (id1 === decoded2) return true;
+  } catch (e) {}
+
+  // Try encoding id1 and comparing
+  try {
+    const encoded1 = btoa(id1);
+    if (encoded1 === id2) return true;
+  } catch (e) {}
+
+  // Try encoding id2 and comparing
+  try {
+    const encoded2 = btoa(id2);
+    if (id1 === encoded2) return true;
+  } catch (e) {}
+
+  return false;
 }
 
 /**
@@ -1463,9 +1503,10 @@ async function paintTaskImmediately(taskId, colorOverride = null, textColorOverr
   const allTaskElements = [...oldUiElements];
 
   // Resolve NEW UI elements and check if they match the taskId
+  // Use taskIdsMatch for flexible format comparison (base64 vs decoded)
   for (const ttbElement of newUiElements) {
     const resolvedId = await getResolvedTaskId(ttbElement);
-    if (resolvedId === taskId) {
+    if (taskIdsMatch(resolvedId, taskId)) {
       allTaskElements.push(ttbElement);
     }
   }
@@ -2307,13 +2348,17 @@ async function injectNewUITaskColorControls(dialogEl, taskId, taskElement, onCha
           colorPreview.style.outline = '';
         }
 
-        // Invalidate cache and repaint
+        // Invalidate cache - storage listener will handle global repaint
+        // We also paint immediately below for instant feedback
         invalidateColorCache();
-        onChanged?.(taskId, colors);
 
-        // Repaint the task immediately
+        // Repaint the task immediately for instant visual feedback
+        // Note: storage listener and onChanged are not called here to avoid race conditions
         await new Promise(resolve => setTimeout(resolve, 50));
         await paintTaskImmediately(taskId, null);
+
+        // Notify parent if needed (but don't trigger redundant repaint)
+        onChanged?.(taskId, colors);
       },
       onClose: () => {
         console.log('[TaskColoring] NEW UI task modal closed');
