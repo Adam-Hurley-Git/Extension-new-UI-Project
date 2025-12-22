@@ -143,7 +143,7 @@ async function findTaskElementOnCalendarGrid(taskId) {
       continue; // Skip modal elements
     }
     const resolvedId = await getResolvedTaskId(ttbElement);
-    if (resolvedId === taskId) {
+    if (taskIdsMatch(resolvedId, taskId)) {
       return ttbElement;
     }
   }
@@ -255,6 +255,27 @@ let taskIdToChainCache = null; // taskId → chainId mapping
 let chainMetadataCache = null; // chainId → { fingerprint, listId, lastSeen }
 let chainColorsCache = null; // chainId → color (manual "apply to all" colors)
 
+// NEW UI TASK COLORS CACHE (ttb_ prefix tasks with full bg/text/border)
+let newUITaskColorsCache = null; // taskId → { background, text, border, isRecurring }
+
+/**
+ * Check if a task element or data-eventid is from NEW UI (ttb_ prefix)
+ * @param {HTMLElement|string} elementOrEventId - DOM element or data-eventid string
+ * @returns {boolean} True if NEW UI task
+ */
+function isNewUITask(elementOrEventId) {
+  if (!elementOrEventId) return false;
+
+  // If it's a string, check directly
+  if (typeof elementOrEventId === 'string') {
+    return elementOrEventId.startsWith('ttb_');
+  }
+
+  // If it's an element, get the data-eventid
+  const eventId = elementOrEventId.getAttribute?.('data-eventid');
+  return eventId && eventId.startsWith('ttb_');
+}
+
 /**
  * Lookup value in map with base64 fallbacks
  * Tries: direct → decoded (atob) → encoded (btoa)
@@ -285,6 +306,46 @@ function lookupWithBase64Fallback(map, taskId) {
   } catch (e) {}
 
   return null;
+}
+
+/**
+ * Compare two task IDs with base64 format flexibility
+ * Returns true if IDs match in any format (direct, decoded, or encoded)
+ * @param {string} id1 - First task ID
+ * @param {string} id2 - Second task ID
+ * @returns {boolean} True if IDs match
+ */
+function taskIdsMatch(id1, id2) {
+  if (!id1 || !id2) return false;
+
+  // Direct match
+  if (id1 === id2) return true;
+
+  // Try decoding id1 and comparing
+  try {
+    const decoded1 = atob(id1);
+    if (decoded1 === id2) return true;
+  } catch (e) {}
+
+  // Try decoding id2 and comparing
+  try {
+    const decoded2 = atob(id2);
+    if (id1 === decoded2) return true;
+  } catch (e) {}
+
+  // Try encoding id1 and comparing
+  try {
+    const encoded1 = btoa(id1);
+    if (encoded1 === id2) return true;
+  } catch (e) {}
+
+  // Try encoding id2 and comparing
+  try {
+    const encoded2 = btoa(id2);
+    if (id1 === encoded2) return true;
+  } catch (e) {}
+
+  return false;
 }
 
 /**
@@ -1442,9 +1503,10 @@ async function paintTaskImmediately(taskId, colorOverride = null, textColorOverr
   const allTaskElements = [...oldUiElements];
 
   // Resolve NEW UI elements and check if they match the taskId
+  // Use taskIdsMatch for flexible format comparison (base64 vs decoded)
   for (const ttbElement of newUiElements) {
     const resolvedId = await getResolvedTaskId(ttbElement);
-    if (resolvedId === taskId) {
+    if (taskIdsMatch(resolvedId, taskId)) {
       allTaskElements.push(ttbElement);
     }
   }
@@ -1491,6 +1553,14 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
   // Don't inject for temporary or new task IDs - only for existing tasks
   if (taskId.startsWith('test-task-') || taskId.startsWith('temp-') || taskId.startsWith('new-task-')) {
     // Skip injection for temporary/new task IDs
+    return;
+  }
+
+  // Check if this is a NEW UI task (ttb_ prefix) - use EventColorModal instead
+  const taskElement = dialogEl.querySelector('[data-eventid^="ttb_"]');
+  if (taskElement && isNewUITask(taskElement)) {
+    console.log('[TaskColoring] NEW UI task detected, using EventColorModal');
+    await injectNewUITaskColorControls(dialogEl, taskId, taskElement, onChanged);
     return;
   }
 
@@ -2154,6 +2224,260 @@ async function injectTaskColorControls(dialogEl, taskId, onChanged) {
   }
 }
 
+/**
+ * Inject color controls for NEW UI tasks (ttb_ prefix) using EventColorModal
+ * This provides full bg/text/border support like events
+ */
+async function injectNewUITaskColorControls(dialogEl, taskId, taskElement, onChanged) {
+  // Check if controls already exist
+  const existingControls = dialogEl.querySelector('.cf-newui-task-color-row');
+  if (existingControls) return;
+
+  // Get current colors from storage
+  const currentColors = await window.cc3Storage.getNewUITaskColors(taskId);
+
+  // Get task title from element
+  const titleEl = taskElement.querySelector('.XuJrye') || taskElement.querySelector('.I0UMhf');
+  const taskTitle = titleEl?.textContent?.replace(/^task:\s*/i, '').split(',')[0].trim() || 'Task';
+
+  // Get original colors from DOM for preview
+  const computedStyle = window.getComputedStyle(taskElement);
+  const originalBg = rgbToHex(computedStyle.backgroundColor) || '#039be5';
+  const textEl = taskElement.querySelector('.XuJrye, .I0UMhf, .lhydbb');
+  const originalText = textEl ? rgbToHex(window.getComputedStyle(textEl).color) : '#ffffff';
+
+  // Get list colors as fallback
+  const cache = await refreshColorCache();
+  const listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+  const listBgColor = listId ? cache.listColors?.[listId] : null;
+  const listTextColor = listId ? cache.listTextColors?.[listId] : null;
+  const listBorderColor = listId ? cache.listBorderColors?.[listId] : null;
+
+  // Create control row
+  const colorRow = document.createElement('div');
+  colorRow.className = 'cf-newui-task-color-row';
+  colorRow.style.cssText = `
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 8px 12px !important;
+    border-top: 1px solid #dadce0 !important;
+    margin-top: 8px !important;
+  `;
+
+  // Create color preview indicator
+  const colorPreview = document.createElement('div');
+  const previewBg = currentColors?.background || listBgColor || originalBg;
+  colorPreview.style.cssText = `
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    background-color: ${previewBg} !important;
+    border: 2px solid rgba(0, 0, 0, 0.1) !important;
+    flex-shrink: 0 !important;
+  `;
+  if (currentColors?.border || listBorderColor) {
+    colorPreview.style.outline = `2px solid ${currentColors?.border || listBorderColor}`;
+    colorPreview.style.outlineOffset = '-2px';
+  }
+
+  // Create "Customize Colors" button
+  const customizeBtn = document.createElement('button');
+  customizeBtn.type = 'button';
+  customizeBtn.textContent = 'Customize Colors';
+  customizeBtn.style.cssText = `
+    padding: 6px 12px !important;
+    border: 1px solid #dadce0 !important;
+    border-radius: 4px !important;
+    background: #f8f9fa !important;
+    color: #3c4043 !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+  `;
+  customizeBtn.addEventListener('mouseover', () => {
+    customizeBtn.style.background = '#e8eaed';
+    customizeBtn.style.borderColor = '#1a73e8';
+  });
+  customizeBtn.addEventListener('mouseout', () => {
+    customizeBtn.style.background = '#f8f9fa';
+    customizeBtn.style.borderColor = '#dadce0';
+  });
+
+  customizeBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    // Check if EventColorModal is available
+    if (!window.EventColorModal) {
+      console.error('[TaskColoring] EventColorModal not available for NEW UI task');
+      return;
+    }
+
+    // Get fresh colors
+    const freshColors = await window.cc3Storage.getNewUITaskColors(taskId);
+
+    const modal = new window.EventColorModal({
+      id: `cf-newui-task-modal-${Date.now()}`,
+      currentColors: {
+        background: freshColors?.background || null,
+        text: freshColors?.text || null,
+        border: freshColors?.border || null,
+      },
+      originalColors: {
+        background: listBgColor || originalBg,
+        text: listTextColor || originalText,
+        border: listBorderColor || null,
+      },
+      eventTitle: taskTitle,
+      onApply: async (colors) => {
+        console.log('[TaskColoring] NEW UI task colors applied:', taskId, colors);
+
+        // Save to storage
+        await window.cc3Storage.saveNewUITaskColors(taskId, colors, { applyToAll: false });
+
+        // Update preview
+        if (colors.background) {
+          colorPreview.style.backgroundColor = colors.background;
+        }
+        if (colors.border) {
+          colorPreview.style.outline = `2px solid ${colors.border}`;
+          colorPreview.style.outlineOffset = '-2px';
+        } else {
+          colorPreview.style.outline = '';
+        }
+
+        // Invalidate cache - storage listener will handle global repaint
+        // We also paint immediately below for instant feedback
+        invalidateColorCache();
+
+        // Repaint the task immediately for instant visual feedback
+        // Note: storage listener and onChanged are not called here to avoid race conditions
+        await new Promise(resolve => setTimeout(resolve, 50));
+        await paintTaskImmediately(taskId, null);
+
+        // Notify parent if needed (but don't trigger redundant repaint)
+        onChanged?.(taskId, colors);
+      },
+      onClose: () => {
+        console.log('[TaskColoring] NEW UI task modal closed');
+      },
+    });
+
+    modal.open();
+  });
+
+  // Create "Clear" button
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.textContent = 'Clear';
+  clearBtn.style.cssText = `
+    padding: 6px 12px !important;
+    border: 1px solid #dadce0 !important;
+    border-radius: 4px !important;
+    background: transparent !important;
+    color: #5f6368 !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+  `;
+  clearBtn.addEventListener('mouseover', () => {
+    clearBtn.style.background = '#fce8e6';
+    clearBtn.style.color = '#c5221f';
+  });
+  clearBtn.addEventListener('mouseout', () => {
+    clearBtn.style.background = 'transparent';
+    clearBtn.style.color = '#5f6368';
+  });
+
+  clearBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    // Clear colors from storage
+    await window.cc3Storage.clearNewUITaskColors(taskId);
+
+    // Reset preview to list colors or original
+    colorPreview.style.backgroundColor = listBgColor || originalBg;
+    if (listBorderColor) {
+      colorPreview.style.outline = `2px solid ${listBorderColor}`;
+      colorPreview.style.outlineOffset = '-2px';
+    } else {
+      colorPreview.style.outline = '';
+    }
+
+    // Invalidate cache and repaint
+    invalidateColorCache();
+    onChanged?.(taskId, null);
+
+    // Repaint the task immediately
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await paintTaskImmediately(taskId, null);
+  });
+
+  // Create "Use List Colors" info label
+  const listColorsInfo = document.createElement('span');
+  listColorsInfo.style.cssText = `
+    font-size: 11px !important;
+    color: #5f6368 !important;
+    margin-left: auto !important;
+  `;
+  if (listBgColor || listTextColor || listBorderColor) {
+    listColorsInfo.textContent = '(List colors active)';
+  }
+
+  // Assemble row
+  colorRow.appendChild(colorPreview);
+  colorRow.appendChild(customizeBtn);
+  colorRow.appendChild(clearBtn);
+  colorRow.appendChild(listColorsInfo);
+
+  // Find insertion point in dialog
+  const modalContent = dialogEl.querySelector('[role="document"]') || dialogEl;
+  const footerArea = modalContent.querySelector('div.HcF6Td');
+
+  if (footerArea) {
+    footerArea.insertBefore(colorRow, footerArea.firstChild);
+  } else {
+    // Find container with buttons
+    const allDivs = modalContent.querySelectorAll('div');
+    let buttonContainer = null;
+    for (const div of allDivs) {
+      if (div.querySelector('button')) {
+        buttonContainer = div;
+        break;
+      }
+    }
+    if (buttonContainer) {
+      buttonContainer.appendChild(colorRow);
+    } else {
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'padding: 8px; border-top: 1px solid #dadce0; margin-top: 16px;';
+      wrapper.appendChild(colorRow);
+      modalContent.appendChild(wrapper);
+    }
+  }
+}
+
+/**
+ * Convert RGB string to hex
+ */
+function rgbToHex(rgb) {
+  if (!rgb) return null;
+  if (rgb.startsWith('#')) return rgb;
+
+  const match = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!match) return null;
+
+  const r = parseInt(match[1]).toString(16).padStart(2, '0');
+  const g = parseInt(match[2]).toString(16).padStart(2, '0');
+  const b = parseInt(match[3]).toString(16).padStart(2, '0');
+
+  return `#${r}${g}${b}`;
+}
+
 const MARK = 'cf-task-colored';
 let repaintQueued = false;
 let lastClickedTaskId = null;
@@ -2467,13 +2791,30 @@ async function unpaintTasksFromList(listId) {
 }
 
 function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOpacity = 1, isCompleted = false, borderColorOverride = null) {
-  if (!node || !color) return;
+  if (!node) return;
+
+  // Allow styling when ANY color is set (background, text, or border)
+  // This enables border-only or text-only styling without requiring background
+  if (!color && !textColorOverride && !borderColorOverride) return;
 
   // DEBUG: Log border color application
-  console.log('[TaskColoring] applyPaint called with borderColorOverride:', borderColorOverride, 'bgOpacity:', bgOpacity);
+  console.log('[TaskColoring] applyPaint called with color:', color, 'borderColorOverride:', borderColorOverride, 'bgOpacity:', bgOpacity);
 
   node.classList.add(MARK);
-  let text = textColorOverride || pickContrastingText(color);
+
+  // Determine text color: use override, auto-contrast from background, or Google's default
+  let text = textColorOverride;
+  if (!text && color) {
+    text = pickContrastingText(color);
+  }
+  if (!text) {
+    // No text override and no background - use Google's captured text or default
+    if (node.dataset.cfGoogleText) {
+      text = node.dataset.cfGoogleText;
+    } else {
+      text = '#5f6368'; // Default gray text
+    }
+  }
 
   // CRITICAL FIX: If text is transparent (signals "use Google's text color")
   if (isTransparentColor(text)) {
@@ -2612,7 +2953,9 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
   node.style.setProperty('filter', 'none', 'important');
   node.style.setProperty('opacity', '1', 'important');
 
-  const textElements = node.querySelectorAll('span, div, p, h1, h2, h3, h4, h5, h6');
+  // Target both generic HTML elements AND Google Calendar-specific classes for NEW UI tasks
+  // Google Calendar uses: .I0UMhf (title), .KcY3wb, .lhydbb, .fFwDnf, .XuJrye (task info)
+  const textElements = node.querySelectorAll('span, div, p, h1, h2, h3, h4, h5, h6, .I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye');
   for (const textEl of textElements) {
     textEl.style.setProperty('color', textColorValue, 'important');
     textEl.style.setProperty('-webkit-text-fill-color', textColorValue, 'important');
@@ -2635,23 +2978,36 @@ function applyPaint(node, color, textColorOverride = null, bgOpacity = 1, textOp
   }
 }
 function applyPaintIfNeeded(node, colors, isCompleted = false) {
-  if (!node || !colors || !colors.backgroundColor) return;
+  if (!node || !colors) return;
 
-  const bgOpacity = typeof colors.bgOpacity === 'number' ? colors.bgOpacity : 1;
+  // Allow styling when ANY color is set (background, text, or border)
+  if (!colors.backgroundColor && !colors.textColor && !colors.borderColor) return;
+
+  const bgOpacity = typeof colors.bgOpacity === 'number' ? colors.bgOpacity : (colors.backgroundColor ? 1 : 0);
   const textOpacity = typeof colors.textOpacity === 'number' ? colors.textOpacity : 1;
-  const fallbackText = pickContrastingText(colors.backgroundColor);
-  const textColor = colors.textColor || fallbackText;
-  const borderColor = colors.borderColor || null;
-  // Use blendColorWithWhite to match what applyPaint stores
-  const desiredBg = blendColorWithWhite(colors.backgroundColor, bgOpacity);
-  const desiredText = colorToRgba(textColor, textOpacity);
-  // Border defaults to bg color if not set, normalize to lowercase for comparison
-  const desiredBorder = (borderColor || desiredBg).toLowerCase();
-  const currentBg = node.dataset.cfTaskBgColor;
-  const currentText = node.dataset.cfTaskTextActual;
-  const currentBorder = (node.dataset.cfTaskBorderColor || '').toLowerCase();
 
-  if (node.classList.contains(MARK) && currentBg === desiredBg && currentText === desiredText && currentBorder === desiredBorder) {
+  // Determine text color: use provided, auto-contrast from bg, or null (will use Google's default)
+  let textColor = colors.textColor;
+  if (!textColor && colors.backgroundColor) {
+    textColor = pickContrastingText(colors.backgroundColor);
+  }
+
+  const borderColor = colors.borderColor || null;
+
+  // Use blendColorWithWhite to match what applyPaint stores (only if bg is set)
+  const desiredBg = colors.backgroundColor ? blendColorWithWhite(colors.backgroundColor, bgOpacity) : null;
+  const desiredText = textColor ? colorToRgba(textColor, textOpacity) : null;
+  // Border comparison - only if set
+  const desiredBorder = borderColor ? borderColor.toLowerCase() : (desiredBg ? desiredBg.toLowerCase() : null);
+  const currentBg = node.dataset.cfTaskBgColor || null;
+  const currentText = node.dataset.cfTaskTextActual || null;
+  const currentBorder = node.dataset.cfTaskBorderColor || null;
+
+  // Check if already painted with same colors
+  if (node.classList.contains(MARK) &&
+      currentBg === desiredBg &&
+      currentText === desiredText &&
+      currentBorder === desiredBorder) {
     return;
   }
 
@@ -2680,13 +3036,15 @@ async function refreshColorCache() {
       taskIdToChain: taskIdToChainCache,
       chainMetadata: chainMetadataCache,
       chainColors: chainColorsCache,
+      // NEW UI task colors (full bg/text/border)
+      newUITaskColors: newUITaskColorsCache,
     };
   }
 
   // Fetch all data in parallel
   console.log('[TaskColoring] 🔄 Fetching fresh data from storage...');
   const [localData, syncData] = await Promise.all([
-    chrome.storage.local.get(['cf.taskToListMap', 'cf.taskIdToChainId', 'cf.recurringChains']),
+    chrome.storage.local.get(['cf.taskToListMap', 'cf.taskIdToChainId', 'cf.recurringChains', 'cf.newUITaskColors']),
     chrome.storage.sync.get(['cf.taskColors', 'cf.recurringTaskColors', 'cf.recurringChainColors', 'cf.taskListColors', 'cf.taskListTextColors', 'cf.taskListBorderColors', 'settings']),
   ]);
 
@@ -2711,11 +3069,15 @@ async function refreshColorCache() {
   chainMetadataCache = localData['cf.recurringChains'] || {};
   chainColorsCache = syncData['cf.recurringChainColors'] || {};
 
+  // NEW UI task colors cache (full bg/text/border support)
+  newUITaskColorsCache = localData['cf.newUITaskColors'] || {};
+
   console.log('[TaskColoring] 🔄 Fresh chain data:', {
     taskIdToChain: Object.keys(taskIdToChainCache),
     chainColors: Object.keys(chainColorsCache),
     chainMetadata: Object.keys(chainMetadataCache),
   });
+  console.log('[TaskColoring] 🔄 NEW UI task colors:', Object.keys(newUITaskColorsCache).length, 'entries');
 
   cacheLastUpdated = now;
 
@@ -2731,6 +3093,8 @@ async function refreshColorCache() {
     taskIdToChain: taskIdToChainCache,
     chainMetadata: chainMetadataCache,
     chainColors: chainColorsCache,
+    // NEW UI task colors (full bg/text/border)
+    newUITaskColors: newUITaskColorsCache,
   };
 }
 
@@ -2750,6 +3114,8 @@ function invalidateColorCache() {
   taskIdToChainCache = null;
   chainMetadataCache = null;
   chainColorsCache = null;
+  // NEW UI task colors cache
+  newUITaskColorsCache = null;
   // Also invalidate calendar mapping cache (NEW UI)
   invalidateCalendarMappingCache();
 }
@@ -2782,6 +3148,90 @@ async function getColorForTask(taskId, manualColorsMap = null, options = {}) {
   const cache = await refreshColorCache();
   const manualColors = manualColorsMap || cache.manualColors;
   const element = options.element; // DOM element for fingerprint matching
+
+  // PRIORITY 0: NEW UI task colors (full bg/text/border support) - HIGHEST PRIORITY
+  // Check if this is a NEW UI task with custom colors set
+  // Use lookupWithBase64Fallback to handle format differences between save and lookup
+  const newUIColors = lookupWithBase64Fallback(cache.newUITaskColors, taskId);
+  if (newUIColors && (newUIColors.background || newUIColors.text || newUIColors.border)) {
+    console.log('[TaskColoring] ✅ Using NEW UI task colors for:', taskId, newUIColors);
+
+    const isCompleted = options.isCompleted === true;
+
+    // Get list colors as fallback for properties not set in NEW UI colors
+    // Need to use the same lookup logic as Priority 3 (chain + fingerprint fallbacks)
+    let listId = lookupWithBase64Fallback(cache.taskToListMap, taskId);
+
+    // FALLBACK 1: Check chain mapping for listId (persists across task moves)
+    if (!listId && taskId) {
+      let chainId = lookupWithBase64Fallback(cache.taskIdToChain, taskId);
+      if (!chainId) {
+        // Check storage directly (cache may be stale)
+        const storageData = await chrome.storage.local.get(['cf.taskIdToChainId']);
+        const storedMapping = storageData['cf.taskIdToChainId'] || {};
+        chainId = lookupWithBase64Fallback(storedMapping, taskId);
+      }
+      if (chainId) {
+        const chainMeta = cache.chainMetadata?.[chainId];
+        if (chainMeta?.listId) {
+          listId = chainMeta.listId;
+          console.log('[TaskColoring] ✅ Priority 0: Using listId from chain mapping:', listId);
+        }
+      }
+    }
+
+    // FALLBACK 2: Try fingerprint matching (for recurring tasks)
+    if (!listId && element) {
+      listId = getListIdFromFingerprint(element);
+      if (listId) {
+        console.log('[TaskColoring] ✅ Priority 0: Using listId from fingerprint:', listId);
+      }
+    }
+
+    const listBgColor = listId ? cache.listColors?.[listId] : null;
+    const listTextColor = listId ? cache.listTextColors?.[listId] : null;
+    const listBorderColor = listId ? cache.listBorderColors?.[listId] : null;
+    const completedStyling = listId ? cache.completedStyling?.[listId] : null;
+
+    // Merge custom colors with list fallbacks:
+    // - If custom property is set → use custom (don't mix with list for that property)
+    // - If custom property is NOT set → use list color as fallback
+    // This allows setting just a custom border while keeping list bg/text
+    const bgColor = newUIColors.background || listBgColor || null;
+    const textColor = newUIColors.text || listTextColor || (bgColor ? pickContrastingText(bgColor) : null);
+    const borderColor = newUIColors.border || listBorderColor || null;
+
+    console.log('[TaskColoring] Priority 0 merged colors:', {
+      customBg: newUIColors.background,
+      customText: newUIColors.text,
+      customBorder: newUIColors.border,
+      listBg: listBgColor,
+      listText: listTextColor,
+      listBorder: listBorderColor,
+      finalBg: bgColor,
+      finalText: textColor,
+      finalBorder: borderColor,
+    });
+
+    if (isCompleted) {
+      const { bgOpacity, textOpacity } = getCompletedOpacities(completedStyling, cache);
+      return {
+        backgroundColor: bgColor,
+        textColor: textColor,
+        borderColor: borderColor,
+        bgOpacity,
+        textOpacity,
+      };
+    }
+
+    return {
+      backgroundColor: bgColor,
+      textColor: textColor,
+      borderColor: borderColor,
+      bgOpacity: bgColor ? 1 : 0,
+      textOpacity: 1,
+    };
+  }
 
   // Support both base64 and decoded task ID formats
   // cf.taskToListMap stores DECODED IDs (from buildTaskToListMapping)
@@ -3215,12 +3665,15 @@ async function doRepaint(bypassThrottling = false) {
 
   const processedTaskIds = new Set();
 
+  // Helper to check if colors object has any paintable color
+  const hasAnyColor = (colors) => colors && (colors.backgroundColor || colors.textColor || colors.borderColor);
+
   // First: Process stored element references (fast path)
   for (const [taskId, element] of taskElementReferences.entries()) {
     if (element.isConnected) {
       const isCompleted = isTaskElementCompleted(element);
       const colors = await getColorForTask(taskId, null, { element, isCompleted });
-      if (colors && colors.backgroundColor) {
+      if (hasAnyColor(colors)) {
         const target = getPaintTarget(element);
         if (target) {
           applyPaintIfNeeded(target, colors, isCompleted);
@@ -3265,11 +3718,11 @@ async function doRepaint(bypassThrottling = false) {
       }
       const colors = await getColorForTask(id, null, { element: chip, isCompleted });
 
-      if (isCompleted && colors && colors.backgroundColor) {
+      if (isCompleted && hasAnyColor(colors)) {
         completedColoredCount++;
       }
 
-      if (colors && colors.backgroundColor) {
+      if (hasAnyColor(colors)) {
         processedCount++;
         // Always process tasks that have colors (manual or list default)
         const target = getPaintTarget(chip);
@@ -3341,7 +3794,7 @@ async function doRepaint(bypassThrottling = false) {
           if (target) {
             const isCompleted = isTaskElementCompleted(element);
             const colors = await getColorForTask(taskId, null, { element, isCompleted });
-            if (colors && colors.backgroundColor) {
+            if (hasAnyColor(colors)) {
               applyPaintIfNeeded(target, colors, isCompleted);
               taskElementReferences.set(taskId, element);
             }
@@ -3692,6 +4145,13 @@ function initTasksColoring() {
     }
     // Chain data (local storage)
     if (area === 'local' && (changes['cf.taskIdToChainId'] || changes['cf.recurringChains'])) {
+      invalidateColorCache();
+      if (!isResetting) {
+        repaintSoon();
+      }
+    }
+    // NEW UI task colors (local storage)
+    if (area === 'local' && changes['cf.newUITaskColors']) {
       invalidateColorCache();
       if (!isResetting) {
         repaintSoon();
