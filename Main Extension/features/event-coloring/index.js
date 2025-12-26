@@ -1822,52 +1822,26 @@
   function applyStoredColors() {
     console.log('[EventColoring] Applying stored colors');
 
-    // Separate recurring and single events
-    const recurringEvents = [];
-    const singleEvents = [];
-    const coloredEventIds = new Set(); // Track which events have manual colors
+    // Build lookup maps for manual colors
+    const recurringEventColors = new Map(); // base event ID -> colors
+    const singleEventColors = new Map(); // exact event ID -> colors
 
     Object.entries(eventColors).forEach(([eventId, colorData]) => {
       const normalized = normalizeColorData(colorData);
       if (!normalized) return;
 
-      coloredEventIds.add(eventId);
-
       if (normalized.isRecurring) {
-        recurringEvents.push({ eventId, colors: normalized });
+        const parsed = EventIdUtils.fromEncoded(eventId);
+        if (parsed.type === 'calendar') {
+          recurringEventColors.set(parsed.decodedId, normalized);
+        }
       } else {
-        singleEvents.push({ eventId, colors: normalized });
+        singleEventColors.set(eventId, normalized);
       }
     });
 
-    // Apply recurring events (match all instances)
-    recurringEvents.forEach(({ eventId, colors }) => {
-      applyRecurringEventColor(eventId, colors);
-    });
-
-    // Apply single events
-    singleEvents.forEach(({ eventId, colors }) => {
-      applyColorsToEvent(eventId, colors);
-    });
-
-    // Apply calendar default colors to events without manual colors
-    // This is completely independent of task coloring - uses user-defined per-calendar colors for events
-    applyCalendarDefaultColors(coloredEventIds, recurringEvents);
-  }
-
-  /**
-   * Apply user-defined calendar default colors to events that don't have manual colors
-   * Priority: Manual event color > Calendar default color > No custom color
-   * @param {Set} coloredEventIds - Set of event IDs with manual colors
-   * @param {Array} recurringEvents - Recurring events with manual colors
-   */
-  function applyCalendarDefaultColors(coloredEventIds, recurringEvents) {
-    if (Object.keys(calendarDefaultColors).length === 0) {
-      return; // No calendar default colors set
-    }
-
-    console.log('[EventColoring] Applying calendar default colors');
-
+    // Apply colors to all event elements
+    // Merge manual colors with calendar defaults - each property independent
     const allEventElements = document.querySelectorAll('[data-eventid]');
 
     allEventElements.forEach((element) => {
@@ -1877,25 +1851,49 @@
       const eventId = element.getAttribute('data-eventid');
       if (!eventId) return;
 
-      // Skip if event has manual color
-      if (coloredEventIds.has(eventId)) return;
+      // Get manual colors for this event (single or recurring)
+      let manualColors = singleEventColors.get(eventId);
 
-      // Check if this is an instance of a recurring event with manual color
-      const parsed = EventIdUtils.fromEncoded(eventId);
-      if (parsed.type === 'calendar') {
-        const hasRecurringColor = recurringEvents.some(({ eventId: recurringId }) => {
-          const recurringParsed = EventIdUtils.fromEncoded(recurringId);
-          return EventIdUtils.matchesEvent(parsed, recurringParsed);
-        });
-        if (hasRecurringColor) return;
+      if (!manualColors) {
+        // Check for recurring event colors
+        const parsed = EventIdUtils.fromEncoded(eventId);
+        if (parsed.type === 'calendar') {
+          manualColors = recurringEventColors.get(parsed.decodedId);
+        }
       }
 
-      // Get calendar default colors for this event
-      const defaultColors = getCalendarDefaultColorsForEvent(eventId);
-      if (defaultColors) {
-        applyColorsToElement(element, defaultColors);
+      // Get calendar default colors
+      const calendarDefaultColorsForEvent = getCalendarDefaultColorsForEvent(eventId);
+
+      // Merge: manual colors take precedence, calendar defaults fill in gaps
+      const mergedColors = mergeEventColors(manualColors, calendarDefaultColorsForEvent);
+
+      if (mergedColors) {
+        applyColorsToElement(element, mergedColors);
       }
     });
+  }
+
+  /**
+   * Merge manual event colors with calendar default colors
+   * Manual colors take precedence for each property independently
+   * @param {Object|null} manualColors - { background, text, border } from event coloring
+   * @param {Object|null} calendarColors - { background, text, border } from calendar defaults
+   * @returns {Object|null} Merged colors or null if no colors
+   */
+  function mergeEventColors(manualColors, calendarColors) {
+    if (!manualColors && !calendarColors) return null;
+    if (!calendarColors) return manualColors;
+    if (!manualColors) return calendarColors;
+
+    // Merge: manual takes precedence for each property
+    return {
+      background: manualColors.background || calendarColors.background || null,
+      text: manualColors.text || calendarColors.text || null,
+      border: manualColors.border || calendarColors.border || null,
+      // Preserve isRecurring from manual if present
+      isRecurring: manualColors.isRecurring || false,
+    };
   }
 
   function applyRecurringEventColor(eventId, colors) {

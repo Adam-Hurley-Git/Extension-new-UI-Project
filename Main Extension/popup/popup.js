@@ -8241,6 +8241,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
   let eventCalendarsList = []; // Cache of calendars from API
   let eventCalendarColors = {}; // Cache of calendar colors from settings
+  let activeEventCalendarColorPicker = null; // Currently open color picker
 
   // Load event calendar colors
   async function loadEventCalendarColors() {
@@ -8332,13 +8333,13 @@ Would you like to refresh all Google Calendar tabs?`;
           <div class="event-calendar-name" title="${escapeHtml(calendar.name)}">${escapeHtml(calendar.name)}</div>
         </div>
         <div class="event-calendar-swatches">
-          <div class="event-calendar-swatch ${bgColor ? 'has-color' : ''}" data-type="background" title="Background" style="${bgColor ? `--swatch-color: ${bgColor}; background-color: ${bgColor};` : ''}">
+          <div class="event-calendar-swatch ${bgColor ? 'has-color' : ''}" data-type="background" data-calendar-id="${calendar.id}" title="Background" style="${bgColor ? `background-color: ${bgColor};` : ''}">
             ${bgColor ? '' : 'B'}
           </div>
-          <div class="event-calendar-swatch ${textColor ? 'has-color' : ''}" data-type="text" title="Text" style="${textColor ? `--swatch-color: ${textColor}; background-color: ${textColor};` : ''}">
+          <div class="event-calendar-swatch ${textColor ? 'has-color' : ''}" data-type="text" data-calendar-id="${calendar.id}" title="Text" style="${textColor ? `background-color: ${textColor};` : ''}">
             ${textColor ? '' : 'T'}
           </div>
-          <div class="event-calendar-swatch ${borderColor ? 'has-color' : ''}" data-type="border" title="Border" style="${borderColor ? `--swatch-color: ${borderColor}; background-color: ${borderColor};` : ''}">
+          <div class="event-calendar-swatch ${borderColor ? 'has-color' : ''}" data-type="border" data-calendar-id="${calendar.id}" title="Border" style="${borderColor ? `background-color: ${borderColor};` : ''}">
             ${borderColor ? '' : '⬚'}
           </div>
         </div>
@@ -8351,28 +8352,26 @@ Would you like to refresh all Google Calendar tabs?`;
       <div class="event-calendar-details">
         <div class="event-calendar-color-row" data-type="background">
           <div class="event-calendar-color-label">Background</div>
-          <div class="event-calendar-color-picker">
-            <div class="event-calendar-color-preview ${bgColor ? 'has-color' : ''}" style="${bgColor ? `background-color: ${bgColor};` : ''}" data-type="background"></div>
-            <input type="color" class="event-calendar-color-input" value="${bgColor || '#4285f4'}" data-type="background" style="display: none;">
-            ${bgColor ? '<button class="event-calendar-clear-btn" data-type="background">Clear</button>' : ''}
+          <div class="event-calendar-color-actions">
+            <div class="event-calendar-color-preview ${bgColor ? 'has-color' : ''}" style="${bgColor ? `background-color: ${bgColor};` : ''}" data-type="background" data-calendar-id="${calendar.id}"></div>
+            ${bgColor ? `<button class="event-calendar-clear-btn" data-type="background" data-calendar-id="${calendar.id}">Clear</button>` : ''}
           </div>
         </div>
         <div class="event-calendar-color-row" data-type="text">
           <div class="event-calendar-color-label">Text</div>
-          <div class="event-calendar-color-picker">
-            <div class="event-calendar-color-preview ${textColor ? 'has-color' : ''}" style="${textColor ? `background-color: ${textColor};` : ''}" data-type="text"></div>
-            <input type="color" class="event-calendar-color-input" value="${textColor || '#000000'}" data-type="text" style="display: none;">
-            ${textColor ? '<button class="event-calendar-clear-btn" data-type="text">Clear</button>' : ''}
+          <div class="event-calendar-color-actions">
+            <div class="event-calendar-color-preview ${textColor ? 'has-color' : ''}" style="${textColor ? `background-color: ${textColor};` : ''}" data-type="text" data-calendar-id="${calendar.id}"></div>
+            ${textColor ? `<button class="event-calendar-clear-btn" data-type="text" data-calendar-id="${calendar.id}">Clear</button>` : ''}
           </div>
         </div>
         <div class="event-calendar-color-row" data-type="border">
           <div class="event-calendar-color-label">Border</div>
-          <div class="event-calendar-color-picker">
-            <div class="event-calendar-color-preview ${borderColor ? 'has-color' : ''}" style="${borderColor ? `background-color: ${borderColor};` : ''}" data-type="border"></div>
-            <input type="color" class="event-calendar-color-input" value="${borderColor || '#1a73e8'}" data-type="border" style="display: none;">
-            ${borderColor ? '<button class="event-calendar-clear-btn" data-type="border">Clear</button>' : ''}
+          <div class="event-calendar-color-actions">
+            <div class="event-calendar-color-preview ${borderColor ? 'has-color' : ''}" style="${borderColor ? `background-color: ${borderColor};` : ''}" data-type="border" data-calendar-id="${calendar.id}"></div>
+            ${borderColor ? `<button class="event-calendar-clear-btn" data-type="border" data-calendar-id="${calendar.id}">Clear</button>` : ''}
           </div>
         </div>
+        <div class="event-calendar-palette-container" id="eventCalPalette-${CSS.escape(calendar.id)}"></div>
       </div>
     `;
 
@@ -8382,37 +8381,25 @@ Would you like to refresh all Google Calendar tabs?`;
       // Don't toggle if clicking on swatch
       if (e.target.closest('.event-calendar-swatch')) return;
       item.classList.toggle('expanded');
+
+      // Close color picker when collapsing
+      if (!item.classList.contains('expanded')) {
+        closeEventCalendarColorPicker();
+      }
     });
 
-    // Quick swatch clicks in header
-    item.querySelectorAll('.event-calendar-swatch').forEach((swatch) => {
+    // Swatch clicks - open color picker
+    item.querySelectorAll('.event-calendar-swatch, .event-calendar-color-preview').forEach((swatch) => {
       swatch.addEventListener('click', (e) => {
         e.stopPropagation();
         const type = swatch.dataset.type;
-        const colorInput = item.querySelector(`.event-calendar-color-input[data-type="${type}"]`);
-        if (colorInput) {
-          colorInput.click();
-        }
-      });
-    });
+        const calId = swatch.dataset.calendarId;
 
-    // Color preview clicks
-    item.querySelectorAll('.event-calendar-color-preview').forEach((preview) => {
-      preview.addEventListener('click', () => {
-        const type = preview.dataset.type;
-        const colorInput = item.querySelector(`.event-calendar-color-input[data-type="${type}"]`);
-        if (colorInput) {
-          colorInput.click();
-        }
-      });
-    });
+        // Ensure the item is expanded
+        item.classList.add('expanded');
 
-    // Color input changes
-    item.querySelectorAll('.event-calendar-color-input').forEach((input) => {
-      input.addEventListener('change', async (e) => {
-        const type = input.dataset.type;
-        const color = e.target.value;
-        await setEventCalendarColor(calendar.id, type, color);
+        // Open the palette picker for this type
+        openEventCalendarColorPicker(calId, type, swatch);
       });
     });
 
@@ -8421,14 +8408,153 @@ Would you like to refresh all Google Calendar tabs?`;
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const type = btn.dataset.type;
-        await clearEventCalendarColor(calendar.id, type);
+        const calId = btn.dataset.calendarId;
+        await clearEventCalendarColor(calId, type);
       });
     });
 
     return item;
   }
 
-  // Set event calendar color
+  // Open color picker for event calendar
+  function openEventCalendarColorPicker(calendarId, type, targetSwatch) {
+    closeEventCalendarColorPicker();
+
+    const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
+    if (!item) return;
+
+    const container = item.querySelector('.event-calendar-palette-container');
+    if (!container) return;
+
+    const colors = eventCalendarColors[calendarId] || {};
+    const currentColor = colors[type] || null;
+
+    activeEventCalendarColorPicker = { calendarId, type, container };
+
+    container.innerHTML = `
+      <div class="event-calendar-picker-header">
+        <span>Select ${type} color</span>
+        <button class="event-calendar-picker-close">×</button>
+      </div>
+      <div class="color-picker-tabs">
+        <button type="button" class="color-tab active" data-tab="vibrant">Vibrant</button>
+        <button type="button" class="color-tab" data-tab="pastel">Pastel</button>
+        <button type="button" class="color-tab" data-tab="dark">Dark</button>
+        <button type="button" class="color-tab" data-tab="custom">Custom</button>
+      </div>
+      <div class="color-tab-content">
+        <div class="color-picker-container" style="margin-bottom: 8px; display: flex; gap: 4px;">
+          <input type="color" class="event-cal-direct-color" value="${currentColor || '#4285f4'}" style="width: 60%; height: 28px; cursor: pointer;">
+          <input type="text" class="event-cal-hex-input" value="${(currentColor || '#4285f4').toUpperCase()}" placeholder="#FF0000" maxlength="7" style="width: 35%; height: 24px; font-size: 10px; padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; text-transform: uppercase;">
+        </div>
+        <div class="color-tab-panel active" data-panel="vibrant">
+          <div class="color-palette event-cal-vibrant-palette"></div>
+        </div>
+        <div class="color-tab-panel" data-panel="pastel">
+          <div class="color-palette event-cal-pastel-palette"></div>
+        </div>
+        <div class="color-tab-panel" data-panel="dark">
+          <div class="color-palette event-cal-dark-palette"></div>
+        </div>
+        <div class="color-tab-panel" data-panel="custom">
+          <div class="color-palette event-cal-custom-palette"></div>
+        </div>
+      </div>
+    `;
+
+    container.style.display = 'block';
+
+    // Setup tab switching
+    container.querySelectorAll('.color-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        container.querySelectorAll('.color-tab').forEach(t => t.classList.remove('active'));
+        container.querySelectorAll('.color-tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        container.querySelector(`.color-tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+      });
+    });
+
+    // Close button
+    container.querySelector('.event-calendar-picker-close').addEventListener('click', closeEventCalendarColorPicker);
+
+    // Color update function
+    const updateColor = async (color) => {
+      await setEventCalendarColor(calendarId, type, color);
+    };
+
+    // Direct color input
+    const directColorInput = container.querySelector('.event-cal-direct-color');
+    const hexInput = container.querySelector('.event-cal-hex-input');
+
+    directColorInput.addEventListener('input', () => {
+      hexInput.value = directColorInput.value.toUpperCase();
+    });
+    directColorInput.addEventListener('change', () => updateColor(directColorInput.value));
+
+    hexInput.addEventListener('input', () => {
+      const hex = hexInput.value.trim();
+      const normalized = hex.startsWith('#') ? hex : '#' + hex;
+      if (/^#[0-9A-Fa-f]{6}$/.test(normalized)) {
+        directColorInput.value = normalized;
+        hexInput.style.borderColor = '#1a73e8';
+      } else {
+        hexInput.style.borderColor = '#dc2626';
+      }
+    });
+    hexInput.addEventListener('change', () => {
+      const hex = hexInput.value.trim();
+      const normalized = hex.startsWith('#') ? hex : '#' + hex;
+      if (/^#[0-9A-Fa-f]{6}$/.test(normalized)) {
+        updateColor(normalized);
+      }
+    });
+
+    // Populate palettes
+    const vibrantPalette = container.querySelector('.event-cal-vibrant-palette');
+    const pastelPaletteEl = container.querySelector('.event-cal-pastel-palette');
+    const darkPaletteEl = container.querySelector('.event-cal-dark-palette');
+    const customPaletteEl = container.querySelector('.event-cal-custom-palette');
+
+    const createSwatch = (color, paletteEl) => {
+      const swatch = document.createElement('div');
+      swatch.className = 'color-swatch';
+      swatch.style.backgroundColor = color;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      if (currentColor && color.toLowerCase() === currentColor.toLowerCase()) {
+        swatch.classList.add('selected');
+      }
+      swatch.onclick = async () => {
+        paletteEl.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+        swatch.classList.add('selected');
+        directColorInput.value = color;
+        hexInput.value = color.toUpperCase();
+        await updateColor(color);
+      };
+      return swatch;
+    };
+
+    colorPickerPalette.forEach(color => vibrantPalette.appendChild(createSwatch(color, vibrantPalette)));
+    pastelPalette.forEach(color => pastelPaletteEl.appendChild(createSwatch(color, pastelPaletteEl)));
+    darkPalette.forEach(color => darkPaletteEl.appendChild(createSwatch(color, darkPaletteEl)));
+
+    if (customColors.length === 0) {
+      customPaletteEl.innerHTML = '<div style="padding: 16px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors yet. Add colors in the Preferences tab.</div>';
+    } else {
+      customColors.forEach(color => customPaletteEl.appendChild(createSwatch(color, customPaletteEl)));
+    }
+  }
+
+  // Close the color picker
+  function closeEventCalendarColorPicker() {
+    if (activeEventCalendarColorPicker) {
+      activeEventCalendarColorPicker.container.style.display = 'none';
+      activeEventCalendarColorPicker.container.innerHTML = '';
+      activeEventCalendarColorPicker = null;
+    }
+  }
+
+  // Set event calendar color - update UI without rebuilding
   async function setEventCalendarColor(calendarId, type, color) {
     debugLog('Setting event calendar color:', calendarId, type, color);
 
@@ -8444,9 +8570,11 @@ Would you like to refresh all Google Calendar tabs?`;
         break;
     }
 
-    // Reload and re-render
+    // Update cache
     eventCalendarColors = await window.cc3Storage.getEventCalendarColors();
-    renderEventCalendarColors();
+
+    // Update UI without rebuilding - just update the specific swatches
+    updateEventCalendarSwatches(calendarId, type, color);
 
     // Show toast
     const calendar = eventCalendarsList.find(c => c.id === calendarId);
@@ -8456,7 +8584,7 @@ Would you like to refresh all Google Calendar tabs?`;
     broadcastEventCalendarColorChange();
   }
 
-  // Clear event calendar color
+  // Clear event calendar color - update UI without rebuilding
   async function clearEventCalendarColor(calendarId, type) {
     debugLog('Clearing event calendar color:', calendarId, type);
 
@@ -8472,9 +8600,11 @@ Would you like to refresh all Google Calendar tabs?`;
         break;
     }
 
-    // Reload and re-render
+    // Update cache
     eventCalendarColors = await window.cc3Storage.getEventCalendarColors();
-    renderEventCalendarColors();
+
+    // Update UI without rebuilding
+    updateEventCalendarSwatches(calendarId, type, null);
 
     // Show toast
     const calendar = eventCalendarsList.find(c => c.id === calendarId);
@@ -8482,6 +8612,60 @@ Would you like to refresh all Google Calendar tabs?`;
 
     // Notify content script
     broadcastEventCalendarColorChange();
+  }
+
+  // Update specific swatches without rebuilding the entire list
+  function updateEventCalendarSwatches(calendarId, type, color) {
+    const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
+    if (!item) return;
+
+    // Update header swatch
+    const headerSwatch = item.querySelector(`.event-calendar-swatch[data-type="${type}"]`);
+    if (headerSwatch) {
+      if (color) {
+        headerSwatch.classList.add('has-color');
+        headerSwatch.style.backgroundColor = color;
+        headerSwatch.textContent = '';
+      } else {
+        headerSwatch.classList.remove('has-color');
+        headerSwatch.style.backgroundColor = '';
+        headerSwatch.textContent = type === 'background' ? 'B' : type === 'text' ? 'T' : '⬚';
+      }
+    }
+
+    // Update details preview
+    const detailsPreview = item.querySelector(`.event-calendar-color-preview[data-type="${type}"]`);
+    if (detailsPreview) {
+      if (color) {
+        detailsPreview.classList.add('has-color');
+        detailsPreview.style.backgroundColor = color;
+      } else {
+        detailsPreview.classList.remove('has-color');
+        detailsPreview.style.backgroundColor = '';
+      }
+    }
+
+    // Update/add/remove clear button
+    const row = item.querySelector(`.event-calendar-color-row[data-type="${type}"]`);
+    if (row) {
+      const actionsDiv = row.querySelector('.event-calendar-color-actions');
+      let clearBtn = row.querySelector('.event-calendar-clear-btn');
+
+      if (color && !clearBtn) {
+        clearBtn = document.createElement('button');
+        clearBtn.className = 'event-calendar-clear-btn';
+        clearBtn.dataset.type = type;
+        clearBtn.dataset.calendarId = calendarId;
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await clearEventCalendarColor(calendarId, type);
+        });
+        actionsDiv.appendChild(clearBtn);
+      } else if (!color && clearBtn) {
+        clearBtn.remove();
+      }
+    }
   }
 
   // Broadcast event calendar color change to content script
