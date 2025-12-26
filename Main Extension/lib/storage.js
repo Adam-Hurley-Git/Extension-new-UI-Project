@@ -100,6 +100,7 @@
       googleColorLabels: {}, // Custom labels for Google's built-in colors
       quickAccessColors: [], // Recently used colors
       disableCustomColors: false, // Hide custom categories, show only Google colors
+      calendarColors: {}, // Per-calendar default colors: calendarId -> { background, text, border }
     },
   };
 
@@ -112,6 +113,7 @@
       'pendingTextColors', // Text colors need hard replace for deletions
       'textColors', // Text colors need hard replace for deletions
       'completedStyling', // Completed styling needs hard replace for deletions
+      'calendarColors', // Calendar colors need hard replace for deletions
     ]);
 
     // If either side isn't a plain object, prefer partial directly
@@ -1706,6 +1708,192 @@
     });
   }
 
+  // ========================================
+  // EVENT CALENDAR COLORS (per-calendar default colors)
+  // Completely separate from task list coloring
+  // ========================================
+
+  /**
+   * Get all calendar colors
+   * @returns {Promise<Object>} Map of calendarId -> { background, text, border }
+   */
+  async function getEventCalendarColors() {
+    const settings = await getSettings();
+    return settings.eventColoring?.calendarColors || {};
+  }
+
+  /**
+   * Get colors for a specific calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @returns {Promise<Object|null>} { background, text, border } or null
+   */
+  async function getEventCalendarColor(calendarId) {
+    if (!calendarId) return null;
+    const calendarColors = await getEventCalendarColors();
+    return calendarColors[calendarId] || null;
+  }
+
+  /**
+   * Set background color for a calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @param {string} color - Hex color
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setEventCalendarBackgroundColor(calendarId, color) {
+    if (!calendarId) return;
+
+    const current = await getSettings();
+    const calendarColors = current.eventColoring?.calendarColors || {};
+    const existingColors = calendarColors[calendarId] || {};
+
+    calendarColors[calendarId] = {
+      ...existingColors,
+      background: color,
+    };
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
+  /**
+   * Set text color for a calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @param {string} color - Hex color
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setEventCalendarTextColor(calendarId, color) {
+    if (!calendarId) return;
+
+    const current = await getSettings();
+    const calendarColors = current.eventColoring?.calendarColors || {};
+    const existingColors = calendarColors[calendarId] || {};
+
+    calendarColors[calendarId] = {
+      ...existingColors,
+      text: color,
+    };
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
+  /**
+   * Set border color for a calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @param {string} color - Hex color
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setEventCalendarBorderColor(calendarId, color) {
+    if (!calendarId) return;
+
+    const current = await getSettings();
+    const calendarColors = current.eventColoring?.calendarColors || {};
+    const existingColors = calendarColors[calendarId] || {};
+
+    calendarColors[calendarId] = {
+      ...existingColors,
+      border: color,
+    };
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
+  /**
+   * Clear background color for a calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function clearEventCalendarBackgroundColor(calendarId) {
+    if (!calendarId) return;
+
+    const current = await getSettings();
+    const calendarColors = { ...(current.eventColoring?.calendarColors || {}) };
+
+    if (calendarColors[calendarId]) {
+      const { background, ...rest } = calendarColors[calendarId];
+      if (Object.keys(rest).filter(k => rest[k]).length === 0) {
+        delete calendarColors[calendarId];
+      } else {
+        calendarColors[calendarId] = rest;
+      }
+    }
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
+  /**
+   * Clear text color for a calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function clearEventCalendarTextColor(calendarId) {
+    if (!calendarId) return;
+
+    const current = await getSettings();
+    const calendarColors = { ...(current.eventColoring?.calendarColors || {}) };
+
+    if (calendarColors[calendarId]) {
+      const { text, ...rest } = calendarColors[calendarId];
+      if (Object.keys(rest).filter(k => rest[k]).length === 0) {
+        delete calendarColors[calendarId];
+      } else {
+        calendarColors[calendarId] = rest;
+      }
+    }
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
+  /**
+   * Clear border color for a calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function clearEventCalendarBorderColor(calendarId) {
+    if (!calendarId) return;
+
+    const current = await getSettings();
+    const calendarColors = { ...(current.eventColoring?.calendarColors || {}) };
+
+    if (calendarColors[calendarId]) {
+      const { border, ...rest } = calendarColors[calendarId];
+      if (Object.keys(rest).filter(k => rest[k]).length === 0) {
+        delete calendarColors[calendarId];
+      } else {
+        calendarColors[calendarId] = rest;
+      }
+    }
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
+  /**
+   * Clear all colors for a calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function clearEventCalendarColors(calendarId) {
+    if (!calendarId) return;
+
+    const current = await getSettings();
+    const calendarColors = { ...(current.eventColoring?.calendarColors || {}) };
+    delete calendarColors[calendarId];
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
   // Time Blocking functions
   async function setTimeBlockingEnabled(enabled) {
     return setSettings({ timeBlocking: { enabled } });
@@ -2140,6 +2328,16 @@
     getIsCustomColorsDisabled,
     setDisableCustomColors,
     addQuickAccessColor,
+    // Event calendar coloring functions (per-calendar default colors)
+    getEventCalendarColors,
+    getEventCalendarColor,
+    setEventCalendarBackgroundColor,
+    setEventCalendarTextColor,
+    setEventCalendarBorderColor,
+    clearEventCalendarBackgroundColor,
+    clearEventCalendarTextColor,
+    clearEventCalendarBorderColor,
+    clearEventCalendarColors,
     // NEW UI task colors (ttb_ prefix - full bg/text/border support)
     saveNewUITaskColors,
     getNewUITaskColors,

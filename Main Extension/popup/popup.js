@@ -7982,6 +7982,9 @@ Would you like to refresh all Google Calendar tabs?`;
     // Render Google color labels
     await renderGoogleColorLabels();
 
+    // Load event calendar colors (per-calendar defaults)
+    await loadEventCalendarColors();
+
     debugLog('Event coloring settings loaded');
   }
 
@@ -8228,6 +8231,530 @@ Would you like to refresh all Google Calendar tabs?`;
           // Ignore errors if tab is not a calendar tab
         });
       }
+    });
+  }
+
+  // ========================================
+  // EVENT CALENDAR COLORS (per-calendar defaults)
+  // Completely separate from task list coloring
+  // ========================================
+
+  let eventCalendarsList = []; // Cache of calendars from API
+  let eventCalendarColors = {}; // Cache of calendar colors from settings
+  let activeEventCalendarColorPicker = null; // Currently open color picker
+
+  // Load event calendar colors
+  async function loadEventCalendarColors() {
+    debugLog('Loading event calendar colors...');
+
+    const loadingEl = qs('eventCalendarColorsLoading');
+    const contentEl = qs('eventCalendarColorsContent');
+    const emptyEl = qs('eventCalendarColorsEmpty');
+
+    if (!loadingEl || !contentEl || !emptyEl) {
+      debugLog('Event calendar colors elements not found');
+      return;
+    }
+
+    // Show loading state
+    loadingEl.style.display = 'block';
+    contentEl.style.display = 'none';
+    emptyEl.style.display = 'none';
+
+    try {
+      // Fetch calendars from background script (reusing existing GET_CALENDAR_COLORS)
+      const calendars = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'GET_CALENDAR_COLORS' }, (response) => {
+          resolve(response || {});
+        });
+      });
+
+      // Get saved calendar colors from storage
+      eventCalendarColors = await window.cc3Storage.getEventCalendarColors();
+
+      // Convert response to array (now includes summary from API)
+      eventCalendarsList = Object.entries(calendars).map(([id, data]) => ({
+        id,
+        name: data.summary || id,
+        backgroundColor: data.backgroundColor || '#4285f4',
+        foregroundColor: data.foregroundColor || '#ffffff',
+      }));
+
+      debugLog('Loaded', eventCalendarsList.length, 'calendars, colors:', eventCalendarColors);
+
+      if (eventCalendarsList.length === 0) {
+        loadingEl.style.display = 'none';
+        emptyEl.style.display = 'block';
+        return;
+      }
+
+      // Render calendars
+      renderEventCalendarColors();
+
+      loadingEl.style.display = 'none';
+      contentEl.style.display = 'block';
+
+    } catch (error) {
+      console.error('[Popup] Failed to load event calendar colors:', error);
+      loadingEl.style.display = 'none';
+      emptyEl.style.display = 'block';
+      emptyEl.textContent = 'Failed to load calendars. Please try again.';
+    }
+  }
+
+  // Render event calendar colors list
+  function renderEventCalendarColors() {
+    const contentEl = qs('eventCalendarColorsContent');
+    if (!contentEl) return;
+
+    contentEl.innerHTML = '';
+
+    for (const calendar of eventCalendarsList) {
+      const colors = eventCalendarColors[calendar.id] || {};
+      const item = createEventCalendarColorItem(calendar, colors);
+      contentEl.appendChild(item);
+    }
+  }
+
+  // Create calendar color item element - matches task-list-card styling
+  function createEventCalendarColorItem(calendar, colors) {
+    const item = document.createElement('div');
+    item.className = 'event-calendar-item';
+    item.dataset.calendarId = calendar.id;
+
+    const bgColor = colors.background || null;
+    const textColor = colors.text || null;
+    const borderColor = colors.border || null;
+
+    // Helper to get contrast text color for preview
+    const getContrastColor = (bgHex) => {
+      if (!bgHex) return '#ffffff';
+      const rgb = parseInt(bgHex.slice(1), 16);
+      const r = (rgb >> 16) & 0xff;
+      const g = (rgb >> 8) & 0xff;
+      const b = rgb & 0xff;
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.6 ? '#000000' : '#ffffff';
+    };
+
+    // Calculate preview styles
+    const previewBg = bgColor || calendar.backgroundColor || '#039be5';
+    const previewText = textColor || getContrastColor(previewBg);
+    const previewBorder = borderColor ? `outline: 2px solid ${borderColor}; outline-offset: -2px;` : '';
+    const stripeColor = calendar.backgroundColor || '#1a73e8';
+
+    item.innerHTML = `
+      <div class="event-calendar-card">
+        <div class="event-calendar-header">
+          <div class="event-calendar-title-group">
+            <div class="event-calendar-title">
+              <span class="event-calendar-google-color" style="background-color: ${calendar.backgroundColor};" title="Google calendar color"></span>
+              <span class="event-calendar-name" title="${escapeHtml(calendar.name)}">${escapeHtml(calendar.name)}</span>
+            </div>
+            <div class="event-calendar-meta">Google Calendar</div>
+          </div>
+          <div class="event-calendar-preview-wrapper">
+            <div class="event-calendar-preview" data-calendar-id="${calendar.id}" style="background-color: ${previewBg}; ${previewBorder}" title="Click to customize colors">
+              <div class="event-calendar-preview-stripe" style="background-color: ${stripeColor};"></div>
+              <div class="event-calendar-preview-content">
+                <span class="event-calendar-preview-title" style="color: ${previewText};">Sample Event</span>
+              </div>
+            </div>
+          </div>
+          <div class="event-calendar-expand">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+        </div>
+        <div class="event-calendar-details">
+          <div class="event-calendar-color-stack">
+            <div class="event-calendar-color-row" data-type="background">
+              <div class="event-calendar-color-label">Background</div>
+              <div class="event-calendar-color-actions">
+                <div class="event-calendar-color-preview ${bgColor ? 'has-color' : ''}" style="${bgColor ? `background-color: ${bgColor};` : ''}" data-type="background" data-calendar-id="${calendar.id}"></div>
+                ${bgColor ? `<button class="event-calendar-clear-btn" data-type="background" data-calendar-id="${calendar.id}">Clear</button>` : ''}
+              </div>
+            </div>
+            <div class="event-calendar-color-row" data-type="text">
+              <div class="event-calendar-color-label">Text Color</div>
+              <div class="event-calendar-color-actions">
+                <div class="event-calendar-color-preview ${textColor ? 'has-color' : ''}" style="${textColor ? `background-color: ${textColor};` : ''}" data-type="text" data-calendar-id="${calendar.id}"></div>
+                ${textColor ? `<button class="event-calendar-clear-btn" data-type="text" data-calendar-id="${calendar.id}">Clear</button>` : ''}
+              </div>
+            </div>
+            <div class="event-calendar-color-row" data-type="border">
+              <div class="event-calendar-color-label">Border</div>
+              <div class="event-calendar-color-actions">
+                <div class="event-calendar-color-preview ${borderColor ? 'has-color' : ''}" style="${borderColor ? `background-color: ${borderColor};` : ''}" data-type="border" data-calendar-id="${calendar.id}"></div>
+                ${borderColor ? `<button class="event-calendar-clear-btn" data-type="border" data-calendar-id="${calendar.id}">Clear</button>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Header click to expand/collapse
+    const header = item.querySelector('.event-calendar-header');
+    header.addEventListener('click', (e) => {
+      // Don't toggle if clicking on preview card
+      if (e.target.closest('.event-calendar-preview')) return;
+      item.classList.toggle('expanded');
+
+      // Close color picker when collapsing
+      if (!item.classList.contains('expanded')) {
+        closeEventCalendarColorPicker();
+      }
+    });
+
+    // Preview card click - expand to show color options
+    const previewCard = item.querySelector('.event-calendar-preview');
+    if (previewCard) {
+      previewCard.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Expand the card to show individual color options
+        item.classList.add('expanded');
+      });
+    }
+
+    // Color preview clicks in details - open color picker
+    item.querySelectorAll('.event-calendar-color-preview').forEach((preview) => {
+      preview.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const type = preview.dataset.type;
+        const calId = preview.dataset.calendarId;
+        openEventCalendarColorPicker(calId, type, preview);
+      });
+    });
+
+    // Clear button clicks
+    item.querySelectorAll('.event-calendar-clear-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const type = btn.dataset.type;
+        const calId = btn.dataset.calendarId;
+        await clearEventCalendarColor(calId, type);
+      });
+    });
+
+    return item;
+  }
+
+  // Open color picker for event calendar (using fixed modal with backdrop - matches task list pattern)
+  function openEventCalendarColorPicker(calendarId, type, targetSwatch) {
+    closeEventCalendarColorPicker();
+
+    const calendar = eventCalendarsList.find(c => c.id === calendarId);
+    const calendarName = calendar?.name || calendarId;
+
+    const colors = eventCalendarColors[calendarId] || {};
+    const currentColor = colors[type] || null;
+
+    // Get or create modal
+    let modal = document.getElementById('event-calendar-color-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'event-calendar-color-modal';
+      modal.className = 'event-calendar-color-details';
+      document.body.appendChild(modal);
+    }
+
+    // Get or create backdrop
+    let backdrop = document.getElementById('event-calendar-color-backdrop');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'event-calendar-color-backdrop';
+      backdrop.className = 'event-calendar-color-backdrop';
+      document.body.appendChild(backdrop);
+    }
+
+    activeEventCalendarColorPicker = { calendarId, type, modal };
+
+    // Build modal content
+    modal.innerHTML = `
+      <div class="event-calendar-picker-header">
+        <span>${type.charAt(0).toUpperCase() + type.slice(1)} Color - ${escapeHtml(calendarName)}</span>
+        <button class="event-calendar-picker-close" type="button">×</button>
+      </div>
+      <div class="color-picker-tabs">
+        <button type="button" class="color-tab active" data-tab="vibrant">Vibrant</button>
+        <button type="button" class="color-tab" data-tab="pastel">Pastel</button>
+        <button type="button" class="color-tab" data-tab="dark">Dark</button>
+        <button type="button" class="color-tab" data-tab="custom">Custom</button>
+      </div>
+      <div class="color-tab-content">
+        <div class="color-picker-container" style="margin-bottom: 8px; display: flex; gap: 4px;">
+          <input type="color" class="event-cal-direct-color" value="${currentColor || '#4285f4'}" style="width: 60%; height: 28px; cursor: pointer;">
+          <input type="text" class="event-cal-hex-input" value="${(currentColor || '#4285f4').toUpperCase()}" placeholder="#FF0000" maxlength="7" style="width: 35%; height: 24px; font-size: 10px; padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; text-transform: uppercase;">
+        </div>
+        <div class="color-tab-panel active" data-panel="vibrant">
+          <div class="color-palette event-cal-vibrant-palette"></div>
+        </div>
+        <div class="color-tab-panel" data-panel="pastel">
+          <div class="color-palette event-cal-pastel-palette"></div>
+        </div>
+        <div class="color-tab-panel" data-panel="dark">
+          <div class="color-palette event-cal-dark-palette"></div>
+        </div>
+        <div class="color-tab-panel" data-panel="custom">
+          <div class="color-palette event-cal-custom-palette"></div>
+        </div>
+      </div>
+    `;
+
+    // Show modal and backdrop
+    modal.classList.add('expanded');
+    backdrop.onclick = closeEventCalendarColorPicker;
+    requestAnimationFrame(() => backdrop.classList.add('active'));
+
+    // Prevent clicks inside modal from closing it
+    modal.onclick = (e) => e.stopPropagation();
+
+    // Setup tab switching
+    modal.querySelectorAll('.color-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        modal.querySelectorAll('.color-tab').forEach(t => t.classList.remove('active'));
+        modal.querySelectorAll('.color-tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        modal.querySelector(`.color-tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+      });
+    });
+
+    // Close button
+    modal.querySelector('.event-calendar-picker-close').addEventListener('click', closeEventCalendarColorPicker);
+
+    // Color update function (does NOT close modal - let user keep picking)
+    const updateColor = async (color) => {
+      await setEventCalendarColor(calendarId, type, color);
+    };
+
+    // Direct color input
+    const directColorInput = modal.querySelector('.event-cal-direct-color');
+    const hexInput = modal.querySelector('.event-cal-hex-input');
+
+    directColorInput.addEventListener('input', () => {
+      hexInput.value = directColorInput.value.toUpperCase();
+    });
+    directColorInput.addEventListener('change', () => updateColor(directColorInput.value));
+
+    hexInput.addEventListener('input', () => {
+      const hex = hexInput.value.trim();
+      const normalized = hex.startsWith('#') ? hex : '#' + hex;
+      if (/^#[0-9A-Fa-f]{6}$/.test(normalized)) {
+        directColorInput.value = normalized;
+        hexInput.style.borderColor = '#1a73e8';
+      } else {
+        hexInput.style.borderColor = '#dc2626';
+      }
+    });
+    hexInput.addEventListener('change', () => {
+      const hex = hexInput.value.trim();
+      const normalized = hex.startsWith('#') ? hex : '#' + hex;
+      if (/^#[0-9A-Fa-f]{6}$/.test(normalized)) {
+        updateColor(normalized);
+      }
+    });
+
+    // Populate palettes
+    const vibrantPalette = modal.querySelector('.event-cal-vibrant-palette');
+    const pastelPaletteEl = modal.querySelector('.event-cal-pastel-palette');
+    const darkPaletteEl = modal.querySelector('.event-cal-dark-palette');
+    const customPaletteEl = modal.querySelector('.event-cal-custom-palette');
+
+    const createSwatch = (color, paletteEl) => {
+      const swatch = document.createElement('div');
+      swatch.className = 'color-swatch';
+      swatch.style.backgroundColor = color;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      if (currentColor && color.toLowerCase() === currentColor.toLowerCase()) {
+        swatch.classList.add('selected');
+      }
+      swatch.onclick = async () => {
+        paletteEl.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+        swatch.classList.add('selected');
+        directColorInput.value = color;
+        hexInput.value = color.toUpperCase();
+        await updateColor(color);
+      };
+      return swatch;
+    };
+
+    colorPickerPalette.forEach(color => vibrantPalette.appendChild(createSwatch(color, vibrantPalette)));
+    pastelPalette.forEach(color => pastelPaletteEl.appendChild(createSwatch(color, pastelPaletteEl)));
+    darkPalette.forEach(color => darkPaletteEl.appendChild(createSwatch(color, darkPaletteEl)));
+
+    if (customColors.length === 0) {
+      customPaletteEl.innerHTML = '<div style="padding: 16px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors yet. Add colors in the Preferences tab.</div>';
+    } else {
+      customColors.forEach(color => customPaletteEl.appendChild(createSwatch(color, customPaletteEl)));
+    }
+  }
+
+  // Close the color picker (modal and backdrop)
+  function closeEventCalendarColorPicker() {
+    const modal = document.getElementById('event-calendar-color-modal');
+    const backdrop = document.getElementById('event-calendar-color-backdrop');
+
+    if (modal) {
+      modal.classList.remove('expanded');
+    }
+    if (backdrop) {
+      backdrop.classList.remove('active');
+    }
+
+    activeEventCalendarColorPicker = null;
+  }
+
+  // Set event calendar color - update UI without rebuilding
+  async function setEventCalendarColor(calendarId, type, color) {
+    debugLog('Setting event calendar color:', calendarId, type, color);
+
+    switch (type) {
+      case 'background':
+        await window.cc3Storage.setEventCalendarBackgroundColor(calendarId, color);
+        break;
+      case 'text':
+        await window.cc3Storage.setEventCalendarTextColor(calendarId, color);
+        break;
+      case 'border':
+        await window.cc3Storage.setEventCalendarBorderColor(calendarId, color);
+        break;
+    }
+
+    // Update cache
+    eventCalendarColors = await window.cc3Storage.getEventCalendarColors();
+
+    // Update UI without rebuilding - just update the specific swatches
+    updateEventCalendarSwatches(calendarId, type, color);
+
+    // Show toast
+    const calendar = eventCalendarsList.find(c => c.id === calendarId);
+    showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} color set for "${calendar?.name || calendarId}"`);
+
+    // Notify content script
+    broadcastEventCalendarColorChange();
+  }
+
+  // Clear event calendar color - update UI without rebuilding
+  async function clearEventCalendarColor(calendarId, type) {
+    debugLog('Clearing event calendar color:', calendarId, type);
+
+    switch (type) {
+      case 'background':
+        await window.cc3Storage.clearEventCalendarBackgroundColor(calendarId);
+        break;
+      case 'text':
+        await window.cc3Storage.clearEventCalendarTextColor(calendarId);
+        break;
+      case 'border':
+        await window.cc3Storage.clearEventCalendarBorderColor(calendarId);
+        break;
+    }
+
+    // Update cache
+    eventCalendarColors = await window.cc3Storage.getEventCalendarColors();
+
+    // Update UI without rebuilding
+    updateEventCalendarSwatches(calendarId, type, null);
+
+    // Show toast
+    const calendar = eventCalendarsList.find(c => c.id === calendarId);
+    showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} color cleared for "${calendar?.name || calendarId}"`);
+
+    // Notify content script
+    broadcastEventCalendarColorChange();
+  }
+
+  // Update preview card and swatches without rebuilding the entire list
+  function updateEventCalendarSwatches(calendarId, type, color) {
+    const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
+    if (!item) return;
+
+    // Helper to get contrast text color
+    const getContrastColor = (bgHex) => {
+      if (!bgHex) return '#ffffff';
+      const rgb = parseInt(bgHex.slice(1), 16);
+      const r = (rgb >> 16) & 0xff;
+      const g = (rgb >> 8) & 0xff;
+      const b = rgb & 0xff;
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.6 ? '#000000' : '#ffffff';
+    };
+
+    // Get all current colors for this calendar
+    const colors = eventCalendarColors[calendarId] || {};
+    const calendar = eventCalendarsList.find(c => c.id === calendarId);
+    const googleBgColor = calendar?.backgroundColor || '#039be5';
+
+    // Update the unified preview card
+    const previewCard = item.querySelector('.event-calendar-preview');
+    if (previewCard) {
+      const bgColor = colors.background || googleBgColor;
+      const textColor = colors.text || getContrastColor(bgColor);
+      const borderColor = colors.border;
+
+      previewCard.style.backgroundColor = bgColor;
+
+      if (borderColor) {
+        previewCard.style.outline = `2px solid ${borderColor}`;
+        previewCard.style.outlineOffset = '-2px';
+      } else {
+        previewCard.style.outline = 'none';
+      }
+
+      const previewTitle = previewCard.querySelector('.event-calendar-preview-title');
+      if (previewTitle) {
+        previewTitle.style.color = textColor;
+      }
+    }
+
+    // Update details preview (in expanded section)
+    const detailsPreview = item.querySelector(`.event-calendar-color-preview[data-type="${type}"]`);
+    if (detailsPreview) {
+      if (color) {
+        detailsPreview.classList.add('has-color');
+        detailsPreview.style.backgroundColor = color;
+      } else {
+        detailsPreview.classList.remove('has-color');
+        detailsPreview.style.backgroundColor = '';
+      }
+    }
+
+    // Update/add/remove clear button
+    const row = item.querySelector(`.event-calendar-color-row[data-type="${type}"]`);
+    if (row) {
+      const actionsDiv = row.querySelector('.event-calendar-color-actions');
+      let clearBtn = row.querySelector('.event-calendar-clear-btn');
+
+      if (color && !clearBtn) {
+        clearBtn = document.createElement('button');
+        clearBtn.className = 'event-calendar-clear-btn';
+        clearBtn.dataset.type = type;
+        clearBtn.dataset.calendarId = calendarId;
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await clearEventCalendarColor(calendarId, type);
+        });
+        actionsDiv.appendChild(clearBtn);
+      } else if (!color && clearBtn) {
+        clearBtn.remove();
+      }
+    }
+  }
+
+  // Broadcast event calendar color change to content script
+  // Include colors in message to avoid race conditions with storage
+  function broadcastEventCalendarColorChange() {
+    chrome.tabs.query({ url: 'https://calendar.google.com/*' }, (tabs) => {
+      tabs.forEach((tab) => {
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'EVENT_CALENDAR_COLORS_CHANGED',
+          calendarColors: eventCalendarColors,
+        }).catch(() => {});
+      });
     });
   }
 

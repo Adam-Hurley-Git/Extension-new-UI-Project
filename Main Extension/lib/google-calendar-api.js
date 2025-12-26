@@ -293,6 +293,7 @@ export async function fetchCalendarColors(forceRefresh = false) {
         colors[calendar.id] = {
           backgroundColor: calendar.backgroundColor,
           foregroundColor: calendar.foregroundColor,
+          summary: calendar.summary || calendar.id, // Calendar name
         };
       });
     }
