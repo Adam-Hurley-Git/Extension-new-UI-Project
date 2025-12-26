@@ -25,6 +25,7 @@
   let categories = {};
   let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor } (from Google API)
   let calendarDefaultColors = {}; // User-defined per-calendar colors: calendarId → { background, text, border }
+  let originalDOMColors = {}; // Cache: calendarId → { background, text } (actual rendered colors from DOM)
   let isEnabled = false;
   let colorPickerObserver = null;
   let colorRenderObserver = null;
@@ -545,6 +546,79 @@
     // Only return if at least one color is set
     if (colors.background || colors.text || colors.border) {
       return colors;
+    }
+
+    return null;
+  }
+
+  /**
+   * Sample and cache the actual rendered color from an uncustomized DOM element
+   * This captures the real color Google displays, which may differ from the API color
+   * @param {HTMLElement} element - The event element
+   * @param {string} calendarId - The calendar ID
+   */
+  function sampleAndCacheDOMColor(element, calendarId) {
+    if (!element || !calendarId) return;
+
+    // Only sample if we haven't already cached this calendar's color
+    if (originalDOMColors[calendarId]) return;
+
+    // Only sample from uncustomized elements (no cfEventColored marker)
+    if (element.dataset.cfEventColored || element.dataset.cfTempGoogleColor) return;
+
+    const computedStyle = window.getComputedStyle(element);
+    let background = computedStyle.backgroundColor;
+
+    // Skip if transparent or not set
+    if (!background || background === 'rgba(0, 0, 0, 0)' || background === 'transparent') {
+      return;
+    }
+
+    // Convert RGB to hex
+    background = rgbToHex(background);
+    if (!background) return;
+
+    // Get text color from title element
+    const titleEl = element.querySelector('.I0UMhf') || element.querySelector('.lhydbb');
+    let text = null;
+    if (titleEl) {
+      const titleStyle = window.getComputedStyle(titleEl);
+      text = rgbToHex(titleStyle.color);
+    }
+
+    // Cache the colors
+    originalDOMColors[calendarId] = { background, text };
+    console.log('[EventColoring] Cached DOM color for calendar:', calendarId, '→', background, 'text:', text);
+  }
+
+  /**
+   * Get the cached original DOM color for a calendar
+   * Falls back to API color if no DOM color cached
+   * @param {string} encodedEventId - The event ID
+   * @returns {string|null} Background color hex or null
+   */
+  function getOriginalColorForEvent(encodedEventId) {
+    const calendarId = getCalendarIdForEvent(encodedEventId);
+
+    // First try DOM-cached color (most accurate)
+    if (calendarId && originalDOMColors[calendarId]) {
+      return originalDOMColors[calendarId].background;
+    }
+
+    // Fall back to API color
+    return getCalendarColorForEvent(encodedEventId);
+  }
+
+  /**
+   * Get the cached original DOM text color for a calendar
+   * @param {string} encodedEventId - The event ID
+   * @returns {string|null} Text color hex or null
+   */
+  function getOriginalTextColorForEvent(encodedEventId) {
+    const calendarId = getCalendarIdForEvent(encodedEventId);
+
+    if (calendarId && originalDOMColors[calendarId]) {
+      return originalDOMColors[calendarId].text;
     }
 
     return null;
@@ -1851,6 +1925,13 @@
       const eventId = element.getAttribute('data-eventid');
       if (!eventId) return;
 
+      // IMPORTANT: Sample DOM color from uncustomized elements BEFORE we apply any colors
+      // This captures the actual color Google renders, which may differ from API color
+      const calendarId = getCalendarIdForEvent(eventId);
+      if (calendarId && !element.dataset.cfEventColored && !element.dataset.cfTempGoogleColor) {
+        sampleAndCacheDOMColor(element, calendarId);
+      }
+
       // Get manual colors for this event (single or recurring)
       let manualColors = singleEventColors.get(eventId);
 
@@ -1872,19 +1953,17 @@
         applyColorsToElement(element, mergedColors);
       } else if (element.dataset.cfEventColored) {
         // No colors to apply but element was previously colored
-        // Instead of just removing styles (which makes cards white/transparent),
-        // apply the Google Calendar API color temporarily for visual feedback
-        const googleCalendarColor = getCalendarColorForEvent(eventId);
+        // Use DOM-cached color (most accurate) or fall back to API color
+        const originalColor = getOriginalColorForEvent(eventId);
 
-        if (googleCalendarColor) {
-          // Apply Google's original calendar color temporarily
-          // This provides instant visual feedback when user clears custom colors
+        if (originalColor) {
+          // Apply the original color temporarily for visual feedback
           // On navigation/refresh, Google's CSS will apply naturally
-          console.log('[EventColoring] Applying temporary Google color:', googleCalendarColor, 'for event:', eventId);
-          applyTemporaryGoogleColor(element, googleCalendarColor);
+          console.log('[EventColoring] Applying original color:', originalColor, 'for event:', eventId);
+          applyTemporaryGoogleColor(element, originalColor);
         } else {
-          // No Google API color available, fall back to removing all styling
-          console.log('[EventColoring] No Google color available, removing styling for event:', eventId);
+          // No color available, fall back to removing all styling
+          console.log('[EventColoring] No original color available, removing styling for event:', eventId);
           removeColorsFromElement(element);
         }
       }
