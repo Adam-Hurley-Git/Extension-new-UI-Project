@@ -1312,53 +1312,10 @@
 
   /**
    * Apply full colors (bg/text/border) to a single element
+   * Note: This delegates to applyColorsToElement for consistent behavior
    */
   function applyFullColorsToElement(element, colors) {
-    if (!element) return;
-
-    const { background, text, border } = colors;
-    const eventId = element.getAttribute('data-eventid');
-    const isEventChip = element.matches('[data-eventchip]');
-
-    if (isEventChip) {
-      // Apply background
-      if (background) {
-        const calendarColor = getCalendarColorForEvent(eventId);
-
-        if (calendarColor) {
-          const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${background} 4px)`;
-          element.style.setProperty('background', gradient, 'important');
-        } else {
-          element.style.setProperty('background-color', background, 'important');
-        }
-
-        element.style.borderColor = adjustColorBrightness(background, -15);
-      }
-
-      // Apply text color
-      const textColor = text || (background ? getTextColorForBackground(background) : null);
-      if (textColor) {
-        element.style.color = textColor;
-
-        // Update text color on child elements
-        element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
-          if (child instanceof HTMLElement) {
-            child.style.color = textColor;
-          }
-        });
-      }
-
-      // Apply border using outline
-      if (border) {
-        element.style.outline = `2px solid ${border}`;
-        element.style.outlineOffset = '-2px';
-      } else {
-        element.style.outline = '';
-        element.style.outlineOffset = '';
-      }
-
-      element.dataset.cfEventColored = 'true';
-    }
+    applyColorsToElement(element, colors);
   }
 
   /**
@@ -2176,12 +2133,6 @@
 
     // Also capture mousedown for cases where context menu appears before click completes
     document.addEventListener('mousedown', captureEventId, true);
-  }
-
-  function getTextColorForBackground(bgHex) {
-    const rgb = hexToRgb(bgHex);
-    const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-    return luminance > 0.6 ? '#000000' : '#FFFFFF';
   }
 
   function hexToRgb(hex) {
