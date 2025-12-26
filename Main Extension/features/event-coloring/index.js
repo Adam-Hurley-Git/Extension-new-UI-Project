@@ -1891,16 +1891,21 @@
   function applyTemporaryGoogleColor(element, googleBgColor) {
     if (!element || !googleBgColor) return;
 
+    // Transform API color to match Google's actual display color
+    // Google Calendar internally darkens/transforms colors before rendering
+    const displayColor = apiColorToGoogleDisplayColor(googleBgColor);
+    console.log('[EventColoring] Temp color transform:', googleBgColor, '->', displayColor);
+
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // Apply just the Google calendar color as solid background
+      // Apply the transformed Google calendar color as solid background
       // No gradient needed since we're showing the "original" color
       // Use 'background' shorthand to override any gradient that was previously set
-      element.style.setProperty('background', googleBgColor, 'important');
+      element.style.setProperty('background', displayColor, 'important');
 
       // Set border to match (cosmetic consistency)
-      element.style.borderColor = adjustColorBrightness(googleBgColor, -15);
+      element.style.borderColor = adjustColorBrightness(displayColor, -15);
 
       // Clear outline (our custom border feature)
       element.style.outline = '';
@@ -1924,9 +1929,9 @@
       // Mark as temporarily colored for debugging
       element.dataset.cfTempGoogleColor = 'true';
     } else if (element.matches('[data-draggable-id]')) {
-      // For draggable items
-      element.style.setProperty('background', googleBgColor, 'important');
-      element.style.borderColor = adjustColorBrightness(googleBgColor, -15);
+      // For draggable items - use the transformed display color
+      element.style.setProperty('background', displayColor, 'important');
+      element.style.borderColor = adjustColorBrightness(displayColor, -15);
 
       // Clear text color - let Google handle it
       element.style.color = '';
@@ -2015,7 +2020,9 @@
     if (isEventChip) {
       // Get the calendar's color from API cache (using event ID to determine calendar)
       const eventId = element.getAttribute('data-eventid');
-      const calendarColor = getCalendarColorForEvent(eventId);
+      const calendarApiColor = getCalendarColorForEvent(eventId);
+      // Transform API color to match Google's actual display color for the stripe
+      const calendarColor = calendarApiColor ? apiColorToGoogleDisplayColor(calendarApiColor) : null;
 
       // Apply or clear background color
       if (background) {
@@ -2153,6 +2160,97 @@
     const g = Math.round(adjust(rgb.g)).toString(16).padStart(2, '0');
     const b = Math.round(adjust(rgb.b)).toString(16).padStart(2, '0');
     return `#${r}${g}${b}`;
+  }
+
+  /**
+   * Convert hex to HSL
+   * @param {string} hex - Hex color
+   * @returns {{h: number, s: number, l: number}}
+   */
+  function hexToHsl(hex) {
+    const rgb = hexToRgb(hex);
+    const r = rgb.r / 255;
+    const g = rgb.g / 255;
+    const b = rgb.b / 255;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+
+    return {
+      h: Math.round(h * 360),
+      s: Math.round(s * 100),
+      l: Math.round(l * 100)
+    };
+  }
+
+  /**
+   * Convert HSL to hex
+   * @param {number} h - Hue (0-360)
+   * @param {number} s - Saturation (0-100)
+   * @param {number} l - Lightness (0-100)
+   * @returns {string} Hex color
+   */
+  function hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+
+    let r, g, b;
+    if (h >= 0 && h < 60) { [r, g, b] = [c, x, 0]; }
+    else if (h >= 60 && h < 120) { [r, g, b] = [x, c, 0]; }
+    else if (h >= 120 && h < 180) { [r, g, b] = [0, c, x]; }
+    else if (h >= 180 && h < 240) { [r, g, b] = [0, x, c]; }
+    else if (h >= 240 && h < 300) { [r, g, b] = [x, 0, c]; }
+    else { [r, g, b] = [c, 0, x]; }
+
+    const toHex = (val) => Math.round((val + m) * 255).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
+  /**
+   * Convert Google Calendar API color to the actual display color
+   * Google Calendar internally transforms API colors before rendering.
+   *
+   * Transformation:
+   * - Hue: +14° (for saturated colors)
+   * - Saturation: × 0.64
+   * - Lightness: × (0.50 + saturation/100 × 0.40)
+   *
+   * @param {string} apiHex - Hex color from Google Calendar API
+   * @returns {string} Transformed hex color matching Google's display
+   */
+  function apiColorToGoogleDisplayColor(apiHex) {
+    if (!apiHex) return apiHex;
+
+    const hsl = hexToHsl(apiHex);
+    if (!hsl) return apiHex;
+
+    // Lightness multiplier based on saturation (less saturated = more darkening)
+    const lMultiplier = 0.50 + (hsl.s / 100) * 0.40;
+
+    // For saturated colors, shift hue and reduce saturation
+    const newH = hsl.s > 0 ? (hsl.h + 14) % 360 : hsl.h;
+    const newS = hsl.s * 0.64;
+    const newL = Math.max(0, Math.min(100, hsl.l * lMultiplier));
+
+    return hslToHex(newH, newS, newL);
   }
 
   // ========================================

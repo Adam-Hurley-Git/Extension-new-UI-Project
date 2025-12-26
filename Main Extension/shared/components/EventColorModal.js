@@ -271,10 +271,14 @@ class EventColorModal {
       title.style.color = text;
     }
 
-    // Update stripe color (calendar color)
+    // Update stripe color (calendar color) - transform API color to display color
     const stripe = preview.querySelector('.ecm-preview-stripe');
     if (stripe) {
-      stripe.style.backgroundColor = this.calendarColor;
+      // Use the color transformation if available, otherwise use raw color
+      const displayCalendarColor = window.colorUtils?.apiColorToGoogleDisplayColor
+        ? window.colorUtils.apiColorToGoogleDisplayColor(this.calendarColor)
+        : this.calendarColor;
+      stripe.style.backgroundColor = displayCalendarColor;
     }
   }
 
