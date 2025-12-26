@@ -25,6 +25,7 @@
   let categories = {};
   let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor } (from Google API)
   let calendarDefaultColors = {}; // User-defined per-calendar colors: calendarId → { background, text, border }
+  let originalDomColors = {}; // Cache: eventId → actual DOM display color (captured before custom styling)
   let isEnabled = false;
   let colorPickerObserver = null;
   let colorRenderObserver = null;
@@ -1140,12 +1141,20 @@
     };
     const eventTitle = domColors.title;
 
-    // Get calendar color for the stripe
-    const calendarColor = getCalendarColorForEvent(eventId) || domColors.background || '#f4511e';
+    // Get calendar color for the stripe - prefer captured DOM color (exact match)
+    // Fall back to API color (will be transformed by the modal)
+    const capturedDomColor = getOriginalDomColor(eventId);
+    const apiCalendarColor = getCalendarColorForEvent(eventId);
+
+    // If we have captured DOM color, pass it directly (already the display color)
+    // Otherwise pass the API color (modal will transform it)
+    // The modal's updatePreview uses window.colorUtils.apiColorToGoogleDisplayColor if available
+    // So we pass the raw value and let it decide
+    const calendarColor = capturedDomColor || apiCalendarColor || domColors.background || '#f4511e';
 
     // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal
     if (typeof window.EventColorModal === 'function') {
-      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors, 'calendarColor:', calendarColor);
+      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors, 'calendarColor:', calendarColor, capturedDomColor ? '(from DOM)' : '(from API)');
 
       activeColorModal = new window.EventColorModal({
         id: `cf-event-color-modal-${Date.now()}`,
@@ -1153,6 +1162,7 @@
         originalColors,
         eventTitle,
         calendarColor,
+        isCalendarColorFromDom: !!capturedDomColor, // true if color is from DOM capture
         onApply: async (colors) => {
           console.log('[EventColoring] Event colors applied:', colors);
           await handleFullColorSelection(eventId, colors);
@@ -1829,21 +1839,31 @@
       // Merge: manual colors take precedence, calendar defaults fill in gaps
       const mergedColors = mergeEventColors(manualColors, calendarDefaultColorsForEvent);
 
+      // IMPORTANT: Capture original DOM color BEFORE applying any custom colors
+      // This captures Google's actual display color for later use when clearing
+      if (!mergedColors && !element.dataset.cfEventColored && !element.dataset.cfTempGoogleColor) {
+        captureOriginalDomColor(element, eventId);
+      }
+
       if (mergedColors) {
         applyColorsToElement(element, mergedColors);
       } else if (element.dataset.cfEventColored) {
         // No colors to apply but element was previously colored
-        // Apply Google Calendar API color temporarily for visual feedback
+        // First try to use captured DOM color, then fall back to formula
+        const originalDomColor = getOriginalDomColor(eventId);
         const googleCalendarColor = getCalendarColorForEvent(eventId);
 
-        if (googleCalendarColor) {
-          // Apply Google's calendar color temporarily
-          // On navigation/refresh, Google's CSS will apply naturally
-          console.log('[EventColoring] Applying Google API color:', googleCalendarColor, 'for event:', eventId);
-          applyTemporaryGoogleColor(element, googleCalendarColor);
+        if (originalDomColor) {
+          // Use the actual captured DOM color - this is the most accurate
+          console.log('[EventColoring] Using captured DOM color:', originalDomColor, 'for event:', eventId);
+          applyTemporaryGoogleColor(element, originalDomColor, true); // true = already transformed
+        } else if (googleCalendarColor) {
+          // Fall back to API color with formula transformation
+          console.log('[EventColoring] Applying Google API color (formula):', googleCalendarColor, 'for event:', eventId);
+          applyTemporaryGoogleColor(element, googleCalendarColor, false); // false = needs transformation
         } else {
           // No color available, fall back to removing all styling
-          console.log('[EventColoring] No Google API color available, removing styling for event:', eventId);
+          console.log('[EventColoring] No color available, removing styling for event:', eventId);
           removeColorsFromElement(element);
         }
       }
@@ -1877,7 +1897,7 @@
   }
 
   /**
-   * Apply the original Google Calendar API color temporarily
+   * Apply the original Google Calendar color temporarily
    * This is used when user clears custom colors - we show the Google color
    * temporarily until navigation/refresh when Google's CSS will take over.
    *
@@ -1886,15 +1906,17 @@
    * which may not match Google's original styling.
    *
    * @param {HTMLElement} element - The event element
-   * @param {string} googleBgColor - Background color from Google Calendar API
+   * @param {string} color - Background color (either from API or captured from DOM)
+   * @param {boolean} isAlreadyDisplayColor - If true, color is already the display color (from DOM).
+   *                                          If false, color is from API and needs transformation.
    */
-  function applyTemporaryGoogleColor(element, googleBgColor) {
-    if (!element || !googleBgColor) return;
+  function applyTemporaryGoogleColor(element, color, isAlreadyDisplayColor = false) {
+    if (!element || !color) return;
 
-    // Transform API color to match Google's actual display color
-    // Google Calendar internally darkens/transforms colors before rendering
-    const displayColor = apiColorToGoogleDisplayColor(googleBgColor);
-    console.log('[EventColoring] Temp color transform:', googleBgColor, '->', displayColor);
+    // If the color is from API, transform it to match Google's display color
+    // If it's already captured from DOM, use it directly
+    const displayColor = isAlreadyDisplayColor ? color : apiColorToGoogleDisplayColor(color);
+    console.log('[EventColoring] Temp color:', color, isAlreadyDisplayColor ? '(from DOM)' : '->', displayColor);
 
     const isEventChip = element.matches('[data-eventchip]');
 
@@ -2018,11 +2040,18 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // Get the calendar's color from API cache (using event ID to determine calendar)
+      // Get the calendar stripe color - prefer captured DOM color, fall back to formula
       const eventId = element.getAttribute('data-eventid');
+      const originalDomColor = getOriginalDomColor(eventId);
       const calendarApiColor = getCalendarColorForEvent(eventId);
-      // Transform API color to match Google's actual display color for the stripe
-      const calendarColor = calendarApiColor ? apiColorToGoogleDisplayColor(calendarApiColor) : null;
+
+      // Use captured DOM color if available (most accurate), otherwise transform API color
+      let calendarColor = null;
+      if (originalDomColor) {
+        calendarColor = originalDomColor;
+      } else if (calendarApiColor) {
+        calendarColor = apiColorToGoogleDisplayColor(calendarApiColor);
+      }
 
       // Apply or clear background color
       if (background) {
@@ -2160,6 +2189,55 @@
     const g = Math.round(adjust(rgb.g)).toString(16).padStart(2, '0');
     const b = Math.round(adjust(rgb.b)).toString(16).padStart(2, '0');
     return `#${r}${g}${b}`;
+  }
+
+  /**
+   * Capture the original DOM background color from an event element
+   * This should be called BEFORE any custom colors are applied
+   * @param {HTMLElement} element - The event element
+   * @param {string} eventId - The event ID
+   * @returns {string|null} The captured hex color or null
+   */
+  function captureOriginalDomColor(element, eventId) {
+    if (!element || !eventId) return null;
+
+    // Already captured for this event - don't overwrite
+    if (originalDomColors[eventId]) {
+      return originalDomColors[eventId];
+    }
+
+    // If element already has our custom coloring, don't capture (it's not original)
+    if (element.dataset.cfEventColored || element.dataset.cfTempGoogleColor) {
+      return null;
+    }
+
+    // Get the computed background color from the DOM
+    const computedStyle = window.getComputedStyle(element);
+    let bgColor = computedStyle.backgroundColor;
+
+    // Skip if transparent or not set
+    if (!bgColor || bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') {
+      return null;
+    }
+
+    // Convert RGB to hex
+    const hexColor = rgbToHex(bgColor);
+    if (!hexColor) return null;
+
+    // Store the captured color
+    originalDomColors[eventId] = hexColor;
+    console.log('[EventColoring] Captured original DOM color:', eventId, '->', hexColor);
+
+    return hexColor;
+  }
+
+  /**
+   * Get the original DOM color for an event (if captured)
+   * @param {string} eventId - The event ID
+   * @returns {string|null} The stored hex color or null
+   */
+  function getOriginalDomColor(eventId) {
+    return originalDomColors[eventId] || null;
   }
 
   /**

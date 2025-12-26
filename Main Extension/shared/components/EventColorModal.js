@@ -85,6 +85,9 @@ class EventColorModal {
     this.eventTitle = options.eventTitle || 'Sample Event';
     // Calendar color for the left stripe in preview
     this.calendarColor = options.calendarColor || '#f4511e';
+    // If true, calendarColor is already the display color (captured from DOM)
+    // If false, calendarColor is from API and needs transformation
+    this.isCalendarColorFromDom = options.isCalendarColorFromDom || false;
     // Working copy for live preview
     this.workingColors = { ...this.currentColors };
     this.onApply = options.onApply;
@@ -271,13 +274,19 @@ class EventColorModal {
       title.style.color = text;
     }
 
-    // Update stripe color (calendar color) - transform API color to display color
+    // Update stripe color (calendar color)
     const stripe = preview.querySelector('.ecm-preview-stripe');
     if (stripe) {
-      // Use the color transformation if available, otherwise use raw color
-      const displayCalendarColor = window.colorUtils?.apiColorToGoogleDisplayColor
-        ? window.colorUtils.apiColorToGoogleDisplayColor(this.calendarColor)
-        : this.calendarColor;
+      // If color is already from DOM, use it directly
+      // Otherwise transform API color to display color
+      let displayCalendarColor;
+      if (this.isCalendarColorFromDom) {
+        displayCalendarColor = this.calendarColor;
+      } else if (window.colorUtils?.apiColorToGoogleDisplayColor) {
+        displayCalendarColor = window.colorUtils.apiColorToGoogleDisplayColor(this.calendarColor);
+      } else {
+        displayCalendarColor = this.calendarColor;
+      }
       stripe.style.backgroundColor = displayCalendarColor;
     }
   }
