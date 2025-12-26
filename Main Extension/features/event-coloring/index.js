@@ -1870,8 +1870,37 @@
 
       if (mergedColors) {
         applyColorsToElement(element, mergedColors);
+      } else if (element.dataset.cfEventColored) {
+        // No colors to apply but element was previously colored - remove custom styling
+        removeColorsFromElement(element);
       }
     });
+  }
+
+  /**
+   * Remove custom colors from an element, restoring Google's original styling
+   * @param {HTMLElement} element - The event element to reset
+   */
+  function removeColorsFromElement(element) {
+    if (!element) return;
+
+    // Clear all custom color properties we may have set
+    element.style.background = '';
+    element.style.backgroundColor = '';
+    element.style.borderColor = '';
+    element.style.color = '';
+    element.style.outline = '';
+    element.style.outlineOffset = '';
+
+    // Clear text colors on child elements
+    element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
+      if (child instanceof HTMLElement) {
+        child.style.color = '';
+      }
+    });
+
+    // Remove the colored marker
+    delete element.dataset.cfEventColored;
   }
 
   /**
