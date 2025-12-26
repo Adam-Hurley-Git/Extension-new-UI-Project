@@ -1140,15 +1140,19 @@
     };
     const eventTitle = domColors.title;
 
+    // Get calendar color for the stripe
+    const calendarColor = getCalendarColorForEvent(eventId) || domColors.background || '#f4511e';
+
     // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal
     if (typeof window.EventColorModal === 'function') {
-      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors);
+      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors, 'calendarColor:', calendarColor);
 
       activeColorModal = new window.EventColorModal({
         id: `cf-event-color-modal-${Date.now()}`,
         currentColors,
         originalColors,
         eventTitle,
+        calendarColor,
         onApply: async (colors) => {
           console.log('[EventColoring] Event colors applied:', colors);
           await handleFullColorSelection(eventId, colors);

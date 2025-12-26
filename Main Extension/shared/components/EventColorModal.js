@@ -83,6 +83,8 @@ class EventColorModal {
     };
     // Event title for preview
     this.eventTitle = options.eventTitle || 'Sample Event';
+    // Calendar color for the left stripe in preview
+    this.calendarColor = options.calendarColor || '#f4511e';
     // Working copy for live preview
     this.workingColors = { ...this.currentColors };
     this.onApply = options.onApply;
@@ -267,6 +269,12 @@ class EventColorModal {
     const title = preview.querySelector('.ecm-preview-title');
     if (title) {
       title.style.color = text;
+    }
+
+    // Update stripe color (calendar color)
+    const stripe = preview.querySelector('.ecm-preview-stripe');
+    if (stripe) {
+      stripe.style.backgroundColor = this.calendarColor;
     }
   }
 
