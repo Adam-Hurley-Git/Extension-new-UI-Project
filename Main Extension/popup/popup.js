@@ -8746,11 +8746,13 @@ Would you like to refresh all Google Calendar tabs?`;
   }
 
   // Broadcast event calendar color change to content script
+  // Include colors in message to avoid race conditions with storage
   function broadcastEventCalendarColorChange() {
     chrome.tabs.query({ url: 'https://calendar.google.com/*' }, (tabs) => {
       tabs.forEach((tab) => {
         chrome.tabs.sendMessage(tab.id, {
           type: 'EVENT_CALENDAR_COLORS_CHANGED',
+          calendarColors: eventCalendarColors,
         }).catch(() => {});
       });
     });

@@ -2111,12 +2111,20 @@
       });
     } else if (message.type === 'EVENT_CALENDAR_COLORS_CHANGED') {
       // User changed per-calendar default colors in popup
+      // Use colors from message to avoid race conditions with storage
       console.log('[EventColoring] Calendar default colors changed, reloading...');
-      window.cc3Storage.getEventCalendarColors().then((colors) => {
-        calendarDefaultColors = colors;
+      if (message.calendarColors) {
+        calendarDefaultColors = message.calendarColors;
         console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');
         applyStoredColors();
-      });
+      } else {
+        // Fallback to storage read if colors not in message
+        window.cc3Storage.getEventCalendarColors().then((colors) => {
+          calendarDefaultColors = colors;
+          console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');
+          applyStoredColors();
+        });
+      }
     }
   });
 
