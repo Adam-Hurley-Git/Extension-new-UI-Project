@@ -1871,8 +1871,22 @@
       if (mergedColors) {
         applyColorsToElement(element, mergedColors);
       } else if (element.dataset.cfEventColored) {
-        // No colors to apply but element was previously colored - remove custom styling
-        removeColorsFromElement(element);
+        // No colors to apply but element was previously colored
+        // Instead of just removing styles (which makes cards white/transparent),
+        // apply the Google Calendar API color temporarily for visual feedback
+        const googleCalendarColor = getCalendarColorForEvent(eventId);
+
+        if (googleCalendarColor) {
+          // Apply Google's original calendar color temporarily
+          // This provides instant visual feedback when user clears custom colors
+          // On navigation/refresh, Google's CSS will apply naturally
+          console.log('[EventColoring] Applying temporary Google color:', googleCalendarColor, 'for event:', eventId);
+          applyTemporaryGoogleColor(element, googleCalendarColor);
+        } else {
+          // No Google API color available, fall back to removing all styling
+          console.log('[EventColoring] No Google color available, removing styling for event:', eventId);
+          removeColorsFromElement(element);
+        }
       }
     });
   }
@@ -1901,6 +1915,62 @@
 
     // Remove the colored marker
     delete element.dataset.cfEventColored;
+  }
+
+  /**
+   * Apply the original Google Calendar API color temporarily
+   * This is used when user clears custom colors - we show the Google color
+   * temporarily until navigation/refresh when Google's CSS will take over.
+   * @param {HTMLElement} element - The event element
+   * @param {string} googleBgColor - Background color from Google Calendar API
+   */
+  function applyTemporaryGoogleColor(element, googleBgColor) {
+    if (!element || !googleBgColor) return;
+
+    const isEventChip = element.matches('[data-eventchip]');
+
+    if (isEventChip) {
+      // Apply just the Google calendar color as solid background
+      // No gradient needed since we're showing the "original" color
+      // Use 'background' shorthand to override any gradient that was previously set
+      element.style.setProperty('background', googleBgColor, 'important');
+
+      // Set border to match
+      element.style.borderColor = adjustColorBrightness(googleBgColor, -15);
+
+      // Clear outline (border feature)
+      element.style.outline = '';
+      element.style.outlineOffset = '';
+
+      // Set appropriate text color for contrast
+      const textColor = getTextColorForBackground(googleBgColor);
+      element.style.color = textColor;
+
+      // Update text color on child elements
+      element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
+        if (child instanceof HTMLElement) {
+          child.style.color = textColor;
+        }
+      });
+
+      // Remove the custom colored marker - this element is now "temporarily" colored
+      // with Google's original color, not our custom color
+      // On navigation/refresh, Google's CSS will apply naturally
+      delete element.dataset.cfEventColored;
+
+      // Optional: mark as temporarily colored for debugging
+      element.dataset.cfTempGoogleColor = 'true';
+    } else if (element.matches('[data-draggable-id]')) {
+      // For draggable items
+      element.style.setProperty('background', googleBgColor, 'important');
+      element.style.borderColor = adjustColorBrightness(googleBgColor, -15);
+
+      const textColor = getTextColorForBackground(googleBgColor);
+      element.style.color = textColor;
+
+      delete element.dataset.cfEventColored;
+      element.dataset.cfTempGoogleColor = 'true';
+    }
   }
 
   /**
