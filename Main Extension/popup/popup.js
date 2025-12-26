@@ -8326,9 +8326,9 @@ Would you like to refresh all Google Calendar tabs?`;
     const textColor = colors.text || null;
     const borderColor = colors.border || null;
 
-    // Helper to get readable text color for chip
-    const getChipTextColor = (bgHex) => {
-      if (!bgHex) return '#6b7280';
+    // Helper to get contrast text color for preview
+    const getContrastColor = (bgHex) => {
+      if (!bgHex) return '#ffffff';
       const rgb = parseInt(bgHex.slice(1), 16);
       const r = (rgb >> 16) & 0xff;
       const g = (rgb >> 8) & 0xff;
@@ -8337,25 +8337,11 @@ Would you like to refresh all Google Calendar tabs?`;
       return luminance > 0.6 ? '#000000' : '#ffffff';
     };
 
-    // Create swatch display HTML (matching task list style)
-    const createSwatchHTML = (label, color, type) => {
-      const hasColor = !!color;
-      const chipStyle = hasColor
-        ? `background-color: ${color}; color: ${getChipTextColor(color)};`
-        : 'background-color: #f3f4f6;';
-      const chipContent = hasColor ? '' : label.charAt(0).toUpperCase();
-      const valueText = hasColor ? color.toUpperCase() : 'Not set';
-
-      return `
-        <div class="event-calendar-swatch-group" data-type="${type}" data-calendar-id="${calendar.id}">
-          <span class="event-calendar-swatch-chip ${hasColor ? 'has-color' : ''}" style="${chipStyle}" data-type="${type}" data-calendar-id="${calendar.id}">${chipContent}</span>
-          <div class="event-calendar-swatch-text">
-            <span class="event-calendar-swatch-label">${label}</span>
-            <span class="event-calendar-swatch-value" data-type="${type}">${valueText}</span>
-          </div>
-        </div>
-      `;
-    };
+    // Calculate preview styles
+    const previewBg = bgColor || calendar.backgroundColor || '#039be5';
+    const previewText = textColor || getContrastColor(previewBg);
+    const previewBorder = borderColor ? `outline: 2px solid ${borderColor}; outline-offset: -2px;` : '';
+    const stripeColor = calendar.backgroundColor || '#1a73e8';
 
     item.innerHTML = `
       <div class="event-calendar-card">
@@ -8367,10 +8353,13 @@ Would you like to refresh all Google Calendar tabs?`;
             </div>
             <div class="event-calendar-meta">Google Calendar</div>
           </div>
-          <div class="event-calendar-swatches">
-            ${createSwatchHTML('Background', bgColor, 'background')}
-            ${createSwatchHTML('Text', textColor, 'text')}
-            ${createSwatchHTML('Border', borderColor, 'border')}
+          <div class="event-calendar-preview-wrapper">
+            <div class="event-calendar-preview" data-calendar-id="${calendar.id}" style="background-color: ${previewBg}; ${previewBorder}" title="Click to customize colors">
+              <div class="event-calendar-preview-stripe" style="background-color: ${stripeColor};"></div>
+              <div class="event-calendar-preview-content">
+                <span class="event-calendar-preview-title" style="color: ${previewText};">Sample Event</span>
+              </div>
+            </div>
           </div>
           <div class="event-calendar-expand">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -8409,8 +8398,8 @@ Would you like to refresh all Google Calendar tabs?`;
     // Header click to expand/collapse
     const header = item.querySelector('.event-calendar-header');
     header.addEventListener('click', (e) => {
-      // Don't toggle if clicking on swatch chip or group
-      if (e.target.closest('.event-calendar-swatch-chip') || e.target.closest('.event-calendar-swatch-group')) return;
+      // Don't toggle if clicking on preview card
+      if (e.target.closest('.event-calendar-preview')) return;
       item.classList.toggle('expanded');
 
       // Close color picker when collapsing
@@ -8419,20 +8408,15 @@ Would you like to refresh all Google Calendar tabs?`;
       }
     });
 
-    // Swatch chip clicks in header - open color picker
-    item.querySelectorAll('.event-calendar-swatch-chip, .event-calendar-swatch-group').forEach((el) => {
-      el.addEventListener('click', (e) => {
+    // Preview card click - expand to show color options
+    const previewCard = item.querySelector('.event-calendar-preview');
+    if (previewCard) {
+      previewCard.addEventListener('click', (e) => {
         e.stopPropagation();
-        const type = el.dataset.type;
-        const calId = el.dataset.calendarId;
-
-        // Ensure the item is expanded
+        // Expand the card to show individual color options
         item.classList.add('expanded');
-
-        // Open the palette picker for this type
-        openEventCalendarColorPicker(calId, type, el);
       });
-    });
+    }
 
     // Color preview clicks in details - open color picker
     item.querySelectorAll('.event-calendar-color-preview').forEach((preview) => {
@@ -8683,14 +8667,14 @@ Would you like to refresh all Google Calendar tabs?`;
     broadcastEventCalendarColorChange();
   }
 
-  // Update specific swatches without rebuilding the entire list
+  // Update preview card and swatches without rebuilding the entire list
   function updateEventCalendarSwatches(calendarId, type, color) {
     const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
     if (!item) return;
 
-    // Helper to get readable text color for chip
-    const getChipTextColor = (bgHex) => {
-      if (!bgHex) return '#6b7280';
+    // Helper to get contrast text color
+    const getContrastColor = (bgHex) => {
+      if (!bgHex) return '#ffffff';
       const rgb = parseInt(bgHex.slice(1), 16);
       const r = (rgb >> 16) & 0xff;
       const g = (rgb >> 8) & 0xff;
@@ -8699,29 +8683,34 @@ Would you like to refresh all Google Calendar tabs?`;
       return luminance > 0.6 ? '#000000' : '#ffffff';
     };
 
-    // Update header swatch chip (new structure)
-    const swatchChip = item.querySelector(`.event-calendar-swatch-chip[data-type="${type}"]`);
-    if (swatchChip) {
-      if (color) {
-        swatchChip.classList.add('has-color');
-        swatchChip.style.backgroundColor = color;
-        swatchChip.style.color = getChipTextColor(color);
-        swatchChip.textContent = '';
+    // Get all current colors for this calendar
+    const colors = eventCalendarColors[calendarId] || {};
+    const calendar = eventCalendarsList.find(c => c.id === calendarId);
+    const googleBgColor = calendar?.backgroundColor || '#039be5';
+
+    // Update the unified preview card
+    const previewCard = item.querySelector('.event-calendar-preview');
+    if (previewCard) {
+      const bgColor = colors.background || googleBgColor;
+      const textColor = colors.text || getContrastColor(bgColor);
+      const borderColor = colors.border;
+
+      previewCard.style.backgroundColor = bgColor;
+
+      if (borderColor) {
+        previewCard.style.outline = `2px solid ${borderColor}`;
+        previewCard.style.outlineOffset = '-2px';
       } else {
-        swatchChip.classList.remove('has-color');
-        swatchChip.style.backgroundColor = '#f3f4f6';
-        swatchChip.style.color = '#6b7280';
-        swatchChip.textContent = type === 'background' ? 'B' : type === 'text' ? 'T' : 'B';
+        previewCard.style.outline = 'none';
+      }
+
+      const previewTitle = previewCard.querySelector('.event-calendar-preview-title');
+      if (previewTitle) {
+        previewTitle.style.color = textColor;
       }
     }
 
-    // Update swatch value text
-    const swatchValue = item.querySelector(`.event-calendar-swatch-value[data-type="${type}"]`);
-    if (swatchValue) {
-      swatchValue.textContent = color ? color.toUpperCase() : 'Not set';
-    }
-
-    // Update details preview
+    // Update details preview (in expanded section)
     const detailsPreview = item.querySelector(`.event-calendar-color-preview[data-type="${type}"]`);
     if (detailsPreview) {
       if (color) {
