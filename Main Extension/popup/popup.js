@@ -8316,7 +8316,7 @@ Would you like to refresh all Google Calendar tabs?`;
     }
   }
 
-  // Create calendar color item element
+  // Create calendar color item element - matches task-list-card styling
   function createEventCalendarColorItem(calendar, colors) {
     const item = document.createElement('div');
     item.className = 'event-calendar-item';
@@ -8326,60 +8326,92 @@ Would you like to refresh all Google Calendar tabs?`;
     const textColor = colors.text || null;
     const borderColor = colors.border || null;
 
+    // Helper to get readable text color for chip
+    const getChipTextColor = (bgHex) => {
+      if (!bgHex) return '#6b7280';
+      const rgb = parseInt(bgHex.slice(1), 16);
+      const r = (rgb >> 16) & 0xff;
+      const g = (rgb >> 8) & 0xff;
+      const b = rgb & 0xff;
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.6 ? '#000000' : '#ffffff';
+    };
+
+    // Create swatch display HTML (matching task list style)
+    const createSwatchHTML = (label, color, type) => {
+      const hasColor = !!color;
+      const chipStyle = hasColor
+        ? `background-color: ${color}; color: ${getChipTextColor(color)};`
+        : 'background-color: #f3f4f6;';
+      const chipContent = hasColor ? '' : label.charAt(0).toUpperCase();
+      const valueText = hasColor ? color.toUpperCase() : 'Not set';
+
+      return `
+        <div class="event-calendar-swatch-group" data-type="${type}" data-calendar-id="${calendar.id}">
+          <span class="event-calendar-swatch-chip ${hasColor ? 'has-color' : ''}" style="${chipStyle}" data-type="${type}" data-calendar-id="${calendar.id}">${chipContent}</span>
+          <div class="event-calendar-swatch-text">
+            <span class="event-calendar-swatch-label">${label}</span>
+            <span class="event-calendar-swatch-value" data-type="${type}">${valueText}</span>
+          </div>
+        </div>
+      `;
+    };
+
     item.innerHTML = `
-      <div class="event-calendar-header">
-        <div class="event-calendar-info">
-          <div class="event-calendar-google-color" style="background-color: ${calendar.backgroundColor};" title="Google calendar color"></div>
-          <div class="event-calendar-name" title="${escapeHtml(calendar.name)}">${escapeHtml(calendar.name)}</div>
-        </div>
-        <div class="event-calendar-swatches">
-          <div class="event-calendar-swatch ${bgColor ? 'has-color' : ''}" data-type="background" data-calendar-id="${calendar.id}" title="Background" style="${bgColor ? `background-color: ${bgColor};` : ''}">
-            ${bgColor ? '' : 'B'}
+      <div class="event-calendar-card">
+        <div class="event-calendar-header">
+          <div class="event-calendar-title-group">
+            <div class="event-calendar-title">
+              <span class="event-calendar-google-color" style="background-color: ${calendar.backgroundColor};" title="Google calendar color"></span>
+              <span class="event-calendar-name" title="${escapeHtml(calendar.name)}">${escapeHtml(calendar.name)}</span>
+            </div>
+            <div class="event-calendar-meta">Google Calendar</div>
           </div>
-          <div class="event-calendar-swatch ${textColor ? 'has-color' : ''}" data-type="text" data-calendar-id="${calendar.id}" title="Text" style="${textColor ? `background-color: ${textColor};` : ''}">
-            ${textColor ? '' : 'T'}
+          <div class="event-calendar-swatches">
+            ${createSwatchHTML('Background', bgColor, 'background')}
+            ${createSwatchHTML('Text', textColor, 'text')}
+            ${createSwatchHTML('Border', borderColor, 'border')}
           </div>
-          <div class="event-calendar-swatch ${borderColor ? 'has-color' : ''}" data-type="border" data-calendar-id="${calendar.id}" title="Border" style="${borderColor ? `background-color: ${borderColor};` : ''}">
-            ${borderColor ? '' : '⬚'}
-          </div>
-        </div>
-        <div class="event-calendar-expand">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M6 9l6 6 6-6"/>
-          </svg>
-        </div>
-      </div>
-      <div class="event-calendar-details">
-        <div class="event-calendar-color-row" data-type="background">
-          <div class="event-calendar-color-label">Background</div>
-          <div class="event-calendar-color-actions">
-            <div class="event-calendar-color-preview ${bgColor ? 'has-color' : ''}" style="${bgColor ? `background-color: ${bgColor};` : ''}" data-type="background" data-calendar-id="${calendar.id}"></div>
-            ${bgColor ? `<button class="event-calendar-clear-btn" data-type="background" data-calendar-id="${calendar.id}">Clear</button>` : ''}
+          <div class="event-calendar-expand">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
           </div>
         </div>
-        <div class="event-calendar-color-row" data-type="text">
-          <div class="event-calendar-color-label">Text</div>
-          <div class="event-calendar-color-actions">
-            <div class="event-calendar-color-preview ${textColor ? 'has-color' : ''}" style="${textColor ? `background-color: ${textColor};` : ''}" data-type="text" data-calendar-id="${calendar.id}"></div>
-            ${textColor ? `<button class="event-calendar-clear-btn" data-type="text" data-calendar-id="${calendar.id}">Clear</button>` : ''}
+        <div class="event-calendar-details">
+          <div class="event-calendar-color-stack">
+            <div class="event-calendar-color-row" data-type="background">
+              <div class="event-calendar-color-label">Background</div>
+              <div class="event-calendar-color-actions">
+                <div class="event-calendar-color-preview ${bgColor ? 'has-color' : ''}" style="${bgColor ? `background-color: ${bgColor};` : ''}" data-type="background" data-calendar-id="${calendar.id}"></div>
+                ${bgColor ? `<button class="event-calendar-clear-btn" data-type="background" data-calendar-id="${calendar.id}">Clear</button>` : ''}
+              </div>
+            </div>
+            <div class="event-calendar-color-row" data-type="text">
+              <div class="event-calendar-color-label">Text Color</div>
+              <div class="event-calendar-color-actions">
+                <div class="event-calendar-color-preview ${textColor ? 'has-color' : ''}" style="${textColor ? `background-color: ${textColor};` : ''}" data-type="text" data-calendar-id="${calendar.id}"></div>
+                ${textColor ? `<button class="event-calendar-clear-btn" data-type="text" data-calendar-id="${calendar.id}">Clear</button>` : ''}
+              </div>
+            </div>
+            <div class="event-calendar-color-row" data-type="border">
+              <div class="event-calendar-color-label">Border</div>
+              <div class="event-calendar-color-actions">
+                <div class="event-calendar-color-preview ${borderColor ? 'has-color' : ''}" style="${borderColor ? `background-color: ${borderColor};` : ''}" data-type="border" data-calendar-id="${calendar.id}"></div>
+                ${borderColor ? `<button class="event-calendar-clear-btn" data-type="border" data-calendar-id="${calendar.id}">Clear</button>` : ''}
+              </div>
+            </div>
           </div>
+          <div class="event-calendar-palette-container" id="eventCalPalette-${CSS.escape(calendar.id)}"></div>
         </div>
-        <div class="event-calendar-color-row" data-type="border">
-          <div class="event-calendar-color-label">Border</div>
-          <div class="event-calendar-color-actions">
-            <div class="event-calendar-color-preview ${borderColor ? 'has-color' : ''}" style="${borderColor ? `background-color: ${borderColor};` : ''}" data-type="border" data-calendar-id="${calendar.id}"></div>
-            ${borderColor ? `<button class="event-calendar-clear-btn" data-type="border" data-calendar-id="${calendar.id}">Clear</button>` : ''}
-          </div>
-        </div>
-        <div class="event-calendar-palette-container" id="eventCalPalette-${CSS.escape(calendar.id)}"></div>
       </div>
     `;
 
     // Header click to expand/collapse
     const header = item.querySelector('.event-calendar-header');
     header.addEventListener('click', (e) => {
-      // Don't toggle if clicking on swatch
-      if (e.target.closest('.event-calendar-swatch')) return;
+      // Don't toggle if clicking on swatch chip or group
+      if (e.target.closest('.event-calendar-swatch-chip') || e.target.closest('.event-calendar-swatch-group')) return;
       item.classList.toggle('expanded');
 
       // Close color picker when collapsing
@@ -8388,18 +8420,28 @@ Would you like to refresh all Google Calendar tabs?`;
       }
     });
 
-    // Swatch clicks - open color picker
-    item.querySelectorAll('.event-calendar-swatch, .event-calendar-color-preview').forEach((swatch) => {
-      swatch.addEventListener('click', (e) => {
+    // Swatch chip clicks in header - open color picker
+    item.querySelectorAll('.event-calendar-swatch-chip, .event-calendar-swatch-group').forEach((el) => {
+      el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const type = swatch.dataset.type;
-        const calId = swatch.dataset.calendarId;
+        const type = el.dataset.type;
+        const calId = el.dataset.calendarId;
 
         // Ensure the item is expanded
         item.classList.add('expanded');
 
         // Open the palette picker for this type
-        openEventCalendarColorPicker(calId, type, swatch);
+        openEventCalendarColorPicker(calId, type, el);
+      });
+    });
+
+    // Color preview clicks in details - open color picker
+    item.querySelectorAll('.event-calendar-color-preview').forEach((preview) => {
+      preview.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const type = preview.dataset.type;
+        const calId = preview.dataset.calendarId;
+        openEventCalendarColorPicker(calId, type, preview);
       });
     });
 
@@ -8619,18 +8661,37 @@ Would you like to refresh all Google Calendar tabs?`;
     const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
     if (!item) return;
 
-    // Update header swatch
-    const headerSwatch = item.querySelector(`.event-calendar-swatch[data-type="${type}"]`);
-    if (headerSwatch) {
+    // Helper to get readable text color for chip
+    const getChipTextColor = (bgHex) => {
+      if (!bgHex) return '#6b7280';
+      const rgb = parseInt(bgHex.slice(1), 16);
+      const r = (rgb >> 16) & 0xff;
+      const g = (rgb >> 8) & 0xff;
+      const b = rgb & 0xff;
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.6 ? '#000000' : '#ffffff';
+    };
+
+    // Update header swatch chip (new structure)
+    const swatchChip = item.querySelector(`.event-calendar-swatch-chip[data-type="${type}"]`);
+    if (swatchChip) {
       if (color) {
-        headerSwatch.classList.add('has-color');
-        headerSwatch.style.backgroundColor = color;
-        headerSwatch.textContent = '';
+        swatchChip.classList.add('has-color');
+        swatchChip.style.backgroundColor = color;
+        swatchChip.style.color = getChipTextColor(color);
+        swatchChip.textContent = '';
       } else {
-        headerSwatch.classList.remove('has-color');
-        headerSwatch.style.backgroundColor = '';
-        headerSwatch.textContent = type === 'background' ? 'B' : type === 'text' ? 'T' : '⬚';
+        swatchChip.classList.remove('has-color');
+        swatchChip.style.backgroundColor = '#f3f4f6';
+        swatchChip.style.color = '#6b7280';
+        swatchChip.textContent = type === 'background' ? 'B' : type === 'text' ? 'T' : 'B';
       }
+    }
+
+    // Update swatch value text
+    const swatchValue = item.querySelector(`.event-calendar-swatch-value[data-type="${type}"]`);
+    if (swatchValue) {
+      swatchValue.textContent = color ? color.toUpperCase() : 'Not set';
     }
 
     // Update details preview
