@@ -8262,9 +8262,10 @@ Would you like to refresh all Google Calendar tabs?`;
     emptyEl.style.display = 'none';
 
     try {
-      // Fetch calendars from background script (reusing existing GET_CALENDAR_COLORS)
+      // Fetch calendars from background script with force refresh
+      // Force refresh ensures we get the latest colors if user changed them in Google settings
       const calendars = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'GET_CALENDAR_COLORS' }, (response) => {
+        chrome.runtime.sendMessage({ type: 'GET_CALENDAR_COLORS', forceRefresh: true }, (response) => {
           resolve(response || {});
         });
       });
@@ -8326,20 +8327,11 @@ Would you like to refresh all Google Calendar tabs?`;
     const textColor = colors.text || null;
     const borderColor = colors.border || null;
 
-    // Helper to get contrast text color for preview
-    const getContrastColor = (bgHex) => {
-      if (!bgHex) return '#ffffff';
-      const rgb = parseInt(bgHex.slice(1), 16);
-      const r = (rgb >> 16) & 0xff;
-      const g = (rgb >> 8) & 0xff;
-      const b = rgb & 0xff;
-      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      return luminance > 0.6 ? '#000000' : '#ffffff';
-    };
-
     // Calculate preview styles
+    // Use Google's foreground color for text unless user explicitly set one
+    // This matches what Google Calendar actually displays
     const previewBg = bgColor || calendar.backgroundColor || '#039be5';
-    const previewText = textColor || getContrastColor(previewBg);
+    const previewText = textColor || calendar.foregroundColor || '#ffffff';
     const previewBorder = borderColor ? `outline: 2px solid ${borderColor}; outline-offset: -2px;` : '';
     const stripeColor = calendar.backgroundColor || '#1a73e8';
 
@@ -8672,27 +8664,18 @@ Would you like to refresh all Google Calendar tabs?`;
     const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
     if (!item) return;
 
-    // Helper to get contrast text color
-    const getContrastColor = (bgHex) => {
-      if (!bgHex) return '#ffffff';
-      const rgb = parseInt(bgHex.slice(1), 16);
-      const r = (rgb >> 16) & 0xff;
-      const g = (rgb >> 8) & 0xff;
-      const b = rgb & 0xff;
-      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      return luminance > 0.6 ? '#000000' : '#ffffff';
-    };
-
     // Get all current colors for this calendar
     const colors = eventCalendarColors[calendarId] || {};
     const calendar = eventCalendarsList.find(c => c.id === calendarId);
     const googleBgColor = calendar?.backgroundColor || '#039be5';
+    const googleFgColor = calendar?.foregroundColor || '#ffffff';
 
     // Update the unified preview card
     const previewCard = item.querySelector('.event-calendar-preview');
     if (previewCard) {
       const bgColor = colors.background || googleBgColor;
-      const textColor = colors.text || getContrastColor(bgColor);
+      // Use Google's foreground color for text unless user explicitly set one
+      const textColor = colors.text || googleFgColor;
       const borderColor = colors.border;
 
       previewCard.style.backgroundColor = bgColor;
