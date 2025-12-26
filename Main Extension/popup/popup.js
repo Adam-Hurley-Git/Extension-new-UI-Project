@@ -8402,7 +8402,6 @@ Would you like to refresh all Google Calendar tabs?`;
               </div>
             </div>
           </div>
-          <div class="event-calendar-palette-container" id="eventCalPalette-${CSS.escape(calendar.id)}"></div>
         </div>
       </div>
     `;
@@ -8458,25 +8457,41 @@ Would you like to refresh all Google Calendar tabs?`;
     return item;
   }
 
-  // Open color picker for event calendar
+  // Open color picker for event calendar (using fixed modal with backdrop - matches task list pattern)
   function openEventCalendarColorPicker(calendarId, type, targetSwatch) {
     closeEventCalendarColorPicker();
 
-    const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
-    if (!item) return;
-
-    const container = item.querySelector('.event-calendar-palette-container');
-    if (!container) return;
+    const calendar = eventCalendarsList.find(c => c.id === calendarId);
+    const calendarName = calendar?.name || calendarId;
 
     const colors = eventCalendarColors[calendarId] || {};
     const currentColor = colors[type] || null;
 
-    activeEventCalendarColorPicker = { calendarId, type, container };
+    // Get or create modal
+    let modal = document.getElementById('event-calendar-color-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'event-calendar-color-modal';
+      modal.className = 'event-calendar-color-details';
+      document.body.appendChild(modal);
+    }
 
-    container.innerHTML = `
+    // Get or create backdrop
+    let backdrop = document.getElementById('event-calendar-color-backdrop');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'event-calendar-color-backdrop';
+      backdrop.className = 'event-calendar-color-backdrop';
+      document.body.appendChild(backdrop);
+    }
+
+    activeEventCalendarColorPicker = { calendarId, type, modal };
+
+    // Build modal content
+    modal.innerHTML = `
       <div class="event-calendar-picker-header">
-        <span>Select ${type} color</span>
-        <button class="event-calendar-picker-close">×</button>
+        <span>${type.charAt(0).toUpperCase() + type.slice(1)} Color - ${escapeHtml(calendarName)}</span>
+        <button class="event-calendar-picker-close" type="button">×</button>
       </div>
       <div class="color-picker-tabs">
         <button type="button" class="color-tab active" data-tab="vibrant">Vibrant</button>
@@ -8504,29 +8519,35 @@ Would you like to refresh all Google Calendar tabs?`;
       </div>
     `;
 
-    container.style.display = 'block';
+    // Show modal and backdrop
+    modal.classList.add('expanded');
+    backdrop.onclick = closeEventCalendarColorPicker;
+    requestAnimationFrame(() => backdrop.classList.add('active'));
+
+    // Prevent clicks inside modal from closing it
+    modal.onclick = (e) => e.stopPropagation();
 
     // Setup tab switching
-    container.querySelectorAll('.color-tab').forEach((tab) => {
+    modal.querySelectorAll('.color-tab').forEach((tab) => {
       tab.addEventListener('click', () => {
-        container.querySelectorAll('.color-tab').forEach(t => t.classList.remove('active'));
-        container.querySelectorAll('.color-tab-panel').forEach(p => p.classList.remove('active'));
+        modal.querySelectorAll('.color-tab').forEach(t => t.classList.remove('active'));
+        modal.querySelectorAll('.color-tab-panel').forEach(p => p.classList.remove('active'));
         tab.classList.add('active');
-        container.querySelector(`.color-tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+        modal.querySelector(`.color-tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
       });
     });
 
     // Close button
-    container.querySelector('.event-calendar-picker-close').addEventListener('click', closeEventCalendarColorPicker);
+    modal.querySelector('.event-calendar-picker-close').addEventListener('click', closeEventCalendarColorPicker);
 
-    // Color update function
+    // Color update function (does NOT close modal - let user keep picking)
     const updateColor = async (color) => {
       await setEventCalendarColor(calendarId, type, color);
     };
 
     // Direct color input
-    const directColorInput = container.querySelector('.event-cal-direct-color');
-    const hexInput = container.querySelector('.event-cal-hex-input');
+    const directColorInput = modal.querySelector('.event-cal-direct-color');
+    const hexInput = modal.querySelector('.event-cal-hex-input');
 
     directColorInput.addEventListener('input', () => {
       hexInput.value = directColorInput.value.toUpperCase();
@@ -8552,10 +8573,10 @@ Would you like to refresh all Google Calendar tabs?`;
     });
 
     // Populate palettes
-    const vibrantPalette = container.querySelector('.event-cal-vibrant-palette');
-    const pastelPaletteEl = container.querySelector('.event-cal-pastel-palette');
-    const darkPaletteEl = container.querySelector('.event-cal-dark-palette');
-    const customPaletteEl = container.querySelector('.event-cal-custom-palette');
+    const vibrantPalette = modal.querySelector('.event-cal-vibrant-palette');
+    const pastelPaletteEl = modal.querySelector('.event-cal-pastel-palette');
+    const darkPaletteEl = modal.querySelector('.event-cal-dark-palette');
+    const customPaletteEl = modal.querySelector('.event-cal-custom-palette');
 
     const createSwatch = (color, paletteEl) => {
       const swatch = document.createElement('div');
@@ -8587,13 +8608,19 @@ Would you like to refresh all Google Calendar tabs?`;
     }
   }
 
-  // Close the color picker
+  // Close the color picker (modal and backdrop)
   function closeEventCalendarColorPicker() {
-    if (activeEventCalendarColorPicker) {
-      activeEventCalendarColorPicker.container.style.display = 'none';
-      activeEventCalendarColorPicker.container.innerHTML = '';
-      activeEventCalendarColorPicker = null;
+    const modal = document.getElementById('event-calendar-color-modal');
+    const backdrop = document.getElementById('event-calendar-color-backdrop');
+
+    if (modal) {
+      modal.classList.remove('expanded');
     }
+    if (backdrop) {
+      backdrop.classList.remove('active');
+    }
+
+    activeEventCalendarColorPicker = null;
   }
 
   // Set event calendar color - update UI without rebuilding

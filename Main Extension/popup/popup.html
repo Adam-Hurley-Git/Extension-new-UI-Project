@@ -1884,6 +1884,45 @@
         display: block;
       }
 
+      /* Event Calendar Color Details Modal (matching task-list-color-details) */
+      .event-calendar-color-details {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        border: 1px solid #dadce0;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        z-index: 10000;
+        min-width: 320px;
+        max-width: 90vw;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+
+      .event-calendar-color-details.expanded {
+        display: block;
+      }
+
+      /* Backdrop for event calendar color picker */
+      .event-calendar-color-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 9999;
+      }
+
+      .event-calendar-color-backdrop.active {
+        display: block;
+      }
+
       /* ========================================
          EVENT CALENDAR COLOR ITEMS
          Matching task-list-card styling
@@ -2119,15 +2158,6 @@
         background: #e8eaed;
         border-color: #c1c3c5;
         color: #202124;
-      }
-
-      .event-calendar-palette-container {
-        display: none;
-        margin-top: 16px;
-        padding: 16px;
-        background: #fafbfc;
-        border: 1px solid #e8eaed;
-        border-radius: 8px;
       }
 
       .event-calendar-picker-header {
