@@ -2180,7 +2180,14 @@
     } else if (message.type === 'EVENT_CALENDAR_COLORS_CHANGED') {
       // User changed per-calendar default colors in popup
       // Use colors from message to avoid race conditions with storage
-      console.log('[EventColoring] Calendar default colors changed, reloading...');
+      console.log('[EventColoring] Calendar colors changed, reloading...');
+
+      // Update Google API colors cache if provided (for accurate temp coloring)
+      if (message.googleApiColors) {
+        calendarColors = message.googleApiColors;
+        console.log('[EventColoring] Updated Google API colors for', Object.keys(calendarColors).length, 'calendars');
+      }
+
       if (message.calendarColors) {
         calendarDefaultColors = message.calendarColors;
         console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');

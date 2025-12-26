@@ -8730,12 +8730,23 @@ Would you like to refresh all Google Calendar tabs?`;
 
   // Broadcast event calendar color change to content script
   // Include colors in message to avoid race conditions with storage
+  // Also include Google API colors so content script can update its cache
   function broadcastEventCalendarColorChange() {
+    // Build Google API colors map from eventCalendarsList
+    const googleApiColors = {};
+    eventCalendarsList.forEach((cal) => {
+      googleApiColors[cal.id] = {
+        backgroundColor: cal.backgroundColor,
+        foregroundColor: cal.foregroundColor,
+      };
+    });
+
     chrome.tabs.query({ url: 'https://calendar.google.com/*' }, (tabs) => {
       tabs.forEach((tab) => {
         chrome.tabs.sendMessage(tab.id, {
           type: 'EVENT_CALENDAR_COLORS_CHANGED',
           calendarColors: eventCalendarColors,
+          googleApiColors: googleApiColors,
         }).catch(() => {});
       });
     });
