@@ -1921,6 +1921,11 @@
    * Apply the original Google Calendar API color temporarily
    * This is used when user clears custom colors - we show the Google color
    * temporarily until navigation/refresh when Google's CSS will take over.
+   *
+   * IMPORTANT: We only set background. We CLEAR text color to let Google's
+   * CSS handle it naturally, rather than computing our own contrast color
+   * which may not match Google's original styling.
+   *
    * @param {HTMLElement} element - The event element
    * @param {string} googleBgColor - Background color from Google Calendar API
    */
@@ -1935,21 +1940,20 @@
       // Use 'background' shorthand to override any gradient that was previously set
       element.style.setProperty('background', googleBgColor, 'important');
 
-      // Set border to match
+      // Set border to match (cosmetic consistency)
       element.style.borderColor = adjustColorBrightness(googleBgColor, -15);
 
-      // Clear outline (border feature)
+      // Clear outline (our custom border feature)
       element.style.outline = '';
       element.style.outlineOffset = '';
 
-      // Set appropriate text color for contrast
-      const textColor = getTextColorForBackground(googleBgColor);
-      element.style.color = textColor;
-
-      // Update text color on child elements
+      // IMPORTANT: Clear text color - don't compute it
+      // Let Google's CSS handle text color naturally
+      // This fixes the issue where text was going black on light backgrounds
+      element.style.color = '';
       element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
         if (child instanceof HTMLElement) {
-          child.style.color = textColor;
+          child.style.color = '';
         }
       });
 
@@ -1958,15 +1962,19 @@
       // On navigation/refresh, Google's CSS will apply naturally
       delete element.dataset.cfEventColored;
 
-      // Optional: mark as temporarily colored for debugging
+      // Mark as temporarily colored for debugging
       element.dataset.cfTempGoogleColor = 'true';
     } else if (element.matches('[data-draggable-id]')) {
       // For draggable items
       element.style.setProperty('background', googleBgColor, 'important');
       element.style.borderColor = adjustColorBrightness(googleBgColor, -15);
 
-      const textColor = getTextColorForBackground(googleBgColor);
-      element.style.color = textColor;
+      // Clear text color - let Google handle it
+      element.style.color = '';
+
+      // Clear outline
+      element.style.outline = '';
+      element.style.outlineOffset = '';
 
       delete element.dataset.cfEventColored;
       element.dataset.cfTempGoogleColor = 'true';
@@ -2050,7 +2058,7 @@
       const eventId = element.getAttribute('data-eventid');
       const calendarColor = getCalendarColorForEvent(eventId);
 
-      // Apply background color
+      // Apply or clear background color
       if (background) {
         // Use a gradient to preserve the left 4px with calendar color
         // and apply our custom color to the rest of the element
@@ -2061,30 +2069,41 @@
           // Fallback: just apply the custom color if we don't have calendar color
           element.style.setProperty('background-color', background, 'important');
         }
-
         element.style.borderColor = adjustColorBrightness(background, -15);
       }
+      // Note: We don't clear background here because if background is null,
+      // we want to keep whatever was there (either Google's default or a temp color)
+      // Background clearing happens in removeColorsFromElement() or applyTemporaryGoogleColor()
 
       element.dataset.cfEventColored = 'true';
 
-      // Apply text color (custom or auto-contrast)
-      const textColor = text || (background ? getTextColorForBackground(background) : null);
-      if (textColor) {
-        element.style.color = textColor;
-
-        // Update text color on child text elements only (not background)
+      // Apply text color - ONLY if explicitly set
+      // Don't auto-compute from background; that overrides Google's choices
+      if (text) {
+        element.style.color = text;
         element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
           if (child instanceof HTMLElement) {
-            child.style.color = textColor;
+            child.style.color = text;
+          }
+        });
+      } else if (background && !text) {
+        // If we have a custom background but no custom text, compute contrast text
+        const autoTextColor = getTextColorForBackground(background);
+        element.style.color = autoTextColor;
+        element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
+          if (child instanceof HTMLElement) {
+            child.style.color = autoTextColor;
           }
         });
       }
+      // If no text and no background, don't touch text color at all
 
-      // Apply border using outline (since Google sets border-width: 0)
+      // Apply or clear border using outline (since Google sets border-width: 0)
       if (border) {
         element.style.outline = `2px solid ${border}`;
         element.style.outlineOffset = '-2px';
       } else {
+        // Always clear outline when border is null/undefined
         element.style.outline = '';
         element.style.outlineOffset = '';
       }
@@ -2097,14 +2116,21 @@
       }
       element.dataset.cfEventColored = 'true';
 
-      const textColor = text || (background ? getTextColorForBackground(background) : null);
-      if (textColor) {
-        element.style.color = textColor;
+      // Apply text color only if explicitly set, or compute if we have custom background
+      if (text) {
+        element.style.color = text;
+      } else if (background) {
+        element.style.color = getTextColorForBackground(background);
       }
 
+      // Apply or clear border
       if (border) {
         element.style.outline = `2px solid ${border}`;
         element.style.outlineOffset = '-2px';
+      } else {
+        // Fix: Clear outline for draggable items too
+        element.style.outline = '';
+        element.style.outlineOffset = '';
       }
     }
   }
