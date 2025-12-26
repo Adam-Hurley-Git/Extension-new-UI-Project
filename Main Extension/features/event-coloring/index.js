@@ -2077,8 +2077,8 @@
 
       element.dataset.cfEventColored = 'true';
 
-      // Apply text color - ONLY if explicitly set
-      // Don't auto-compute from background; that overrides Google's choices
+      // Apply text color - ONLY if explicitly set by user
+      // Never auto-compute from background; let Google's CSS handle text naturally
       if (text) {
         element.style.color = text;
         element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
@@ -2086,17 +2086,8 @@
             child.style.color = text;
           }
         });
-      } else if (background && !text) {
-        // If we have a custom background but no custom text, compute contrast text
-        const autoTextColor = getTextColorForBackground(background);
-        element.style.color = autoTextColor;
-        element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
-          if (child instanceof HTMLElement) {
-            child.style.color = autoTextColor;
-          }
-        });
       }
-      // If no text and no background, don't touch text color at all
+      // If no explicit text color, don't touch it - Google's CSS handles it
 
       // Apply or clear border using outline (since Google sets border-width: 0)
       if (border) {
@@ -2116,12 +2107,11 @@
       }
       element.dataset.cfEventColored = 'true';
 
-      // Apply text color only if explicitly set, or compute if we have custom background
+      // Apply text color - ONLY if explicitly set by user
       if (text) {
         element.style.color = text;
-      } else if (background) {
-        element.style.color = getTextColorForBackground(background);
       }
+      // If no explicit text color, don't touch it - Google's CSS handles it
 
       // Apply or clear border
       if (border) {
