@@ -113,6 +113,7 @@
       'pendingTextColors', // Text colors need hard replace for deletions
       'textColors', // Text colors need hard replace for deletions
       'completedStyling', // Completed styling needs hard replace for deletions
+      'calendarColors', // Calendar colors need hard replace for deletions
     ]);
 
     // If either side isn't a plain object, prefer partial directly
