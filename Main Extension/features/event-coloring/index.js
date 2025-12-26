@@ -1140,15 +1140,19 @@
     };
     const eventTitle = domColors.title;
 
+    // Get calendar color for the stripe
+    const calendarColor = getCalendarColorForEvent(eventId) || domColors.background || '#f4511e';
+
     // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal
     if (typeof window.EventColorModal === 'function') {
-      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors);
+      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors, 'calendarColor:', calendarColor);
 
       activeColorModal = new window.EventColorModal({
         id: `cf-event-color-modal-${Date.now()}`,
         currentColors,
         originalColors,
         eventTitle,
+        calendarColor,
         onApply: async (colors) => {
           console.log('[EventColoring] Event colors applied:', colors);
           await handleFullColorSelection(eventId, colors);
@@ -1312,53 +1316,10 @@
 
   /**
    * Apply full colors (bg/text/border) to a single element
+   * Note: This delegates to applyColorsToElement for consistent behavior
    */
   function applyFullColorsToElement(element, colors) {
-    if (!element) return;
-
-    const { background, text, border } = colors;
-    const eventId = element.getAttribute('data-eventid');
-    const isEventChip = element.matches('[data-eventchip]');
-
-    if (isEventChip) {
-      // Apply background
-      if (background) {
-        const calendarColor = getCalendarColorForEvent(eventId);
-
-        if (calendarColor) {
-          const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${background} 4px)`;
-          element.style.setProperty('background', gradient, 'important');
-        } else {
-          element.style.setProperty('background-color', background, 'important');
-        }
-
-        element.style.borderColor = adjustColorBrightness(background, -15);
-      }
-
-      // Apply text color
-      const textColor = text || (background ? getTextColorForBackground(background) : null);
-      if (textColor) {
-        element.style.color = textColor;
-
-        // Update text color on child elements
-        element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
-          if (child instanceof HTMLElement) {
-            child.style.color = textColor;
-          }
-        });
-      }
-
-      // Apply border using outline
-      if (border) {
-        element.style.outline = `2px solid ${border}`;
-        element.style.outlineOffset = '-2px';
-      } else {
-        element.style.outline = '';
-        element.style.outlineOffset = '';
-      }
-
-      element.dataset.cfEventColored = 'true';
-    }
+    applyColorsToElement(element, colors);
   }
 
   /**
@@ -2178,12 +2139,6 @@
     document.addEventListener('mousedown', captureEventId, true);
   }
 
-  function getTextColorForBackground(bgHex) {
-    const rgb = hexToRgb(bgHex);
-    const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-    return luminance > 0.6 ? '#000000' : '#FFFFFF';
-  }
-
   function hexToRgb(hex) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
@@ -2225,7 +2180,14 @@
     } else if (message.type === 'EVENT_CALENDAR_COLORS_CHANGED') {
       // User changed per-calendar default colors in popup
       // Use colors from message to avoid race conditions with storage
-      console.log('[EventColoring] Calendar default colors changed, reloading...');
+      console.log('[EventColoring] Calendar colors changed, reloading...');
+
+      // Update Google API colors cache if provided (for accurate temp coloring)
+      if (message.googleApiColors) {
+        calendarColors = message.googleApiColors;
+        console.log('[EventColoring] Updated Google API colors for', Object.keys(calendarColors).length, 'calendars');
+      }
+
       if (message.calendarColors) {
         calendarDefaultColors = message.calendarColors;
         console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');

@@ -55,21 +55,6 @@ async function loadCustomColors() {
 }
 
 /**
- * Get contrasting text color for a background
- * @param {string} hexColor - Background color
- * @returns {string} Black or white hex color
- */
-function getContrastColor(hexColor) {
-  if (!hexColor) return '#000000';
-  const hex = hexColor.replace('#', '');
-  const r = parseInt(hex.substr(0, 2), 16);
-  const g = parseInt(hex.substr(2, 2), 16);
-  const b = parseInt(hex.substr(4, 2), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.5 ? '#000000' : '#ffffff';
-}
-
-/**
  * EventColorModal class
  * Creates a modal with Background/Text/Border property tabs and color palettes
  */
@@ -98,6 +83,8 @@ class EventColorModal {
     };
     // Event title for preview
     this.eventTitle = options.eventTitle || 'Sample Event';
+    // Calendar color for the left stripe in preview
+    this.calendarColor = options.calendarColor || '#f4511e';
     // Working copy for live preview
     this.workingColors = { ...this.currentColors };
     this.onApply = options.onApply;
@@ -265,7 +252,7 @@ class EventColorModal {
 
     // Use working colors if set, otherwise fall back to original event colors
     const bg = this.getEffectiveColor('background') || '#039be5';
-    const text = this.workingColors.text || (this.currentColors.text ? this.currentColors.text : (this.originalColors.text || getContrastColor(bg)));
+    const text = this.workingColors.text || this.currentColors.text || this.originalColors.text || '#ffffff';
     const border = this.getEffectiveColor('border');
 
     preview.style.backgroundColor = bg;
@@ -282,6 +269,12 @@ class EventColorModal {
     const title = preview.querySelector('.ecm-preview-title');
     if (title) {
       title.style.color = text;
+    }
+
+    // Update stripe color (calendar color)
+    const stripe = preview.querySelector('.ecm-preview-stripe');
+    if (stripe) {
+      stripe.style.backgroundColor = this.calendarColor;
     }
   }
 

@@ -293,6 +293,40 @@ export class ColorPickerInjector {
       this.activeModal = null;
     }
 
+    // Try to find the event element and extract colors from DOM
+    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+    let calendarColor = '#f4511e'; // Default fallback
+    let originalColors = { background: '#039be5', text: '#ffffff', border: null };
+    let eventTitle = 'Sample Event';
+
+    if (eventElement) {
+      // Try to get stripe color (calendar color)
+      const stripeEl = eventElement.querySelector('.jSrjCf');
+      if (stripeEl) {
+        const stripeColor = window.getComputedStyle(stripeEl).backgroundColor;
+        if (stripeColor && stripeColor !== 'rgba(0, 0, 0, 0)') {
+          calendarColor = stripeColor;
+        }
+      }
+
+      // Get original event background
+      const chipEl = eventElement.querySelector('[data-eventchip]') || eventElement;
+      const bgStyle = window.getComputedStyle(chipEl).backgroundColor;
+      if (bgStyle && bgStyle !== 'rgba(0, 0, 0, 0)') {
+        originalColors.background = bgStyle;
+      }
+
+      // Get event title
+      const titleEl = eventElement.querySelector('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye');
+      if (titleEl) {
+        eventTitle = titleEl.textContent?.trim() || 'Sample Event';
+        const textColor = window.getComputedStyle(titleEl).color;
+        if (textColor) {
+          originalColors.text = textColor;
+        }
+      }
+    }
+
     // Get current colors for this event (use new full format)
     const getColors = this.storageService.findEventColorFull || this.storageService.findEventColor;
     getColors?.(eventId).then((colorData) => {
@@ -303,11 +337,14 @@ export class ColorPickerInjector {
         border: colorData?.border || null,
       };
 
-      console.log('[CF] Opening EventColorModal with colors:', currentColors);
+      console.log('[CF] Opening EventColorModal with colors:', currentColors, 'calendarColor:', calendarColor);
 
       this.activeModal = new EventColorModal({
         id: `cf-event-color-modal-${Date.now()}`,
         currentColors,
+        originalColors,
+        eventTitle,
+        calendarColor,
         onApply: async (colors) => {
           console.log('[CF] Event colors applied:', colors);
           await this.handleFullColorSelect(eventId, colors);
