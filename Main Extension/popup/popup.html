@@ -1885,6 +1885,186 @@
       }
 
       /* ========================================
+         EVENT CALENDAR COLOR ITEMS
+         ======================================== */
+
+      .event-calendar-item {
+        background: #f8f9fa;
+        border: 1px solid #e8eaed;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        overflow: hidden;
+        transition: all 0.2s ease;
+      }
+
+      .event-calendar-item:hover {
+        border-color: #dadce0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+
+      .event-calendar-item.expanded {
+        background: #fff;
+        border-color: #1a73e8;
+      }
+
+      .event-calendar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        cursor: pointer;
+        gap: 10px;
+      }
+
+      .event-calendar-header:hover {
+        background: rgba(0, 0, 0, 0.02);
+      }
+
+      .event-calendar-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .event-calendar-google-color {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        flex-shrink: 0;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      .event-calendar-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: #202124;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .event-calendar-swatches {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .event-calendar-swatch {
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        border: 2px dashed #dadce0;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        color: #9aa0a6;
+      }
+
+      .event-calendar-swatch:hover {
+        border-color: #1a73e8;
+        transform: scale(1.05);
+      }
+
+      .event-calendar-swatch.has-color {
+        border: 2px solid rgba(0, 0, 0, 0.15);
+        background-color: var(--swatch-color);
+      }
+
+      .event-calendar-swatch.has-color:hover {
+        border-color: rgba(0, 0, 0, 0.3);
+      }
+
+      .event-calendar-expand {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: #5f6368;
+        transition: transform 0.2s ease;
+      }
+
+      .event-calendar-item.expanded .event-calendar-expand {
+        transform: rotate(180deg);
+      }
+
+      .event-calendar-details {
+        display: none;
+        padding: 0 12px 12px;
+        border-top: 1px solid #e8eaed;
+        margin-top: 4px;
+      }
+
+      .event-calendar-item.expanded .event-calendar-details {
+        display: block;
+      }
+
+      .event-calendar-color-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+      }
+
+      .event-calendar-color-row:not(:last-child) {
+        border-bottom: 1px solid #f1f3f4;
+      }
+
+      .event-calendar-color-label {
+        font-size: 12px;
+        color: #5f6368;
+        font-weight: 500;
+      }
+
+      .event-calendar-color-picker {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .event-calendar-color-preview {
+        width: 28px;
+        height: 28px;
+        border-radius: 4px;
+        border: 2px dashed #dadce0;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .event-calendar-color-preview:hover {
+        border-color: #1a73e8;
+        transform: scale(1.05);
+      }
+
+      .event-calendar-color-preview.has-color {
+        border: 2px solid rgba(0, 0, 0, 0.15);
+      }
+
+      .event-calendar-clear-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+        color: #5f6368;
+        background: #f8f9fa;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .event-calendar-clear-btn:hover {
+        background: #e8eaed;
+        color: #d93025;
+      }
+
+      /* ========================================
          PENDING TASKS SECTION HEADER
          ======================================== */
 
@@ -2529,6 +2709,15 @@
         width: 80px;
         height: 80px;
         animation: pulse 2s infinite;
+      }
+
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
       }
 
       @keyframes pulse {
@@ -5264,6 +5453,43 @@
               <div id="eventColorCategoriesList" style="margin-bottom: 16px;">
                 <div style="padding: 20px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
                   No categories. Click "New Category" to start.
+                </div>
+              </div>
+
+              <!-- Calendar Colors Section -->
+              <div style="margin-top: 16px; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                  <div style="font-weight: 600; color: #202124; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Calendar Default Colors
+                  </div>
+                  <button
+                    id="calendarColorsInfoBtn"
+                    style="padding: 4px 8px; background: #f8f9fa; border: 1px solid #dadce0; border-radius: 4px; font-size: 11px; color: #5f6368; cursor: pointer;"
+                    onmouseover="this.style.background='#e8eaed';"
+                    onmouseout="this.style.background='#f8f9fa';"
+                  >
+                    ?
+                  </button>
+                </div>
+                <p style="margin: 0 0 12px 0; font-size: 11px; color: #80868b; line-height: 1.4;">
+                  Set default colors for all events from each calendar. Individual event colors override these defaults.
+                </p>
+                <div id="eventCalendarColorsList" style="max-height: 300px; overflow-y: auto;">
+                  <div id="eventCalendarColorsLoading" style="padding: 16px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="animation: spin 1s linear infinite;">
+                        <circle cx="12" cy="12" r="10" stroke="#dadce0" stroke-width="2" fill="none"/>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="#1a73e8" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                      Loading calendars...
+                    </div>
+                  </div>
+                  <div id="eventCalendarColorsContent" style="display: none;">
+                    <!-- Populated dynamically by JS -->
+                  </div>
+                  <div id="eventCalendarColorsEmpty" style="display: none; padding: 16px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
+                    No calendars found. Calendar colors are fetched from your Google Calendar account.
+                  </div>
                 </div>
               </div>
 

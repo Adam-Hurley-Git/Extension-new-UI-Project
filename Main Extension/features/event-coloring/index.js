@@ -23,7 +23,8 @@
   let settings = {};
   let eventColors = {};
   let categories = {};
-  let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor }
+  let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor } (from Google API)
+  let calendarDefaultColors = {}; // User-defined per-calendar colors: calendarId → { background, text, border }
   let isEnabled = false;
   let colorPickerObserver = null;
   let colorRenderObserver = null;
@@ -456,6 +457,99 @@
     }
   }
 
+  /**
+   * Get the calendar ID for an event (for looking up user-defined calendar default colors)
+   * @param {string} encodedEventId - The data-eventid value
+   * @returns {string|null} Calendar ID or null
+   */
+  function getCalendarIdForEvent(encodedEventId) {
+    if (!encodedEventId) return null;
+
+    try {
+      let partialCalendarId = null;
+
+      if (encodedEventId.startsWith('ttb_')) {
+        // TTB format: decode base64 after prefix
+        const base64Part = encodedEventId.slice(4);
+        const decoded = atob(base64Part);
+        const spaceIndex = decoded.indexOf(' ');
+        if (spaceIndex > 0) {
+          partialCalendarId = decoded.substring(spaceIndex + 1);
+        }
+      } else {
+        // Standard format: base64 encoded with email suffix
+        try {
+          const decoded = atob(encodedEventId);
+          const spaceIndex = decoded.indexOf(' ');
+          if (spaceIndex > 0) {
+            partialCalendarId = decoded.substring(spaceIndex + 1);
+          }
+        } catch (e) {
+          // Not base64, might be plain ID
+        }
+      }
+
+      if (partialCalendarId) {
+        // First try exact match in calendarDefaultColors
+        if (calendarDefaultColors[partialCalendarId]) {
+          return partialCalendarId;
+        }
+
+        // Try username prefix matching
+        const atIndex = partialCalendarId.indexOf('@');
+        if (atIndex > 0) {
+          const usernamePrefix = partialCalendarId.substring(0, atIndex);
+
+          for (const calendarId of Object.keys(calendarDefaultColors)) {
+            if (calendarId.startsWith(usernamePrefix + '@')) {
+              return calendarId;
+            }
+          }
+        }
+
+        // Also check against calendarColors (Google API cache) for full calendar ID resolution
+        if (calendarColors[partialCalendarId]) {
+          return partialCalendarId;
+        }
+
+        if (atIndex > 0) {
+          const usernamePrefix = partialCalendarId.substring(0, atIndex);
+          for (const calendarId of Object.keys(calendarColors)) {
+            if (calendarId.startsWith(usernamePrefix + '@')) {
+              // Return the full calendar ID for use in looking up default colors
+              return calendarId;
+            }
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[EventColoring] Failed to get calendar ID for event:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get user-defined calendar default colors for an event
+   * @param {string} encodedEventId - The data-eventid value
+   * @returns {Object|null} { background, text, border } or null
+   */
+  function getCalendarDefaultColorsForEvent(encodedEventId) {
+    const calendarId = getCalendarIdForEvent(encodedEventId);
+    if (!calendarId) return null;
+
+    const colors = calendarDefaultColors[calendarId];
+    if (!colors) return null;
+
+    // Only return if at least one color is set
+    if (colors.background || colors.text || colors.border) {
+      return colors;
+    }
+
+    return null;
+  }
+
   // ========================================
   // INITIALIZATION
   // ========================================
@@ -488,6 +582,10 @@
     // Load event colors from storage
     eventColors = await window.cc3Storage.getAllEventColors();
     console.log('[EventColoring] Loaded', Object.keys(eventColors).length, 'event colors');
+
+    // Load calendar default colors (user-defined per-calendar colors)
+    calendarDefaultColors = await window.cc3Storage.getEventCalendarColors();
+    console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');
 
     // Fetch calendar colors from API (single call, cached in background)
     await fetchCalendarColors();
@@ -1708,6 +1806,7 @@
 
   async function refreshColors() {
     eventColors = await window.cc3Storage.getAllEventColors();
+    calendarDefaultColors = await window.cc3Storage.getEventCalendarColors();
     applyStoredColors();
 
     // Also update the color swatch if we're in an event editor
@@ -1726,10 +1825,13 @@
     // Separate recurring and single events
     const recurringEvents = [];
     const singleEvents = [];
+    const coloredEventIds = new Set(); // Track which events have manual colors
 
     Object.entries(eventColors).forEach(([eventId, colorData]) => {
       const normalized = normalizeColorData(colorData);
       if (!normalized) return;
+
+      coloredEventIds.add(eventId);
 
       if (normalized.isRecurring) {
         recurringEvents.push({ eventId, colors: normalized });
@@ -1746,6 +1848,53 @@
     // Apply single events
     singleEvents.forEach(({ eventId, colors }) => {
       applyColorsToEvent(eventId, colors);
+    });
+
+    // Apply calendar default colors to events without manual colors
+    // This is completely independent of task coloring - uses user-defined per-calendar colors for events
+    applyCalendarDefaultColors(coloredEventIds, recurringEvents);
+  }
+
+  /**
+   * Apply user-defined calendar default colors to events that don't have manual colors
+   * Priority: Manual event color > Calendar default color > No custom color
+   * @param {Set} coloredEventIds - Set of event IDs with manual colors
+   * @param {Array} recurringEvents - Recurring events with manual colors
+   */
+  function applyCalendarDefaultColors(coloredEventIds, recurringEvents) {
+    if (Object.keys(calendarDefaultColors).length === 0) {
+      return; // No calendar default colors set
+    }
+
+    console.log('[EventColoring] Applying calendar default colors');
+
+    const allEventElements = document.querySelectorAll('[data-eventid]');
+
+    allEventElements.forEach((element) => {
+      // Skip events in dialogs
+      if (element.closest('[role="dialog"]')) return;
+
+      const eventId = element.getAttribute('data-eventid');
+      if (!eventId) return;
+
+      // Skip if event has manual color
+      if (coloredEventIds.has(eventId)) return;
+
+      // Check if this is an instance of a recurring event with manual color
+      const parsed = EventIdUtils.fromEncoded(eventId);
+      if (parsed.type === 'calendar') {
+        const hasRecurringColor = recurringEvents.some(({ eventId: recurringId }) => {
+          const recurringParsed = EventIdUtils.fromEncoded(recurringId);
+          return EventIdUtils.matchesEvent(parsed, recurringParsed);
+        });
+        if (hasRecurringColor) return;
+      }
+
+      // Get calendar default colors for this event
+      const defaultColors = getCalendarDefaultColorsForEvent(eventId);
+      if (defaultColors) {
+        applyColorsToElement(element, defaultColors);
+      }
     });
   }
 
@@ -1961,6 +2110,14 @@
       console.log('[EventColoring] Settings changed, reloading...');
       window.cc3Storage.getEventColoringSettings().then((freshSettings) => {
         init(freshSettings).catch((err) => console.error('[EventColoring] Reinit failed:', err));
+      });
+    } else if (message.type === 'EVENT_CALENDAR_COLORS_CHANGED') {
+      // User changed per-calendar default colors in popup
+      console.log('[EventColoring] Calendar default colors changed, reloading...');
+      window.cc3Storage.getEventCalendarColors().then((colors) => {
+        calendarDefaultColors = colors;
+        console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');
+        applyStoredColors();
       });
     }
   });
