@@ -1390,7 +1390,12 @@
 
     console.log('[EventColoring] colorData to save:', colorData);
 
-    // Use new storage method if available
+    // IMPORTANT: Update local cache FIRST for immediate effect
+    // This prevents race conditions where MutationObserver fires before storage save completes
+    eventColors[eventId] = colorData;
+    console.log('[EventColoring] Updated local cache FIRST for event:', eventId.slice(0, 30) + '...', 'borderWidth:', colorData.borderWidth);
+
+    // Then save to storage (async, can complete in background)
     if (window.cc3Storage.saveEventColorsFullAdvanced) {
       await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
       console.log('[EventColoring] Saved to storage via saveEventColorsFullAdvanced');
@@ -1398,9 +1403,6 @@
       // Fallback: save as single color
       await window.cc3Storage.saveEventColor(eventId, colors.background, false);
     }
-
-    eventColors[eventId] = colorData;
-    console.log('[EventColoring] Updated local cache for event:', eventId.slice(0, 30) + '...', 'borderWidth:', colorData.borderWidth);
   }
 
   /**
@@ -1420,6 +1422,14 @@
       appliedAt: Date.now(),
     };
 
+    // Update local cache FIRST for immediate effect (before async storage operations)
+    if (applyToAll && parsed.isRecurring) {
+      const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
+      eventColors[baseStorageId] = colorData;
+    } else {
+      eventColors[eventId] = colorData;
+    }
+
     if (applyToAll && parsed.isRecurring) {
       const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
 
@@ -1429,9 +1439,7 @@
         await window.cc3Storage.saveEventColorAdvanced(eventId, colors.background, { applyToAll: true });
       }
 
-      eventColors[baseStorageId] = colorData;
-
-      // Clean up individual instance colors
+      // Clean up individual instance colors (cache was already updated at function start)
       Object.keys(eventColors).forEach((storedId) => {
         try {
           const storedParsed = EventIdUtils.fromEncoded(storedId);
