@@ -1190,8 +1190,58 @@
   async function handleFullColorSelection(eventId, colors) {
     console.log('[EventColoring] Full color selected:', eventId, colors);
 
+    // Check if all colors are cleared (all null)
+    const allColorsCleared = !colors.background && !colors.text && !colors.border;
+
     // Check if recurring event
     const parsed = EventIdUtils.fromEncoded(eventId);
+
+    if (allColorsCleared) {
+      console.log('[EventColoring] All colors cleared, removing event color');
+
+      if (parsed.isRecurring) {
+        // For recurring events, show dialog to choose clear scope
+        showRecurringEventDialog({
+          eventId,
+          color: null, // No color for display (clearing)
+          onConfirm: async (applyToAll) => {
+            console.log('[EventColoring] Recurring clear confirmed, applyToAll:', applyToAll);
+            // Remove the event color from storage
+            await window.cc3Storage.removeEventColor(eventId);
+            delete eventColors[eventId];
+
+            // Close modal and color picker
+            if (activeColorModal) {
+              activeColorModal.close();
+              activeColorModal = null;
+            }
+            closeColorPicker();
+
+            // Force page refresh to show cleared state
+            window.location.reload();
+          },
+          onClose: () => {
+            console.log('[EventColoring] Recurring clear dialog closed');
+          },
+        });
+      } else {
+        // Single event - remove color and refresh
+        await window.cc3Storage.removeEventColor(eventId);
+        delete eventColors[eventId];
+
+        // Close the modal first
+        if (activeColorModal) {
+          activeColorModal.close();
+          activeColorModal = null;
+        }
+
+        closeColorPicker();
+
+        // Force page refresh to show cleared state
+        window.location.reload();
+      }
+      return;
+    }
 
     if (parsed.isRecurring) {
       // Show recurring event dialog
