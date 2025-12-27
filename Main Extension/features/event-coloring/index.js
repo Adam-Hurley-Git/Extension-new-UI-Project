@@ -1275,8 +1275,23 @@
     console.log('[EventColoring] handleFullColorSelection called:', { eventId, colors });
     console.log('[EventColoring] borderWidth from modal:', colors.borderWidth, 'type:', typeof colors.borderWidth);
 
-    // Check if all colors are cleared (all null)
-    const allColorsCleared = !colors.background && !colors.text && !colors.border;
+    // Check if all colors are cleared (all null AND borderWidth is default 2)
+    // If borderWidth is anything other than 2, the user has explicitly set it,
+    // so we should save it (even if bg/text/border are null)
+    // Also, if there's an inherited border from calendar, we need to save the borderWidth
+    // to allow the user to override the calendar's thickness
+    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+    const hasBorderFromCalendar = !!calendarDefaults?.border;
+    const hasCustomBorderWidth = colors.borderWidth != null;
+
+    // Only treat as "all cleared" if:
+    // 1. No bg/text/border colors are set AND
+    // 2. No custom borderWidth is being applied (or there's no calendar border to apply it to)
+    const allColorsCleared = !colors.background && !colors.text && !colors.border &&
+                             (!hasCustomBorderWidth || !hasBorderFromCalendar);
+
+    console.log('[EventColoring] calendarDefaults:', calendarDefaults);
+    console.log('[EventColoring] hasBorderFromCalendar:', hasBorderFromCalendar, 'hasCustomBorderWidth:', hasCustomBorderWidth, 'allColorsCleared:', allColorsCleared);
 
     // Check if recurring event
     const parsed = EventIdUtils.fromEncoded(eventId);
