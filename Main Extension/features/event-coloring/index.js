@@ -2025,12 +2025,16 @@
     if (!manualColors) return calendarColors;
 
     // Merge: manual takes precedence for each property
-    // For borderWidth: use manual if set, else calendar, else default 2
+    // For borderWidth: use manual if explicitly set (not null/undefined), else calendar, else default 2
+    const mergedBorderWidth = (manualColors.borderWidth != null)
+      ? manualColors.borderWidth
+      : (calendarColors.borderWidth != null ? calendarColors.borderWidth : 2);
+
     return {
       background: manualColors.background || calendarColors.background || null,
       text: manualColors.text || calendarColors.text || null,
       border: manualColors.border || calendarColors.border || null,
-      borderWidth: manualColors.borderWidth || calendarColors.borderWidth || 2,
+      borderWidth: mergedBorderWidth,
       // Preserve isRecurring from manual if present
       isRecurring: manualColors.isRecurring || false,
     };
@@ -2256,6 +2260,10 @@
       console.log('[EventColoring] Calendar default colors changed, reloading...');
       if (message.calendarColors) {
         calendarDefaultColors = message.calendarColors;
+        // Debug: log the actual calendar colors received
+        Object.entries(calendarDefaultColors).forEach(([calId, colors]) => {
+          console.log('[EventColoring] Calendar', calId, 'colors:', JSON.stringify(colors));
+        });
         console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');
         applyStoredColors();
       } else {

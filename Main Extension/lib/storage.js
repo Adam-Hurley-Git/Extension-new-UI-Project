@@ -1838,15 +1838,18 @@
 
     // Validate width is within range
     const validWidth = Math.max(1, Math.min(6, parseInt(width) || 2));
+    console.log('[Storage] setEventCalendarBorderWidth:', { calendarId, width, validWidth });
 
     const current = await getSettings();
     const calendarColors = current.eventColoring?.calendarColors || {};
     const existingColors = calendarColors[calendarId] || {};
+    console.log('[Storage] Existing colors for calendar:', JSON.stringify(existingColors));
 
     calendarColors[calendarId] = {
       ...existingColors,
       borderWidth: validWidth,
     };
+    console.log('[Storage] Updated colors for calendar:', JSON.stringify(calendarColors[calendarId]));
 
     return setSettings({
       eventColoring: { calendarColors },

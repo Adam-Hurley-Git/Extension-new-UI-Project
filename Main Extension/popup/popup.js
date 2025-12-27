@@ -8839,11 +8839,13 @@ Would you like to refresh all Google Calendar tabs?`;
   // Set event calendar border width
   async function setEventCalendarBorderWidth(calendarId, width) {
     debugLog('Setting event calendar border width:', calendarId, width);
+    console.log('[Popup] Setting border width:', { calendarId, width });
 
     await window.cc3Storage.setEventCalendarBorderWidth(calendarId, width);
 
     // Update cache
     eventCalendarColors = await window.cc3Storage.getEventCalendarColors();
+    console.log('[Popup] Updated cache after setting width:', JSON.stringify(eventCalendarColors[calendarId]));
 
     // Update preview to show new border width
     updateEventCalendarPreview(calendarId);
@@ -9010,12 +9012,17 @@ Would you like to refresh all Google Calendar tabs?`;
   // Broadcast event calendar color change to content script
   // Include colors in message to avoid race conditions with storage
   function broadcastEventCalendarColorChange() {
+    // Debug: log what we're broadcasting
+    console.log('[Popup] Broadcasting calendar colors:', JSON.stringify(eventCalendarColors));
     chrome.tabs.query({ url: 'https://calendar.google.com/*' }, (tabs) => {
+      console.log('[Popup] Found', tabs.length, 'Calendar tabs to notify');
       tabs.forEach((tab) => {
         chrome.tabs.sendMessage(tab.id, {
           type: 'EVENT_CALENDAR_COLORS_CHANGED',
           calendarColors: eventCalendarColors,
-        }).catch(() => {});
+        }).catch((err) => {
+          console.error('[Popup] Failed to send message to tab', tab.id, ':', err);
+        });
       });
     });
   }
