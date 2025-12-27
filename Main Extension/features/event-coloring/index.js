@@ -1141,20 +1141,21 @@
     };
     const eventTitle = domColors.title;
 
-    // Get calendar color for the stripe - prefer captured DOM color (exact match)
-    // Fall back to API color (will be transformed by the modal)
-    const capturedDomColor = getOriginalDomColor(eventId);
-    const apiCalendarColor = getCalendarColorForEvent(eventId);
+    // Get calendar color for the stripe - prefer stripe element (always accurate)
+    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+    const originalColor = eventElement ? getOriginalCalendarColor(eventElement, eventId) : null;
 
-    // If we have captured DOM color, pass it directly (already the display color)
-    // Otherwise pass the API color (modal will transform it)
-    // The modal's updatePreview uses window.colorUtils.apiColorToGoogleDisplayColor if available
-    // So we pass the raw value and let it decide
-    const calendarColor = capturedDomColor || apiCalendarColor || domColors.background || '#f4511e';
+    // Determine calendar color and whether it's from DOM
+    let calendarColor = domColors.background || '#f4511e';
+    let isFromDom = false;
+    if (originalColor) {
+      calendarColor = originalColor.color;
+      isFromDom = originalColor.isFromDom;
+    }
 
     // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal
     if (typeof window.EventColorModal === 'function') {
-      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors, 'calendarColor:', calendarColor, capturedDomColor ? '(from DOM)' : '(from API)');
+      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors, 'calendarColor:', calendarColor, isFromDom ? '(from stripe/DOM)' : '(from API)');
 
       activeColorModal = new window.EventColorModal({
         id: `cf-event-color-modal-${Date.now()}`,
@@ -1162,7 +1163,7 @@
         originalColors,
         eventTitle,
         calendarColor,
-        isCalendarColorFromDom: !!capturedDomColor, // true if color is from DOM capture
+        isCalendarColorFromDom: isFromDom, // true if color is from stripe/DOM
         onApply: async (colors) => {
           console.log('[EventColoring] Event colors applied:', colors);
           await handleFullColorSelection(eventId, colors);
@@ -1849,18 +1850,14 @@
         applyColorsToElement(element, mergedColors);
       } else if (element.dataset.cfEventColored) {
         // No colors to apply but element was previously colored
-        // First try to use captured DOM color, then fall back to formula
-        const originalDomColor = getOriginalDomColor(eventId);
-        const googleCalendarColor = getCalendarColorForEvent(eventId);
+        // Get the best available original color (stripe > captured > API)
+        const originalColor = getOriginalCalendarColor(element, eventId);
 
-        if (originalDomColor) {
-          // Use the actual captured DOM color - this is the most accurate
-          console.log('[EventColoring] Using captured DOM color:', originalDomColor, 'for event:', eventId);
-          applyTemporaryGoogleColor(element, originalDomColor, true); // true = already transformed
-        } else if (googleCalendarColor) {
-          // Fall back to API color with formula transformation
-          console.log('[EventColoring] Applying Google API color (formula):', googleCalendarColor, 'for event:', eventId);
-          applyTemporaryGoogleColor(element, googleCalendarColor, false); // false = needs transformation
+        if (originalColor) {
+          console.log('[EventColoring] Using original color:', originalColor.color,
+            originalColor.isFromDom ? '(from stripe/DOM)' : '(from API, needs transform)',
+            'for event:', eventId);
+          applyTemporaryGoogleColor(element, originalColor.color, originalColor.isFromDom);
         } else {
           // No color available, fall back to removing all styling
           console.log('[EventColoring] No color available, removing styling for event:', eventId);
@@ -2040,17 +2037,16 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // Get the calendar stripe color - prefer captured DOM color, fall back to formula
+      // Get the calendar stripe color - prefer stripe element (always accurate)
       const eventId = element.getAttribute('data-eventid');
-      const originalDomColor = getOriginalDomColor(eventId);
-      const calendarApiColor = getCalendarColorForEvent(eventId);
+      const originalColor = getOriginalCalendarColor(element, eventId);
 
-      // Use captured DOM color if available (most accurate), otherwise transform API color
+      // Get the display color (already from DOM or transform from API)
       let calendarColor = null;
-      if (originalDomColor) {
-        calendarColor = originalDomColor;
-      } else if (calendarApiColor) {
-        calendarColor = apiColorToGoogleDisplayColor(calendarApiColor);
+      if (originalColor) {
+        calendarColor = originalColor.isFromDom
+          ? originalColor.color
+          : apiColorToGoogleDisplayColor(originalColor.color);
       }
 
       // Apply or clear background color
@@ -2238,6 +2234,62 @@
    */
   function getOriginalDomColor(eventId) {
     return originalDomColors[eventId] || null;
+  }
+
+  /**
+   * Get the calendar color from the stripe element (.jSrjCf)
+   * This is the most reliable source of the original Google display color
+   * because we never modify the stripe element.
+   * @param {HTMLElement} element - The event chip element
+   * @returns {string|null} The stripe color in hex or null
+   */
+  function getStripeColor(element) {
+    if (!element) return null;
+
+    // Find the stripe element within the event chip
+    const stripeEl = element.querySelector('.jSrjCf');
+    if (!stripeEl) return null;
+
+    // Get the computed background color
+    const computedStyle = window.getComputedStyle(stripeEl);
+    const bgColor = computedStyle.backgroundColor;
+
+    // Skip if transparent or not set
+    if (!bgColor || bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') {
+      return null;
+    }
+
+    // Convert RGB to hex
+    return rgbToHex(bgColor);
+  }
+
+  /**
+   * Get the best available original calendar color for an event
+   * Priority: 1) Stripe element (always accurate), 2) Captured DOM color, 3) API color with formula
+   * @param {HTMLElement} element - The event chip element
+   * @param {string} eventId - The event ID
+   * @returns {{color: string, isFromDom: boolean}|null}
+   */
+  function getOriginalCalendarColor(element, eventId) {
+    // Priority 1: Read from stripe element (most reliable, always accurate)
+    const stripeColor = getStripeColor(element);
+    if (stripeColor) {
+      return { color: stripeColor, isFromDom: true };
+    }
+
+    // Priority 2: Use captured DOM color
+    const capturedColor = getOriginalDomColor(eventId);
+    if (capturedColor) {
+      return { color: capturedColor, isFromDom: true };
+    }
+
+    // Priority 3: Fall back to API color (needs transformation)
+    const apiColor = getCalendarColorForEvent(eventId);
+    if (apiColor) {
+      return { color: apiColor, isFromDom: false };
+    }
+
+    return null;
   }
 
   /**
