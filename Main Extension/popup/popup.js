@@ -7967,7 +7967,11 @@ Would you like to refresh all Google Calendar tabs?`;
     // Update toggle
     const toggle = qs('eventColoringToggle');
     if (toggle) {
-      toggle.checked = eventColoringSettings.enabled !== false;
+      if (eventColoringSettings.enabled !== false) {
+        toggle.classList.add('active');
+      } else {
+        toggle.classList.remove('active');
+      }
     }
 
     // Update disable custom colors checkbox
@@ -8765,14 +8769,25 @@ Would you like to refresh all Google Calendar tabs?`;
   // Event Coloring event listeners
   const eventColoringToggle = qs('eventColoringToggle');
   if (eventColoringToggle) {
-    eventColoringToggle.addEventListener('change', async (e) => {
-      await window.cc3Storage.setEventColoringEnabled(e.target.checked);
-      debugLog('Event coloring enabled:', e.target.checked);
+    eventColoringToggle.onclick = async (e) => {
+      e.stopPropagation(); // Prevent accordion trigger
+      const isCurrentlyActive = eventColoringToggle.classList.contains('active');
+      const newState = !isCurrentlyActive;
+
+      // Toggle the active class
+      if (newState) {
+        eventColoringToggle.classList.add('active');
+      } else {
+        eventColoringToggle.classList.remove('active');
+      }
+
+      await window.cc3Storage.setEventColoringEnabled(newState);
+      debugLog('Event coloring enabled:', newState);
 
       // Update feature disabled state
       const section = document.querySelector('.event-coloring-section .section-content');
       if (section) {
-        if (e.target.checked) {
+        if (newState) {
           section.classList.remove('feature-disabled');
         } else {
           section.classList.add('feature-disabled');
@@ -8784,11 +8799,11 @@ Would you like to refresh all Google Calendar tabs?`;
         if (tabs[0]) {
           chrome.tabs.sendMessage(tabs[0].id, {
             type: 'EVENT_COLORING_TOGGLED',
-            enabled: e.target.checked
+            enabled: newState
           }).catch(() => {});
         }
       });
-    });
+    };
   }
 
   const addCategoryBtn = qs('addEventColorCategoryBtn');
