@@ -267,10 +267,10 @@ export class ColorRenderer {
     }
 
     // Apply border using outline (since Google sets border-width: 0)
-    // Outline is drawn outside the element by default
+    // Outline is centered on the edge (half inside, half outside)
     if (border) {
       element.style.outline = `${borderWidth}px solid ${border}`;
-      element.style.outlineOffset = '0';
+      element.style.outlineOffset = `-${borderWidth / 2}px`;
     } else {
       // Clear any existing outline
       element.style.outline = '';

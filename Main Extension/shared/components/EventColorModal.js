@@ -287,7 +287,7 @@ class EventColorModal {
 
     if (border) {
       preview.style.outline = `${borderWidth}px solid ${border}`;
-      preview.style.outlineOffset = '0';
+      preview.style.outlineOffset = `-${borderWidth / 2}px`;
     } else {
       preview.style.outline = 'none';
     }

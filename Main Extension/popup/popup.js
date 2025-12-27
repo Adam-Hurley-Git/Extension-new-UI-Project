@@ -8474,7 +8474,7 @@ Would you like to refresh all Google Calendar tabs?`;
     // Calculate preview styles
     const previewBg = bgColor || calendar.backgroundColor || '#039be5';
     const previewText = textColor || getContrastColor(previewBg);
-    const previewBorder = borderColor ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: 0;` : '';
+    const previewBorder = borderColor ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: -${borderWidth / 2}px;` : '';
     const stripeColor = calendar.backgroundColor || '#1a73e8';
 
     item.innerHTML = `
@@ -8889,7 +8889,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
       if (borderColor) {
         previewCard.style.outline = `${borderWidth}px solid ${borderColor}`;
-        previewCard.style.outlineOffset = '0';
+        previewCard.style.outlineOffset = `-${borderWidth / 2}px`;
       } else {
         previewCard.style.outline = 'none';
       }
@@ -8995,7 +8995,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
       if (borderColor) {
         previewCard.style.outline = `${borderWidth}px solid ${borderColor}`;
-        previewCard.style.outlineOffset = '0';
+        previewCard.style.outlineOffset = `-${borderWidth / 2}px`;
       } else {
         previewCard.style.outline = 'none';
       }

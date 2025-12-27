@@ -1469,10 +1469,10 @@
       }
 
       // Apply border using outline (with configurable width)
-      // Outline is drawn outside the element
+      // Outline is centered on the edge (half inside, half outside)
       if (border) {
         element.style.outline = `${borderWidth}px solid ${border}`;
-        element.style.outlineOffset = '0';
+        element.style.outlineOffset = `-${borderWidth / 2}px`;
       } else {
         element.style.outline = '';
         element.style.outlineOffset = '';
@@ -2115,10 +2115,10 @@
       }
 
       // Apply border using outline (since Google sets border-width: 0)
-      // Outline is drawn outside the element
+      // Outline is centered on the edge (half inside, half outside)
       if (border) {
         element.style.outline = `${borderWidth}px solid ${border}`;
-        element.style.outlineOffset = '0';
+        element.style.outlineOffset = `-${borderWidth / 2}px`;
       } else {
         element.style.outline = '';
         element.style.outlineOffset = '';
@@ -2139,7 +2139,7 @@
 
       if (border) {
         element.style.outline = `${borderWidth}px solid ${border}`;
-        element.style.outlineOffset = '0';
+        element.style.outlineOffset = `-${borderWidth / 2}px`;
       }
     }
   }
