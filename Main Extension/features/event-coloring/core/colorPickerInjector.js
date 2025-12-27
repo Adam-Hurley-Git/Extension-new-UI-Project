@@ -324,7 +324,7 @@ export class ColorPickerInjector {
    * Open the custom color swatch modal (with bg/text/border tabs)
    * @param {string} eventId - The event ID to apply color to
    */
-  openCustomColorModal(eventId) {
+  async openCustomColorModal(eventId) {
     // Close any existing modal
     if (this.activeModal) {
       this.activeModal.close();
@@ -333,30 +333,51 @@ export class ColorPickerInjector {
 
     // Get current colors for this event (use new full format)
     const getColors = this.storageService.findEventColorFull || this.storageService.findEventColor;
-    getColors?.(eventId).then((colorData) => {
-      // Normalize color data for the modal
-      const currentColors = {
-        background: colorData?.background || colorData?.hex || null,
-        text: colorData?.text || null,
-        border: colorData?.border || null,
-      };
+    const colorData = await getColors?.(eventId);
 
-      console.log('[CF] Opening EventColorModal with colors:', currentColors);
+    // Also get calendar default colors to merge with event colors
+    const calendarColors = await this.storageService.getEventCalendarColors?.();
+    const calendarId = this.getCalendarIdForEvent(eventId);
+    const calendarDefaults = calendarId ? calendarColors?.[calendarId] : null;
 
-      this.activeModal = new EventColorModal({
-        id: `cf-event-color-modal-${Date.now()}`,
-        currentColors,
-        onApply: async (colors) => {
-          console.log('[CF] Event colors applied:', colors);
-          await this.handleFullColorSelect(eventId, colors);
-        },
-        onClose: () => {
-          this.activeModal = null;
-        },
-      });
+    // Merge: event colors take precedence, calendar colors fill in gaps
+    const currentColors = {
+      background: colorData?.background || colorData?.hex || null,
+      text: colorData?.text || null,
+      border: colorData?.border || null,
+      // Use event borderWidth, fall back to calendar borderWidth, then default to 2
+      borderWidth: colorData?.borderWidth || calendarDefaults?.borderWidth || 2,
+    };
 
-      this.activeModal.open();
+    console.log('[CF] Opening EventColorModal with colors:', currentColors, 'calendarDefaults:', calendarDefaults);
+
+    this.activeModal = new EventColorModal({
+      id: `cf-event-color-modal-${Date.now()}`,
+      currentColors,
+      onApply: async (colors) => {
+        console.log('[CF] Event colors applied:', colors);
+        await this.handleFullColorSelect(eventId, colors);
+      },
+      onClose: () => {
+        this.activeModal = null;
+      },
     });
+
+    this.activeModal.open();
+  }
+
+  /**
+   * Get calendar ID for an event
+   * @param {string} eventId - Encoded event ID
+   * @returns {string|null} Calendar ID (email) or null
+   */
+  getCalendarIdForEvent(eventId) {
+    try {
+      const parsed = EventIdUtils.fromEncoded(eventId);
+      return parsed.emailSuffix || null;
+    } catch (e) {
+      return null;
+    }
   }
 
   /**

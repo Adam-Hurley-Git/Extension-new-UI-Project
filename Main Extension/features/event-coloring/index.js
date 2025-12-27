@@ -1355,13 +1355,14 @@
   }
 
   /**
-   * Save full colors (bg/text/border) for a single event
+   * Save full colors (bg/text/border/borderWidth) for a single event
    */
   async function saveFullColors(eventId, colors) {
     const colorData = {
       background: colors.background || null,
       text: colors.text || null,
       border: colors.border || null,
+      borderWidth: colors.borderWidth || null,
       hex: colors.background || null, // Backward compatibility
       isRecurring: false,
       appliedAt: Date.now(),
@@ -1388,6 +1389,7 @@
       background: colors.background || null,
       text: colors.text || null,
       border: colors.border || null,
+      borderWidth: colors.borderWidth || null,
       hex: colors.background || null,
       isRecurring: applyToAll && parsed.isRecurring,
       appliedAt: Date.now(),
@@ -1431,12 +1433,12 @@
   }
 
   /**
-   * Apply full colors (bg/text/border) to a single element
+   * Apply full colors (bg/text/border/borderWidth) to a single element
    */
   function applyFullColorsToElement(element, colors) {
     if (!element) return;
 
-    const { background, text, border } = colors;
+    const { background, text, border, borderWidth = 2 } = colors;
     const eventId = element.getAttribute('data-eventid');
     const isEventChip = element.matches('[data-eventchip]');
 
@@ -1468,10 +1470,11 @@
         });
       }
 
-      // Apply border using outline
+      // Apply border using outline (with configurable width)
+      // Outline is positioned 30% inside, 70% outside
       if (border) {
-        element.style.outline = `2px solid ${border}`;
-        element.style.outlineOffset = '-2px';
+        element.style.outline = `${borderWidth}px solid ${border}`;
+        element.style.outlineOffset = `-${borderWidth * 0.3}px`;
       } else {
         element.style.outline = '';
         element.style.outlineOffset = '';
@@ -1883,6 +1886,7 @@
         background: colorData,
         text: null,
         border: null,
+        borderWidth: null,
         hex: colorData,
         isRecurring: false,
       };
@@ -1894,6 +1898,7 @@
         background: colorData.hex,
         text: null,
         border: null,
+        borderWidth: colorData.borderWidth || null,
         hex: colorData.hex,
         isRecurring: colorData.isRecurring || false,
       };
@@ -1904,6 +1909,7 @@
       background: colorData.background || null,
       text: colorData.text || null,
       border: colorData.border || null,
+      borderWidth: colorData.borderWidth || null,
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
     };
@@ -1951,8 +1957,20 @@
     }
   }
 
-  function applyStoredColors() {
+  async function applyStoredColors() {
     console.log('[EventColoring] Applying stored colors');
+
+    // Always refresh calendar default colors from storage to ensure we have the latest
+    // This handles cases where the broadcast message might not have been received
+    try {
+      const freshCalendarColors = await window.cc3Storage.getEventCalendarColors();
+      if (freshCalendarColors && Object.keys(freshCalendarColors).length > 0) {
+        calendarDefaultColors = freshCalendarColors;
+        console.log('[EventColoring] Refreshed calendar colors from storage:', JSON.stringify(calendarDefaultColors));
+      }
+    } catch (e) {
+      console.log('[EventColoring] Could not refresh calendar colors:', e);
+    }
 
     // Build lookup maps for manual colors
     const recurringEventColors = new Map(); // base event ID -> colors
@@ -2009,8 +2027,8 @@
   /**
    * Merge manual event colors with calendar default colors
    * Manual colors take precedence for each property independently
-   * @param {Object|null} manualColors - { background, text, border } from event coloring
-   * @param {Object|null} calendarColors - { background, text, border } from calendar defaults
+   * @param {Object|null} manualColors - { background, text, border, borderWidth } from event coloring
+   * @param {Object|null} calendarColors - { background, text, border, borderWidth } from calendar defaults
    * @returns {Object|null} Merged colors or null if no colors
    */
   function mergeEventColors(manualColors, calendarColors) {
@@ -2019,10 +2037,16 @@
     if (!manualColors) return calendarColors;
 
     // Merge: manual takes precedence for each property
+    // For borderWidth: use manual if explicitly set (not null/undefined), else calendar, else default 2
+    const mergedBorderWidth = (manualColors.borderWidth != null)
+      ? manualColors.borderWidth
+      : (calendarColors.borderWidth != null ? calendarColors.borderWidth : 2);
+
     return {
       background: manualColors.background || calendarColors.background || null,
       text: manualColors.text || calendarColors.text || null,
       border: manualColors.border || calendarColors.border || null,
+      borderWidth: mergedBorderWidth,
       // Preserve isRecurring from manual if present
       isRecurring: manualColors.isRecurring || false,
     };
@@ -2071,7 +2095,7 @@
   function applyColorsToElement(element, colors) {
     if (!element) return;
 
-    const { background, text, border } = colors;
+    const { background, text, border, borderWidth = 2 } = colors;
     if (!background && !text && !border) return;
 
     // Only color the main event chip element - NOT child elements
@@ -2114,9 +2138,10 @@
       }
 
       // Apply border using outline (since Google sets border-width: 0)
+      // Outline is positioned 30% inside, 70% outside
       if (border) {
-        element.style.outline = `2px solid ${border}`;
-        element.style.outlineOffset = '-2px';
+        element.style.outline = `${borderWidth}px solid ${border}`;
+        element.style.outlineOffset = `-${borderWidth * 0.3}px`;
       } else {
         element.style.outline = '';
         element.style.outlineOffset = '';
@@ -2136,8 +2161,8 @@
       }
 
       if (border) {
-        element.style.outline = `2px solid ${border}`;
-        element.style.outlineOffset = '-2px';
+        element.style.outline = `${borderWidth}px solid ${border}`;
+        element.style.outlineOffset = `-${borderWidth * 0.3}px`;
       }
     }
   }
@@ -2247,6 +2272,10 @@
       console.log('[EventColoring] Calendar default colors changed, reloading...');
       if (message.calendarColors) {
         calendarDefaultColors = message.calendarColors;
+        // Debug: log the actual calendar colors received
+        Object.entries(calendarDefaultColors).forEach(([calId, colors]) => {
+          console.log('[EventColoring] Calendar', calId, 'colors:', JSON.stringify(colors));
+        });
         console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');
         applyStoredColors();
       } else {

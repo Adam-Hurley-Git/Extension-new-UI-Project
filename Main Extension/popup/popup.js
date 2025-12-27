@@ -8458,6 +8458,7 @@ Would you like to refresh all Google Calendar tabs?`;
     const bgColor = colors.background || null;
     const textColor = colors.text || null;
     const borderColor = colors.border || null;
+    const borderWidth = colors.borderWidth || 2; // Default 2px
 
     // Helper to get contrast text color for preview
     const getContrastColor = (bgHex) => {
@@ -8473,7 +8474,7 @@ Would you like to refresh all Google Calendar tabs?`;
     // Calculate preview styles
     const previewBg = bgColor || calendar.backgroundColor || '#039be5';
     const previewText = textColor || getContrastColor(previewBg);
-    const previewBorder = borderColor ? `outline: 2px solid ${borderColor}; outline-offset: -2px;` : '';
+    const previewBorder = borderColor ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: -${borderWidth * 0.3}px;` : '';
     const stripeColor = calendar.backgroundColor || '#1a73e8';
 
     item.innerHTML = `
@@ -8523,6 +8524,19 @@ Would you like to refresh all Google Calendar tabs?`;
                 ${borderColor ? `<button class="event-calendar-clear-btn" data-type="border" data-calendar-id="${calendar.id}">Clear</button>` : ''}
               </div>
             </div>
+            <div class="event-calendar-color-row event-calendar-thickness-row ${borderColor ? 'visible' : ''}" data-type="borderWidth">
+              <div class="event-calendar-color-label">Border Thickness</div>
+              <div class="event-calendar-thickness-actions">
+                <div class="event-calendar-thickness-buttons" data-calendar-id="${calendar.id}">
+                  <button type="button" class="event-calendar-thickness-btn${borderWidth === 1 ? ' active' : ''}" data-width="1" data-calendar-id="${calendar.id}">1px</button>
+                  <button type="button" class="event-calendar-thickness-btn${borderWidth === 2 ? ' active' : ''}" data-width="2" data-calendar-id="${calendar.id}">2px</button>
+                  <button type="button" class="event-calendar-thickness-btn${borderWidth === 3 ? ' active' : ''}" data-width="3" data-calendar-id="${calendar.id}">3px</button>
+                  <button type="button" class="event-calendar-thickness-btn${borderWidth === 4 ? ' active' : ''}" data-width="4" data-calendar-id="${calendar.id}">4px</button>
+                  <button type="button" class="event-calendar-thickness-btn${borderWidth === 5 ? ' active' : ''}" data-width="5" data-calendar-id="${calendar.id}">5px</button>
+                  <button type="button" class="event-calendar-thickness-btn${borderWidth === 6 ? ' active' : ''}" data-width="6" data-calendar-id="${calendar.id}">6px</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -8568,6 +8582,24 @@ Would you like to refresh all Google Calendar tabs?`;
         const type = btn.dataset.type;
         const calId = btn.dataset.calendarId;
         await clearEventCalendarColor(calId, type);
+      });
+    });
+
+    // Border thickness button clicks
+    item.querySelectorAll('.event-calendar-thickness-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const width = parseInt(btn.dataset.width);
+        const calId = btn.dataset.calendarId;
+        await setEventCalendarBorderWidth(calId, width);
+
+        // Update active states for thickness buttons in this calendar row
+        const thicknessRow = btn.closest('.event-calendar-thickness-row');
+        if (thicknessRow) {
+          thicknessRow.querySelectorAll('.event-calendar-thickness-btn').forEach((b) => {
+            b.classList.toggle('active', parseInt(b.dataset.width) === width);
+          });
+        }
       });
     });
 
@@ -8804,6 +8836,28 @@ Would you like to refresh all Google Calendar tabs?`;
     });
   }
 
+  // Set event calendar border width
+  async function setEventCalendarBorderWidth(calendarId, width) {
+    debugLog('Setting event calendar border width:', calendarId, width);
+    console.log('[Popup] Setting border width:', { calendarId, width });
+
+    await window.cc3Storage.setEventCalendarBorderWidth(calendarId, width);
+
+    // Update cache
+    eventCalendarColors = await window.cc3Storage.getEventCalendarColors();
+    console.log('[Popup] Updated cache after setting width:', JSON.stringify(eventCalendarColors[calendarId]));
+
+    // Update preview to show new border width
+    updateEventCalendarPreview(calendarId);
+
+    // Show toast
+    const calendar = eventCalendarsList.find(c => c.id === calendarId);
+    showToast(`Border thickness set to ${width}px for "${calendar?.name || calendarId}"`);
+
+    // Notify content script
+    broadcastEventCalendarColorChange();
+  }
+
   // Update preview card and swatches without rebuilding the entire list
   function updateEventCalendarSwatches(calendarId, type, color) {
     const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
@@ -8831,12 +8885,13 @@ Would you like to refresh all Google Calendar tabs?`;
       const bgColor = colors.background || googleBgColor;
       const textColor = colors.text || getContrastColor(bgColor);
       const borderColor = colors.border;
+      const borderWidth = colors.borderWidth || 2;
 
       previewCard.style.backgroundColor = bgColor;
 
       if (borderColor) {
-        previewCard.style.outline = `2px solid ${borderColor}`;
-        previewCard.style.outlineOffset = '-2px';
+        previewCard.style.outline = `${borderWidth}px solid ${borderColor}`;
+        previewCard.style.outlineOffset = `-${borderWidth * 0.3}px`;
       } else {
         previewCard.style.outline = 'none';
       }
@@ -8901,17 +8956,73 @@ Would you like to refresh all Google Calendar tabs?`;
         clearBtn.remove();
       }
     }
+
+    // Show/hide thickness row when border color changes
+    if (type === 'border') {
+      const thicknessRow = item.querySelector('.event-calendar-thickness-row');
+      if (thicknessRow) {
+        thicknessRow.classList.toggle('visible', !!color);
+      }
+    }
+  }
+
+  // Update the preview card for a calendar (used when border width changes)
+  function updateEventCalendarPreview(calendarId) {
+    const item = document.querySelector(`.event-calendar-item[data-calendar-id="${CSS.escape(calendarId)}"]`);
+    if (!item) return;
+
+    // Helper to get contrast text color
+    const getContrastColor = (bgHex) => {
+      if (!bgHex) return '#ffffff';
+      const rgb = parseInt(bgHex.slice(1), 16);
+      const r = (rgb >> 16) & 0xff;
+      const g = (rgb >> 8) & 0xff;
+      const b = rgb & 0xff;
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.6 ? '#000000' : '#ffffff';
+    };
+
+    const colors = eventCalendarColors[calendarId] || {};
+    const calendar = eventCalendarsList.find(c => c.id === calendarId);
+    const googleBgColor = calendar?.backgroundColor || '#039be5';
+
+    const previewCard = item.querySelector('.event-calendar-preview');
+    if (previewCard) {
+      const bgColor = colors.background || googleBgColor;
+      const textColor = colors.text || getContrastColor(bgColor);
+      const borderColor = colors.border;
+      const borderWidth = colors.borderWidth || 2;
+
+      previewCard.style.backgroundColor = bgColor;
+
+      if (borderColor) {
+        previewCard.style.outline = `${borderWidth}px solid ${borderColor}`;
+        previewCard.style.outlineOffset = `-${borderWidth * 0.3}px`;
+      } else {
+        previewCard.style.outline = 'none';
+      }
+
+      const previewTitle = previewCard.querySelector('.event-calendar-preview-title');
+      if (previewTitle) {
+        previewTitle.style.color = textColor;
+      }
+    }
   }
 
   // Broadcast event calendar color change to content script
   // Include colors in message to avoid race conditions with storage
   function broadcastEventCalendarColorChange() {
+    // Debug: log what we're broadcasting
+    console.log('[Popup] Broadcasting calendar colors:', JSON.stringify(eventCalendarColors));
     chrome.tabs.query({ url: 'https://calendar.google.com/*' }, (tabs) => {
+      console.log('[Popup] Found', tabs.length, 'Calendar tabs to notify');
       tabs.forEach((tab) => {
         chrome.tabs.sendMessage(tab.id, {
           type: 'EVENT_CALENDAR_COLORS_CHANGED',
           calendarColors: eventCalendarColors,
-        }).catch(() => {});
+        }).catch((err) => {
+          console.error('[Popup] Failed to send message to tab', tab.id, ':', err);
+        });
       });
     });
   }
