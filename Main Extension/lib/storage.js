@@ -1447,6 +1447,9 @@
   async function saveEventColorsFullAdvanced(eventId, colors, options = {}) {
     if (!eventId) return;
 
+    console.log('[Storage] saveEventColorsFullAdvanced called:', { eventId: eventId.slice(0, 30) + '...', colors });
+    console.log('[Storage] colors.borderWidth:', colors.borderWidth, 'type:', typeof colors.borderWidth);
+
     const { applyToAll = false } = options;
 
     return new Promise((resolve) => {
@@ -1456,16 +1459,20 @@
         // Parse the event ID to check if recurring
         const parsed = parseEventId(eventId);
 
+        // Use null-coalescing (??) for borderWidth to preserve explicit 0 values
+        // but fall back to 2 if undefined/null
         const colorData = {
           background: colors.background || null,
           text: colors.text || null,
           border: colors.border || null,
-          borderWidth: colors.borderWidth || 2, // Default to 2px if not set
+          borderWidth: colors.borderWidth ?? 2, // Changed from || to ?? to properly handle numeric values
           // Keep hex for backward compatibility (use background as primary)
           hex: colors.background || null,
           isRecurring: false,
           appliedAt: Date.now(),
         };
+
+        console.log('[Storage] colorData to store:', colorData);
 
         if (applyToAll && parsed.isRecurring) {
           // Store under base ID for recurring events

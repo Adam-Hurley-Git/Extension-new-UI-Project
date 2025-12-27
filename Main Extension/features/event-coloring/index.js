@@ -1268,7 +1268,8 @@
    * Handle full color selection with background/text/border
    */
   async function handleFullColorSelection(eventId, colors) {
-    console.log('[EventColoring] Full color selected:', eventId, colors);
+    console.log('[EventColoring] handleFullColorSelection called:', { eventId, colors });
+    console.log('[EventColoring] borderWidth from modal:', colors.borderWidth, 'type:', typeof colors.borderWidth);
 
     // Check if all colors are cleared (all null)
     const allColorsCleared = !colors.background && !colors.text && !colors.border;
@@ -1368,6 +1369,9 @@
    * Save full colors (bg/text/border/borderWidth) for a single event
    */
   async function saveFullColors(eventId, colors) {
+    console.log('[EventColoring] saveFullColors called:', { eventId, colors });
+    console.log('[EventColoring] colors.borderWidth:', colors.borderWidth, 'type:', typeof colors.borderWidth);
+
     const colorData = {
       background: colors.background || null,
       text: colors.text || null,
@@ -1380,15 +1384,19 @@
       appliedAt: Date.now(),
     };
 
+    console.log('[EventColoring] colorData to save:', colorData);
+
     // Use new storage method if available
     if (window.cc3Storage.saveEventColorsFullAdvanced) {
       await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      console.log('[EventColoring] Saved to storage via saveEventColorsFullAdvanced');
     } else {
       // Fallback: save as single color
       await window.cc3Storage.saveEventColor(eventId, colors.background, false);
     }
 
     eventColors[eventId] = colorData;
+    console.log('[EventColoring] Updated local cache for event:', eventId.slice(0, 30) + '...', 'borderWidth:', colorData.borderWidth);
   }
 
   /**
@@ -1438,13 +1446,20 @@
    * Merges with calendar defaults to ensure inherited properties (like border) are applied
    */
   function applyFullColorsToEvent(eventId, colors) {
+    console.log('[EventColoring] applyFullColorsToEvent called:', { eventId, colors });
+
     // Get calendar default colors and merge - this ensures that if the user
     // only changed borderWidth but not border color, we still apply the
     // inherited border color from the calendar
     const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+    console.log('[EventColoring] calendarDefaults for event:', calendarDefaults);
+
     const mergedColors = mergeEventColors(colors, calendarDefaults);
+    console.log('[EventColoring] mergedColors result:', mergedColors);
 
     const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+    console.log('[EventColoring] Found', elements.length, 'elements to apply colors to');
+
     elements.forEach((element) => {
       if (!element.closest('[role="dialog"]')) {
         applyFullColorsToElement(element, mergedColors || colors);
@@ -2040,6 +2055,15 @@
 
       // Merge: manual colors take precedence, calendar defaults fill in gaps
       const mergedColors = mergeEventColors(manualColors, calendarDefaultColorsForEvent);
+
+      // Debug logging for borderWidth issues
+      if (manualColors && manualColors.borderWidth != null) {
+        console.log('[EventColoring] applyStoredColors merge for event:', eventId.slice(0, 20) + '...', {
+          manualBorderWidth: manualColors.borderWidth,
+          calendarBorderWidth: calendarDefaultColorsForEvent?.borderWidth,
+          mergedBorderWidth: mergedColors?.borderWidth,
+        });
+      }
 
       if (mergedColors) {
         applyColorsToElement(element, mergedColors);
