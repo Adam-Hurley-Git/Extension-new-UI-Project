@@ -5477,15 +5477,122 @@
             <div class="section-content">
               <!-- Enable Toggle -->
               <div style="margin-bottom: 12px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e8eaed;">
-                <div class="toggle" style="margin-bottom: 0;">
+                <div class="toggle" style="margin-bottom: 8px;">
                   <label>Enable event coloring</label>
                   <div class="switch" id="eventColoringToggle"></div>
                 </div>
+                <p style="margin: 0; font-size: 12px; color: #80868b; line-height: 1.4;">
+                  Apply custom colors and labels to your Google Calendar events.
+                </p>
               </div>
 
-              <!-- Info box -->
+              <!-- Calendar Default Colors Info Card -->
               <div
-                id="eventColoringInfoCard"
+                id="calendarColorsInfoCard"
+                style="
+                  margin-bottom: 12px;
+                  padding: 8px 12px;
+                  background: #fff;
+                  border-radius: 8px;
+                  border: 1px solid #dadce0;
+                  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+                "
+              >
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+                  <div
+                    style="font-weight: 500; color: #202124; font-size: 13px; display: flex; align-items: center; gap: 6px"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0">
+                      <circle cx="12" cy="12" r="10" stroke="#1a73e8" stroke-width="2" fill="none" />
+                      <path d="M12 16v-4M12 8h.01" stroke="#1a73e8" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                    <span>Calendar Default Colors</span>
+                  </div>
+                  <button
+                    id="calendarColorsInfoToggle"
+                    style="
+                      padding: 6px 12px;
+                      background: #f8f9fa;
+                      border: 1px solid #dadce0;
+                      border-radius: 4px;
+                      font-size: 12px;
+                      color: #5f6368;
+                      cursor: pointer;
+                      white-space: nowrap;
+                      font-weight: 500;
+                      display: flex;
+                      align-items: center;
+                      gap: 4px;
+                      transition: all 0.2s ease;
+                      flex-shrink: 0;
+                    "
+                    onmouseover="this.style.background='#e8eaed';"
+                    onmouseout="this.style.background='#f8f9fa';"
+                  >
+                    See how to use
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transition: transform 0.2s ease">
+                      <path
+                        d="M7 10l5 5 5-5"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Expanded info -->
+                <div
+                  id="calendarColorsInfoExpanded"
+                  style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e8eaed"
+                >
+                  <div style="font-size: 13px; color: #5f6368; line-height: 1.6">
+                    <div style="font-weight: 600; color: #202124; margin-bottom: 8px">What it does</div>
+                    <div style="margin-bottom: 12px">
+                      Set default colors for all events from each calendar. These colors apply automatically to every event in that calendar.
+                    </div>
+
+                    <div style="font-weight: 600; color: #202124; margin-bottom: 8px">How to use</div>
+                    <ol style="margin: 0 0 12px 0; padding-left: 20px">
+                      <li style="margin-bottom: 4px">Click on a calendar's color swatch below</li>
+                      <li style="margin-bottom: 4px">Choose a color from the picker</li>
+                      <li style="margin-bottom: 4px">All events from that calendar will show this color</li>
+                    </ol>
+
+                    <div style="font-weight: 600; color: #202124; margin-bottom: 8px">Notes</div>
+                    <ul style="margin: 0; padding-left: 20px">
+                      <li style="margin-bottom: 4px">Individual event colors will override these defaults</li>
+                      <li style="margin-bottom: 4px">Calendars are synced from your Google Calendar account</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Calendar Colors List -->
+              <div style="margin-bottom: 16px;">
+                <div id="eventCalendarColorsList">
+                  <div id="eventCalendarColorsLoading" style="padding: 16px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="animation: spin 1s linear infinite;">
+                        <circle cx="12" cy="12" r="10" stroke="#dadce0" stroke-width="2" fill="none"/>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="#1a73e8" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                      Loading calendars...
+                    </div>
+                  </div>
+                  <div id="eventCalendarColorsContent" style="display: none;">
+                    <!-- Populated dynamically by JS -->
+                  </div>
+                  <div id="eventCalendarColorsEmpty" style="display: none; padding: 16px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
+                    No calendars found. Calendar colors are fetched from your Google Calendar account.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Google Color Labels Info Card -->
+              <div
+                id="googleColorLabelsInfoCard"
                 style="
                   margin-bottom: 12px;
                   padding: 8px 12px;
@@ -5502,6 +5609,116 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0">
                       <circle cx="12" cy="12" r="10" stroke="#f59e0b" stroke-width="2" fill="none" />
                       <path d="M12 16v-4M12 8h.01" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                    <span>Google Color Labels</span>
+                  </div>
+                  <button
+                    id="googleColorLabelsInfoToggle"
+                    style="
+                      padding: 6px 12px;
+                      background: #f8f9fa;
+                      border: 1px solid #dadce0;
+                      border-radius: 4px;
+                      font-size: 12px;
+                      color: #5f6368;
+                      cursor: pointer;
+                      white-space: nowrap;
+                      font-weight: 500;
+                      display: flex;
+                      align-items: center;
+                      gap: 4px;
+                      transition: all 0.2s ease;
+                      flex-shrink: 0;
+                    "
+                    onmouseover="this.style.background='#e8eaed';"
+                    onmouseout="this.style.background='#f8f9fa';"
+                  >
+                    See how to use
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transition: transform 0.2s ease">
+                      <path
+                        d="M7 10l5 5 5-5"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Expanded info -->
+                <div
+                  id="googleColorLabelsInfoExpanded"
+                  style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e8eaed"
+                >
+                  <div style="font-size: 13px; color: #5f6368; line-height: 1.6">
+                    <div style="font-weight: 600; color: #202124; margin-bottom: 8px">What it does</div>
+                    <div style="margin-bottom: 12px">
+                      Add custom labels to Google's default event colors. Labels help you remember what each color represents.
+                    </div>
+
+                    <div style="font-weight: 600; color: #202124; margin-bottom: 8px">How to use</div>
+                    <ol style="margin: 0 0 12px 0; padding-left: 20px">
+                      <li style="margin-bottom: 4px">Click on any color's label field below</li>
+                      <li style="margin-bottom: 4px">Type a name (e.g., "Work", "Personal", "Important")</li>
+                      <li style="margin-bottom: 4px">Labels appear in the color picker when editing events</li>
+                    </ol>
+
+                    <div style="font-weight: 600; color: #202124; margin-bottom: 8px">Notes</div>
+                    <ul style="margin: 0; padding-left: 20px">
+                      <li style="margin-bottom: 4px">Switch between Modern and Classic color schemes</li>
+                      <li style="margin-bottom: 4px">Classic colors match Google Calendar's original palette</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Google Colors List -->
+              <div style="margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <div style="font-weight: 600; color: #202124; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Color Scheme
+                  </div>
+                  <select id="googleColorSchemeSelect" style="
+                    padding: 4px 8px;
+                    font-size: 11px;
+                    border: 1px solid #dadce0;
+                    border-radius: 4px;
+                    background: white;
+                    color: #5f6368;
+                    cursor: pointer;
+                  ">
+                    <option value="modern">Modern</option>
+                    <option value="classic">Classic</option>
+                  </select>
+                </div>
+                <p style="margin: 0 0 10px 0; font-size: 11px; color: #80868b; line-height: 1.4;">
+                  Click a label field to name each color. Labels appear in the event color picker.
+                </p>
+                <div id="googleColorLabelsList" class="google-colors-grid" style="max-height: 200px; overflow-y: auto;">
+                  <!-- Populated by JS -->
+                </div>
+              </div>
+
+              <!-- Custom Categories Info Card -->
+              <div
+                id="eventColoringInfoCard"
+                style="
+                  margin-bottom: 12px;
+                  padding: 8px 12px;
+                  background: #fff;
+                  border-radius: 8px;
+                  border: 1px solid #dadce0;
+                  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+                "
+              >
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+                  <div
+                    style="font-weight: 500; color: #202124; font-size: 13px; display: flex; align-items: center; gap: 6px"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0">
+                      <circle cx="12" cy="12" r="10" stroke="#ec4899" stroke-width="2" fill="none" />
+                      <path d="M12 16v-4M12 8h.01" stroke="#ec4899" stroke-width="2" stroke-linecap="round" />
                     </svg>
                     <span>Custom Event Color Categories</span>
                   </div>
@@ -5552,78 +5769,24 @@
 
                     <div style="font-weight: 600; color: #202124; margin-bottom: 8px">How to use</div>
                     <ol style="margin: 0 0 12px 0; padding-left: 20px">
-                      <li style="margin-bottom: 4px">Create categories to organize your colors</li>
-                      <li style="margin-bottom: 4px">Add colors to each category with optional labels</li>
-                      <li style="margin-bottom: 4px">Click any event → Your categories appear in color picker</li>
+                      <li style="margin-bottom: 4px">Click "New Category" to create a category</li>
+                      <li style="margin-bottom: 4px">Add colors to each category using the color picker</li>
+                      <li style="margin-bottom: 4px">Optionally add labels to describe each color</li>
+                      <li style="margin-bottom: 4px">Click any event in Google Calendar → Your categories appear in color picker</li>
                       <li style="margin-bottom: 4px">Select a color → Event updates instantly</li>
                     </ol>
-                  </div>
-                </div>
-              </div>
 
-              <!-- Calendar Colors Section -->
-              <div style="margin-top: 16px; margin-bottom: 16px;">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                  <div style="font-weight: 600; color: #202124; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-                    Calendar Default Colors
+                    <div style="font-weight: 600; color: #202124; margin-bottom: 8px">Notes</div>
+                    <ul style="margin: 0; padding-left: 20px">
+                      <li style="margin-bottom: 4px">Drag categories to reorder them</li>
+                      <li style="margin-bottom: 4px">Labels help you remember what each color represents</li>
+                    </ul>
                   </div>
-                  <button
-                    id="calendarColorsInfoBtn"
-                    style="padding: 4px 8px; background: #f8f9fa; border: 1px solid #dadce0; border-radius: 4px; font-size: 11px; color: #5f6368; cursor: pointer;"
-                    onmouseover="this.style.background='#e8eaed';"
-                    onmouseout="this.style.background='#f8f9fa';"
-                  >
-                    ?
-                  </button>
-                </div>
-                <p style="margin: 0 0 12px 0; font-size: 11px; color: #80868b; line-height: 1.4;">
-                  Set default colors for all events from each calendar. Individual event colors override these defaults.
-                </p>
-                <div id="eventCalendarColorsList">
-                  <div id="eventCalendarColorsLoading" style="padding: 16px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="animation: spin 1s linear infinite;">
-                        <circle cx="12" cy="12" r="10" stroke="#dadce0" stroke-width="2" fill="none"/>
-                        <path d="M12 2a10 10 0 0 1 10 10" stroke="#1a73e8" stroke-width="2" stroke-linecap="round"/>
-                      </svg>
-                      Loading calendars...
-                    </div>
-                  </div>
-                  <div id="eventCalendarColorsContent" style="display: none;">
-                    <!-- Populated dynamically by JS -->
-                  </div>
-                  <div id="eventCalendarColorsEmpty" style="display: none; padding: 16px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
-                    No calendars found. Calendar colors are fetched from your Google Calendar account.
-                  </div>
-                </div>
-              </div>
-
-              <!-- Google Colors -->
-              <div style="margin-top: 16px; margin-bottom: 16px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                  <div style="font-weight: 600; color: #202124; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-                    Google Color Labels
-                  </div>
-                  <select id="googleColorSchemeSelect" style="
-                    padding: 4px 8px;
-                    font-size: 11px;
-                    border: 1px solid #dadce0;
-                    border-radius: 4px;
-                    background: white;
-                    color: #5f6368;
-                    cursor: pointer;
-                  ">
-                    <option value="modern">Modern</option>
-                    <option value="classic">Classic</option>
-                  </select>
-                </div>
-                <div id="googleColorLabelsList" class="google-colors-grid" style="max-height: 200px; overflow-y: auto;">
-                  <!-- Populated by JS -->
                 </div>
               </div>
 
               <!-- Quick Actions -->
-              <div style="margin-bottom: 16px;">
+              <div style="margin-bottom: 12px;">
                 <button
                   id="addEventColorCategoryBtn"
                   style="
@@ -5651,12 +5814,15 @@
                   </svg>
                   New Category
                 </button>
+                <p style="margin: 8px 0 0 0; font-size: 11px; color: #80868b; line-height: 1.4; text-align: center;">
+                  Categories group your custom colors and appear in the event color picker.
+                </p>
               </div>
 
               <!-- Categories List -->
               <div id="eventColorCategoriesList">
                 <div style="padding: 20px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
-                  No categories. Click "New Category" to start.
+                  No categories yet. Click "New Category" to start organizing your colors.
                 </div>
               </div>
             </div>
