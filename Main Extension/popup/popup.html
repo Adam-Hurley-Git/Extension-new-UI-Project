@@ -2156,14 +2156,14 @@
 
       /* Border Thickness Row Styles */
       .event-calendar-thickness-row {
+        display: none;
         margin-top: 4px;
         padding-top: 8px;
         border-top: 1px solid #e8eaed;
       }
 
-      .event-calendar-thickness-row.disabled {
-        opacity: 0.5;
-        pointer-events: none;
+      .event-calendar-thickness-row.visible {
+        display: flex;
       }
 
       .event-calendar-thickness-actions {

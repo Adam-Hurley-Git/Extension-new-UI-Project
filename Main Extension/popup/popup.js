@@ -8474,7 +8474,7 @@ Would you like to refresh all Google Calendar tabs?`;
     // Calculate preview styles
     const previewBg = bgColor || calendar.backgroundColor || '#039be5';
     const previewText = textColor || getContrastColor(previewBg);
-    const previewBorder = borderColor ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: -${borderWidth}px;` : '';
+    const previewBorder = borderColor ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: 0;` : '';
     const stripeColor = calendar.backgroundColor || '#1a73e8';
 
     item.innerHTML = `
@@ -8524,7 +8524,7 @@ Would you like to refresh all Google Calendar tabs?`;
                 ${borderColor ? `<button class="event-calendar-clear-btn" data-type="border" data-calendar-id="${calendar.id}">Clear</button>` : ''}
               </div>
             </div>
-            <div class="event-calendar-color-row event-calendar-thickness-row ${borderColor ? '' : 'disabled'}" data-type="borderWidth">
+            <div class="event-calendar-color-row event-calendar-thickness-row ${borderColor ? 'visible' : ''}" data-type="borderWidth">
               <div class="event-calendar-color-label">Border Thickness</div>
               <div class="event-calendar-thickness-actions">
                 <div class="event-calendar-thickness-buttons" data-calendar-id="${calendar.id}">
@@ -8889,7 +8889,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
       if (borderColor) {
         previewCard.style.outline = `${borderWidth}px solid ${borderColor}`;
-        previewCard.style.outlineOffset = `-${borderWidth}px`;
+        previewCard.style.outlineOffset = '0';
       } else {
         previewCard.style.outline = 'none';
       }
@@ -8954,6 +8954,14 @@ Would you like to refresh all Google Calendar tabs?`;
         clearBtn.remove();
       }
     }
+
+    // Show/hide thickness row when border color changes
+    if (type === 'border') {
+      const thicknessRow = item.querySelector('.event-calendar-thickness-row');
+      if (thicknessRow) {
+        thicknessRow.classList.toggle('visible', !!color);
+      }
+    }
   }
 
   // Update the preview card for a calendar (used when border width changes)
@@ -8987,7 +8995,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
       if (borderColor) {
         previewCard.style.outline = `${borderWidth}px solid ${borderColor}`;
-        previewCard.style.outlineOffset = `-${borderWidth}px`;
+        previewCard.style.outlineOffset = '0';
       } else {
         previewCard.style.outline = 'none';
       }
