@@ -13,6 +13,44 @@ import { showRecurringEventDialog } from '../components/RecurringEventDialog.js'
 import { ColorSwatchModal, COLOR_PALETTES } from '../../../shared/components/ColorSwatchModal.js';
 import { EventColorModal, createEventColorModal } from '../../../shared/components/EventColorModal.js';
 
+// ========================================
+// GOOGLE COLOR SCHEME MAPPING
+// Modern (saturated) vs Classic (pastel) color schemes
+// ========================================
+
+// Bidirectional mapping between Modern and Classic color schemes
+const GOOGLE_COLOR_SCHEME_MAP = {
+  // Modern → Classic
+  '#d50000': '#dc2127',  // Tomato
+  '#e67c73': '#ff887c',  // Flamingo
+  '#f4511e': '#ffb878',  // Tangerine
+  '#f6bf26': '#fbd75b',  // Banana
+  '#33b679': '#7ae7bf',  // Sage
+  '#0b8043': '#51b749',  // Basil
+  '#039be5': '#46d6db',  // Peacock
+  '#3f51b5': '#5484ed',  // Blueberry
+  '#7986cb': '#a4bdfc',  // Lavender
+  '#8e24aa': '#dbadff',  // Grape
+  '#616161': '#e1e1e1',  // Graphite
+  // Classic → Modern
+  '#dc2127': '#d50000',  // Tomato
+  '#ff887c': '#e67c73',  // Flamingo
+  '#ffb878': '#f4511e',  // Tangerine
+  '#fbd75b': '#f6bf26',  // Banana
+  '#7ae7bf': '#33b679',  // Sage
+  '#51b749': '#0b8043',  // Basil
+  '#46d6db': '#039be5',  // Peacock
+  '#5484ed': '#3f51b5',  // Blueberry
+  '#a4bdfc': '#7986cb',  // Lavender
+  '#dbadff': '#8e24aa',  // Grape
+  '#e1e1e1': '#616161'   // Graphite
+};
+
+// Get the equivalent color in the other scheme
+function getSchemeEquivalent(hex) {
+  return GOOGLE_COLOR_SCHEME_MAP[hex.toLowerCase()] || null;
+}
+
 /**
  * ColorPickerInjector - Handles injection of custom colors into Google Calendar
  */
@@ -900,6 +938,7 @@ export class ColorPickerInjector {
 
   /**
    * Modify Google's built-in color labels with custom names
+   * Handles both Modern and Classic color schemes by checking the equivalent color
    */
   async modifyGoogleColorLabels() {
     console.log('[CF] Modifying Google color labels');
@@ -917,6 +956,8 @@ export class ColorPickerInjector {
 
     console.log('[CF] Found', googleButtons.length, 'Google color buttons');
 
+    const allLabels = this.storageService.getGoogleColorLabels?.() || {};
+
     for (const button of googleButtons) {
       const labelElement = button.querySelector(COLOR_PICKER_SELECTORS.LABEL_ELEMENT);
       if (!labelElement) continue;
@@ -924,7 +965,23 @@ export class ColorPickerInjector {
       const colorAttr = button.getAttribute('data-color');
       if (!colorAttr) continue;
 
-      const customName = await this.storageService.getGoogleColorLabels?.()[colorAttr];
+      const normalizedColor = colorAttr.toLowerCase();
+
+      // Try direct lookup first
+      let customName = allLabels[normalizedColor];
+
+      // If not found, try the equivalent color from the other scheme
+      // This handles users who set labels in one scheme but are viewing in another
+      if (!customName) {
+        const equivalentColor = getSchemeEquivalent(normalizedColor);
+        if (equivalentColor) {
+          customName = allLabels[equivalentColor];
+          if (customName) {
+            console.log('[CF] Label found via scheme mapping:', normalizedColor, '→', equivalentColor);
+          }
+        }
+      }
+
       if (!customName) continue;
 
       button.setAttribute('aria-label', customName);

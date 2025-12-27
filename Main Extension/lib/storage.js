@@ -1277,6 +1277,26 @@
   }
 
   /**
+   * Set Google color scheme (modern or classic)
+   * @param {string} scheme - 'modern' or 'classic'
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setGoogleColorScheme(scheme) {
+    return setSettings({
+      eventColoring: { googleColorScheme: scheme },
+    });
+  }
+
+  /**
+   * Get Google color scheme
+   * @returns {Promise<string>} Color scheme ('modern' or 'classic')
+   */
+  async function getGoogleColorScheme() {
+    const settings = await getSettings();
+    return settings.eventColoring?.googleColorScheme || 'modern';
+  }
+
+  /**
    * Save event color
    * @param {string} eventId - Calendar event ID
    * @param {string} colorHex - Color hex code
@@ -2315,6 +2335,8 @@
     getEventColorCategories,
     setGoogleColorLabel,
     getGoogleColorLabels,
+    setGoogleColorScheme,
+    getGoogleColorScheme,
     saveEventColor,
     getEventColor,
     getAllEventColors,

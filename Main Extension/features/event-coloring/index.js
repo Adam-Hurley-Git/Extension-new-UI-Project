@@ -32,6 +32,76 @@
   let isInjecting = false;
 
   // ========================================
+  // GOOGLE COLOR SCHEME MAPPING
+  // Modern (saturated) vs Classic (pastel) color schemes
+  // ========================================
+
+  // Bidirectional mapping between Modern and Classic color schemes
+  const GOOGLE_COLOR_SCHEME_MAP = {
+    // Modern → Classic
+    '#d50000': '#dc2127',  // Tomato
+    '#e67c73': '#ff887c',  // Flamingo
+    '#f4511e': '#ffb878',  // Tangerine
+    '#f6bf26': '#fbd75b',  // Banana
+    '#33b679': '#7ae7bf',  // Sage
+    '#0b8043': '#51b749',  // Basil
+    '#039be5': '#46d6db',  // Peacock
+    '#3f51b5': '#5484ed',  // Blueberry
+    '#7986cb': '#a4bdfc',  // Lavender
+    '#8e24aa': '#dbadff',  // Grape
+    '#616161': '#e1e1e1',  // Graphite
+    // Classic → Modern
+    '#dc2127': '#d50000',  // Tomato
+    '#ff887c': '#e67c73',  // Flamingo
+    '#ffb878': '#f4511e',  // Tangerine
+    '#fbd75b': '#f6bf26',  // Banana
+    '#7ae7bf': '#33b679',  // Sage
+    '#51b749': '#0b8043',  // Basil
+    '#46d6db': '#039be5',  // Peacock
+    '#5484ed': '#3f51b5',  // Blueberry
+    '#a4bdfc': '#7986cb',  // Lavender
+    '#dbadff': '#8e24aa',  // Grape
+    '#e1e1e1': '#616161'   // Graphite
+  };
+
+  // Modern color hex values (canonical keys for storage)
+  const MODERN_COLORS = [
+    '#d50000', '#e67c73', '#f4511e', '#f6bf26', '#33b679',
+    '#0b8043', '#039be5', '#3f51b5', '#7986cb', '#8e24aa', '#616161'
+  ];
+
+  // Classic color hex values
+  const CLASSIC_COLORS = [
+    '#dc2127', '#ff887c', '#ffb878', '#fbd75b', '#7ae7bf',
+    '#51b749', '#46d6db', '#5484ed', '#a4bdfc', '#dbadff', '#e1e1e1'
+  ];
+
+  // Check if a color is a Modern scheme color
+  function isModernColor(hex) {
+    return MODERN_COLORS.includes(hex.toLowerCase());
+  }
+
+  // Check if a color is a Classic scheme color
+  function isClassicColor(hex) {
+    return CLASSIC_COLORS.includes(hex.toLowerCase());
+  }
+
+  // Get the Modern equivalent of any Google color (for consistent label lookup)
+  function getModernEquivalent(hex) {
+    const normalizedHex = hex.toLowerCase();
+    if (isModernColor(normalizedHex)) {
+      return normalizedHex;
+    }
+    // If it's a Classic color, map it to Modern
+    return GOOGLE_COLOR_SCHEME_MAP[normalizedHex] || normalizedHex;
+  }
+
+  // Get the equivalent color in the other scheme
+  function getSchemeEquivalent(hex) {
+    return GOOGLE_COLOR_SCHEME_MAP[hex.toLowerCase()] || null;
+  }
+
+  // ========================================
   // MODULE LOADER
   // ========================================
 
@@ -1631,7 +1701,19 @@
       if (!dataColor) return;
 
       const normalizedColor = dataColor.toLowerCase();
-      const customLabel = customLabels[normalizedColor];
+
+      // Try direct lookup first
+      let customLabel = customLabels[normalizedColor];
+
+      // If not found, try looking up the equivalent color from the other scheme
+      // This handles cases where user set labels while using one scheme but is now viewing in another
+      if (!customLabel) {
+        const equivalentColor = getSchemeEquivalent(normalizedColor);
+        if (equivalentColor) {
+          customLabel = customLabels[equivalentColor];
+          console.log('[EventColoring] Label lookup via scheme mapping:', normalizedColor, '→', equivalentColor, '=', customLabel);
+        }
+      }
 
       if (customLabel) {
         button.setAttribute('aria-label', customLabel);

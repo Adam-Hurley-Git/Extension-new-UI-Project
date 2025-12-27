@@ -5600,8 +5600,22 @@
 
               <!-- Google Colors -->
               <div style="margin-top: 16px; margin-bottom: 16px;">
-                <div style="font-weight: 600; color: #202124; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-                  Google Color Labels
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <div style="font-weight: 600; color: #202124; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Google Color Labels
+                  </div>
+                  <select id="googleColorSchemeSelect" style="
+                    padding: 4px 8px;
+                    font-size: 11px;
+                    border: 1px solid #dadce0;
+                    border-radius: 4px;
+                    background: white;
+                    color: #5f6368;
+                    cursor: pointer;
+                  ">
+                    <option value="modern">Modern</option>
+                    <option value="classic">Classic</option>
+                  </select>
                 </div>
                 <div id="googleColorLabelsList" class="google-colors-grid" style="max-height: 200px; overflow-y: auto;">
                   <!-- Populated by JS -->

@@ -7944,11 +7944,10 @@ Would you like to refresh all Google Calendar tabs?`;
   // ========================================
 
   let eventColoringSettings = {};
-  // Google Calendar's 11 standard event colors
-  // These match the actual colors shown in Google Calendar's event color picker
-  // FIX #7: Updated to ACTUAL Google Calendar colors (extracted from live calendar)
-  // These are the colors Google Calendar actually uses (December 2025)
-  const GOOGLE_COLORS = [
+
+  // Google Calendar's 11 standard event colors - MODERN scheme (with white text)
+  // These are the saturated colors shown when user has "Modern" color set selected
+  const GOOGLE_COLORS_MODERN = [
     { hex: '#d50000', default: 'Tomato' },
     { hex: '#e67c73', default: 'Flamingo' },
     { hex: '#f4511e', default: 'Tangerine' },
@@ -7961,6 +7960,87 @@ Would you like to refresh all Google Calendar tabs?`;
     { hex: '#8e24aa', default: 'Grape' },
     { hex: '#616161', default: 'Graphite' }
   ];
+
+  // Google Calendar's 11 standard event colors - CLASSIC scheme (with black text)
+  // These are the pastel colors shown when user has "Classic" color set selected
+  const GOOGLE_COLORS_CLASSIC = [
+    { hex: '#dc2127', default: 'Tomato' },
+    { hex: '#ff887c', default: 'Flamingo' },
+    { hex: '#ffb878', default: 'Tangerine' },
+    { hex: '#fbd75b', default: 'Banana' },
+    { hex: '#7ae7bf', default: 'Sage' },
+    { hex: '#51b749', default: 'Basil' },
+    { hex: '#46d6db', default: 'Peacock' },
+    { hex: '#5484ed', default: 'Blueberry' },
+    { hex: '#a4bdfc', default: 'Lavender' },
+    { hex: '#dbadff', default: 'Grape' },
+    { hex: '#e1e1e1', default: 'Graphite' }
+  ];
+
+  // Bidirectional mapping between Modern and Classic color schemes
+  // Maps Modern hex → Classic hex and vice versa
+  const GOOGLE_COLOR_SCHEME_MAP = {
+    // Modern → Classic
+    '#d50000': '#dc2127',  // Tomato
+    '#e67c73': '#ff887c',  // Flamingo
+    '#f4511e': '#ffb878',  // Tangerine
+    '#f6bf26': '#fbd75b',  // Banana
+    '#33b679': '#7ae7bf',  // Sage
+    '#0b8043': '#51b749',  // Basil
+    '#039be5': '#46d6db',  // Peacock
+    '#3f51b5': '#5484ed',  // Blueberry
+    '#7986cb': '#a4bdfc',  // Lavender
+    '#8e24aa': '#dbadff',  // Grape
+    '#616161': '#e1e1e1',  // Graphite
+    // Classic → Modern
+    '#dc2127': '#d50000',  // Tomato
+    '#ff887c': '#e67c73',  // Flamingo
+    '#ffb878': '#f4511e',  // Tangerine
+    '#fbd75b': '#f6bf26',  // Banana
+    '#7ae7bf': '#33b679',  // Sage
+    '#51b749': '#0b8043',  // Basil
+    '#46d6db': '#039be5',  // Peacock
+    '#5484ed': '#3f51b5',  // Blueberry
+    '#a4bdfc': '#7986cb',  // Lavender
+    '#dbadff': '#8e24aa',  // Grape
+    '#e1e1e1': '#616161'   // Graphite
+  };
+
+  // Helper to check if a color is from Modern scheme
+  function isModernColor(hex) {
+    return GOOGLE_COLORS_MODERN.some(c => c.hex.toLowerCase() === hex.toLowerCase());
+  }
+
+  // Helper to check if a color is from Classic scheme
+  function isClassicColor(hex) {
+    return GOOGLE_COLORS_CLASSIC.some(c => c.hex.toLowerCase() === hex.toLowerCase());
+  }
+
+  // Get the Modern equivalent of any Google color (for consistent storage key)
+  function getModernEquivalent(hex) {
+    const normalizedHex = hex.toLowerCase();
+    if (isModernColor(normalizedHex)) {
+      return normalizedHex;
+    }
+    // If it's a Classic color, map it to Modern
+    return GOOGLE_COLOR_SCHEME_MAP[normalizedHex] || normalizedHex;
+  }
+
+  // Get the color name for any hex (works for both Modern and Classic)
+  function getGoogleColorName(hex) {
+    const normalizedHex = hex.toLowerCase();
+    // Check Modern colors first
+    const modernColor = GOOGLE_COLORS_MODERN.find(c => c.hex.toLowerCase() === normalizedHex);
+    if (modernColor) return modernColor.default;
+    // Check Classic colors
+    const classicColor = GOOGLE_COLORS_CLASSIC.find(c => c.hex.toLowerCase() === normalizedHex);
+    if (classicColor) return classicColor.default;
+    return null;
+  }
+
+  // Default to Modern colors (will be updated based on detected scheme)
+  let GOOGLE_COLORS = GOOGLE_COLORS_MODERN;
+  let detectedColorScheme = 'modern'; // Will be updated when we detect user's scheme
 
   // Helper to escape HTML
   function escapeHtml(text) {
@@ -8190,51 +8270,89 @@ Would you like to refresh all Google Calendar tabs?`;
   }
 
   // Render Google color labels
+  // Uses the selected color scheme (Modern or Classic) to display swatches
+  // Labels are stored using Modern hex as the key for consistency
   async function renderGoogleColorLabels() {
     const container = qs('googleColorLabelsList');
     if (!container) return;
 
     const customLabels = eventColoringSettings.googleColorLabels || {};
 
+    // Get the selected color scheme
+    const schemeSelect = qs('googleColorSchemeSelect');
+    const selectedScheme = eventColoringSettings.googleColorScheme || 'modern';
+
+    // Set the dropdown value
+    if (schemeSelect) {
+      schemeSelect.value = selectedScheme;
+    }
+
+    // Choose color array based on scheme
+    const colors = selectedScheme === 'classic' ? GOOGLE_COLORS_CLASSIC : GOOGLE_COLORS_MODERN;
+
     container.innerHTML = '';
 
-    for (const googleColor of GOOGLE_COLORS) {
-      const customLabel = customLabels[googleColor.hex] || googleColor.default;
+    for (let i = 0; i < colors.length; i++) {
+      const color = colors[i];
+      const modernColor = GOOGLE_COLORS_MODERN[i];
+
+      // Always use Modern hex as the storage key for consistency
+      const storageKey = modernColor.hex.toLowerCase();
+      const customLabel = customLabels[storageKey] || color.default;
 
       const itemDiv = document.createElement('div');
       itemDiv.className = 'google-color-item';
       itemDiv.innerHTML = `
         <div
           class="google-color-preview"
-          style="background-color: ${googleColor.hex};"
-          title="${googleColor.hex}"
+          style="background-color: ${color.hex};"
+          title="${color.default}: ${color.hex}"
         ></div>
         <input
           type="text"
           class="google-color-label-input"
           value="${escapeHtml(customLabel)}"
-          data-color="${googleColor.hex}"
-          placeholder="${googleColor.default}"
+          data-color="${storageKey}"
+          placeholder="${color.default}"
         />
       `;
 
       const input = itemDiv.querySelector('.google-color-label-input');
       input.addEventListener('blur', async (e) => {
-        await updateGoogleColorLabel(googleColor.hex, e.target.value);
+        // Always store using Modern hex as key
+        await updateGoogleColorLabel(storageKey, e.target.value);
       });
 
       container.appendChild(itemDiv);
     }
 
-    debugLog('Google color labels rendered');
+    debugLog('Google color labels rendered (scheme:', selectedScheme, ')');
+  }
+
+  // Handle color scheme change
+  async function handleColorSchemeChange(scheme) {
+    eventColoringSettings.googleColorScheme = scheme;
+    await window.cc3Storage.setGoogleColorScheme(scheme);
+    await renderGoogleColorLabels();
+    debugLog('Color scheme changed to:', scheme);
   }
 
   // Update Google color label
+  // Stores labels for BOTH Modern and Classic hex keys so lookup works regardless of user's scheme
   async function updateGoogleColorLabel(colorHex, label) {
     // FIX #5: Ensure hex is always lowercase for consistency
     const normalizedHex = colorHex.toLowerCase();
+
+    // Store the label for the Modern hex (canonical key)
     await window.cc3Storage.setGoogleColorLabel(normalizedHex, label);
-    debugLog('Google color label updated:', normalizedHex, label);
+
+    // Also store for the Classic equivalent so it works for Classic scheme users
+    const classicEquivalent = GOOGLE_COLOR_SCHEME_MAP[normalizedHex];
+    if (classicEquivalent) {
+      await window.cc3Storage.setGoogleColorLabel(classicEquivalent.toLowerCase(), label);
+    }
+
+    debugLog('Google color label updated:', normalizedHex, label, '(+ Classic:', classicEquivalent, ')');
 
     // FIX #6a: CRITICAL - Notify content script that labels changed
     // Without this, content script keeps using cached settings with old labels
@@ -8857,6 +8975,14 @@ Would you like to refresh all Google Calendar tabs?`;
           }).catch(() => {});
         }
       });
+    });
+  }
+
+  // Color scheme selector (Modern vs Classic)
+  const colorSchemeSelect = qs('googleColorSchemeSelect');
+  if (colorSchemeSelect) {
+    colorSchemeSelect.addEventListener('change', async (e) => {
+      await handleColorSchemeChange(e.target.value);
     });
   }
 
