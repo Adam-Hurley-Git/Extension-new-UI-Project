@@ -2177,7 +2177,7 @@ checkAuthAndSubscription();
     const controlsWrapper = document.createElement('div');
     controlsWrapper.className = 'task-list-color-stack';
 
-    const updateSwatchDisplay = (target, color, type) => {
+    const updateSwatchDisplay = (target, color, type, bgColorForContrast = null) => {
       if (color) {
         target.chip.style.backgroundColor = color;
         target.chip.classList.add('has-color');
@@ -2190,10 +2190,18 @@ checkAuthAndSubscription();
         }
       } else {
         target.chip.style.backgroundColor = '#f3f4f6';
-        target.chip.style.color = '#6b7280';
-        target.chip.textContent = type === 'text' ? 'A' : (type === 'border' ? '▢' : '');
+        // For text type with a background color, show the computed contrast color
+        if (type === 'text' && bgColorForContrast) {
+          const contrastColor = getReadableTextColor(bgColorForContrast, 100);
+          target.chip.style.color = contrastColor;
+          target.chip.textContent = 'A';
+          target.value.textContent = 'Auto';
+        } else {
+          target.chip.style.color = '#6b7280';
+          target.chip.textContent = type === 'text' ? 'A' : (type === 'border' ? '▢' : '');
+          target.value.textContent = 'Auto';
+        }
         target.chip.classList.remove('has-color');
-        target.value.textContent = 'Auto';
         // Reset border style for border type
         if (type === 'border') {
           target.chip.style.border = '1px solid #d1d5db';
@@ -2219,6 +2227,10 @@ checkAuthAndSubscription();
       onColorChange: (value) => {
         currentBgColor = value;
         updateSwatchDisplay(backgroundSwatch, value, 'background');
+        // Also update text swatch to show correct contrast color for "Auto"
+        if (!currentTextColor) {
+          updateSwatchDisplay(textSwatch, null, 'text', value);
+        }
         // INSTANT UPDATE: Update inherit mode availability
         updateInheritModeAvailability(list.id, currentBgColor, currentTextColor);
         // AUTO-SWITCH: Switch to inherit mode when color is set
@@ -2240,7 +2252,7 @@ checkAuthAndSubscription();
       helperText: 'Overrides the auto-contrast text color for this list.',
       onColorChange: (value) => {
         currentTextColor = value;
-        updateSwatchDisplay(textSwatch, value, 'text');
+        updateSwatchDisplay(textSwatch, value, 'text', currentBgColor);
         // INSTANT UPDATE: Also update completed text preview if it's inheriting
         updateCompletedTextPreview(list.id, value);
         // INSTANT UPDATE: Update inherit mode availability
@@ -2374,7 +2386,7 @@ checkAuthAndSubscription();
     item.appendChild(card);
 
     updateSwatchDisplay(backgroundSwatch, colorConfig.background, 'background');
-    updateSwatchDisplay(textSwatch, colorConfig.text, 'text');
+    updateSwatchDisplay(textSwatch, colorConfig.text, 'text', colorConfig.background);
     updateSwatchDisplay(borderSwatch, colorConfig.border, 'border');
 
     // Asynchronously load completed tasks section
