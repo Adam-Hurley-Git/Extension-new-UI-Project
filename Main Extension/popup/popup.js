@@ -7943,12 +7943,11 @@ Would you like to refresh all Google Calendar tabs?`;
     { hex: '#f6bf26', default: 'Banana' },
     { hex: '#33b679', default: 'Sage' },
     { hex: '#0b8043', default: 'Basil' },
+    { hex: '#039be5', default: 'Peacock' },
     { hex: '#3f51b5', default: 'Blueberry' },
     { hex: '#7986cb', default: 'Lavender' },
     { hex: '#8e24aa', default: 'Grape' },
-    { hex: '#616161', default: 'Graphite' },
-    { hex: '#8a6648', default: 'Cocoa' },
-    { hex: '#ad1457', default: 'Cherry Blossom' }
+    { hex: '#616161', default: 'Graphite' }
   ];
 
   // Helper to escape HTML
