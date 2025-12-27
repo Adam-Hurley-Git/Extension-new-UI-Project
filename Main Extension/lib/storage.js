@@ -1438,9 +1438,9 @@
   }
 
   /**
-   * Save event colors with full background/text/border support
+   * Save event colors with full background/text/border/borderWidth support
    * @param {string} eventId - Calendar event ID
-   * @param {Object} colors - Colors { background, text, border }
+   * @param {Object} colors - Colors { background, text, border, borderWidth }
    * @param {Object} options - Options { applyToAll: boolean }
    * @returns {Promise<void>}
    */
@@ -1460,6 +1460,7 @@
           background: colors.background || null,
           text: colors.text || null,
           border: colors.border || null,
+          borderWidth: colors.borderWidth || 2, // Default to 2px if not set
           // Keep hex for backward compatibility (use background as primary)
           hex: colors.background || null,
           isRecurring: false,
@@ -1506,7 +1507,7 @@
   /**
    * Get normalized event color data (handles both old and new formats)
    * @param {Object} colorData - Raw color data from storage
-   * @returns {Object} Normalized { background, text, border, hex, isRecurring }
+   * @returns {Object} Normalized { background, text, border, borderWidth, hex, isRecurring }
    */
   function normalizeEventColorData(colorData) {
     if (!colorData) return null;
@@ -1517,6 +1518,7 @@
         background: colorData,
         text: null,
         border: null,
+        borderWidth: 2, // Default border width
         hex: colorData,
         isRecurring: false,
       };
@@ -1528,6 +1530,7 @@
         background: colorData.hex,
         text: null,
         border: null,
+        borderWidth: colorData.borderWidth || 2, // Default if not set
         hex: colorData.hex,
         isRecurring: colorData.isRecurring || false,
       };
@@ -1538,6 +1541,7 @@
       background: colorData.background || null,
       text: colorData.text || null,
       border: colorData.border || null,
+      borderWidth: colorData.borderWidth || 2, // Default if not set
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
     };
@@ -1817,6 +1821,57 @@
       ...existingColors,
       border: color,
     };
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
+  /**
+   * Set border width for a calendar
+   * @param {string} calendarId - Calendar ID (email)
+   * @param {number} width - Border width in pixels (1-6)
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setEventCalendarBorderWidth(calendarId, width) {
+    if (!calendarId) return;
+
+    // Validate width is within range
+    const validWidth = Math.max(1, Math.min(6, parseInt(width) || 2));
+
+    const current = await getSettings();
+    const calendarColors = current.eventColoring?.calendarColors || {};
+    const existingColors = calendarColors[calendarId] || {};
+
+    calendarColors[calendarId] = {
+      ...existingColors,
+      borderWidth: validWidth,
+    };
+
+    return setSettings({
+      eventColoring: { calendarColors },
+    });
+  }
+
+  /**
+   * Clear border width for a calendar (reset to default)
+   * @param {string} calendarId - Calendar ID (email)
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function clearEventCalendarBorderWidth(calendarId) {
+    if (!calendarId) return;
+
+    const current = await getSettings();
+    const calendarColors = { ...(current.eventColoring?.calendarColors || {}) };
+
+    if (calendarColors[calendarId]) {
+      const { borderWidth, ...rest } = calendarColors[calendarId];
+      if (Object.keys(rest).filter(k => rest[k]).length === 0) {
+        delete calendarColors[calendarId];
+      } else {
+        calendarColors[calendarId] = rest;
+      }
+    }
 
     return setSettings({
       eventColoring: { calendarColors },
@@ -2357,9 +2412,11 @@
     setEventCalendarBackgroundColor,
     setEventCalendarTextColor,
     setEventCalendarBorderColor,
+    setEventCalendarBorderWidth,
     clearEventCalendarBackgroundColor,
     clearEventCalendarTextColor,
     clearEventCalendarBorderColor,
+    clearEventCalendarBorderWidth,
     clearEventCalendarColors,
     // NEW UI task colors (ttb_ prefix - full bg/text/border support)
     saveNewUITaskColors,

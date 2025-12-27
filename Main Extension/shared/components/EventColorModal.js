@@ -89,6 +89,7 @@ class EventColorModal {
       background: options.currentColors?.background || null,
       text: options.currentColors?.text || null,
       border: options.currentColors?.border || null,
+      borderWidth: options.currentColors?.borderWidth || 2, // Default 2px
     };
     // Original event colors from DOM (for accurate preview when no custom color set)
     this.originalColors = {
@@ -146,6 +147,18 @@ class EventColorModal {
               <span class="ecm-preview-title">${this.eventTitle}</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="ecm-thickness-section" id="${this.id}-thickness-section">
+        <div class="ecm-thickness-label">Border Thickness</div>
+        <div class="ecm-thickness-controls">
+          <button type="button" class="ecm-thickness-btn" data-width="1">1px</button>
+          <button type="button" class="ecm-thickness-btn${this.workingColors.borderWidth === 2 ? ' active' : ''}" data-width="2">2px</button>
+          <button type="button" class="ecm-thickness-btn" data-width="3">3px</button>
+          <button type="button" class="ecm-thickness-btn" data-width="4">4px</button>
+          <button type="button" class="ecm-thickness-btn" data-width="5">5px</button>
+          <button type="button" class="ecm-thickness-btn" data-width="6">6px</button>
         </div>
       </div>
 
@@ -267,13 +280,14 @@ class EventColorModal {
     const bg = this.getEffectiveColor('background') || '#039be5';
     const text = this.workingColors.text || (this.currentColors.text ? this.currentColors.text : (this.originalColors.text || getContrastColor(bg)));
     const border = this.getEffectiveColor('border');
+    const borderWidth = this.workingColors.borderWidth || 2;
 
     preview.style.backgroundColor = bg;
     preview.style.color = text;
 
     if (border) {
-      preview.style.outline = `2px solid ${border}`;
-      preview.style.outlineOffset = '-2px';
+      preview.style.outline = `${borderWidth}px solid ${border}`;
+      preview.style.outlineOffset = `-${borderWidth}px`;
     } else {
       preview.style.outline = 'none';
     }
@@ -413,6 +427,7 @@ class EventColorModal {
    */
   setupPropertyTabs() {
     const tabs = this.element.querySelectorAll('.ecm-property-tab');
+    const thicknessSection = this.element.querySelector(`#${this.id}-thickness-section`);
 
     tabs.forEach((tab) => {
       tab.addEventListener('click', (e) => {
@@ -422,10 +437,44 @@ class EventColorModal {
         tabs.forEach((t) => t.classList.toggle('active', t.dataset.property === property));
         this.activePropertyTab = property;
 
+        // Show/hide border thickness section based on active tab
+        if (thicknessSection) {
+          thicknessSection.classList.toggle('visible', property === 'border');
+        }
+
         // Update hex inputs to show current property's color
         const currentColor = this.workingColors[property];
         this.updateHexInputs(currentColor);
         this.highlightSelected();
+      });
+    });
+  }
+
+  /**
+   * Setup border thickness button handlers
+   */
+  setupThicknessButtons() {
+    const thicknessSection = this.element.querySelector(`#${this.id}-thickness-section`);
+    if (!thicknessSection) return;
+
+    const buttons = thicknessSection.querySelectorAll('.ecm-thickness-btn');
+    buttons.forEach((btn) => {
+      // Update active state based on current borderWidth
+      const width = parseInt(btn.dataset.width);
+      btn.classList.toggle('active', width === this.workingColors.borderWidth);
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newWidth = parseInt(btn.dataset.width);
+
+        // Update working colors
+        this.workingColors.borderWidth = newWidth;
+
+        // Update active states
+        buttons.forEach((b) => b.classList.toggle('active', parseInt(b.dataset.width) === newWidth));
+
+        // Update preview
+        this.updatePreview();
       });
     });
   }
@@ -543,6 +592,7 @@ class EventColorModal {
 
     // Setup functionality
     this.setupPropertyTabs();
+    this.setupThicknessButtons();
     this.setupPaletteTabs();
     this.setupHexInputs();
     this.setupActions();
@@ -736,6 +786,49 @@ class EventColorModal {
         font-weight: 500;
         color: #ffffff;
         white-space: nowrap;
+      }
+
+      /* Border Thickness Section */
+      .ecm-thickness-section {
+        display: none;
+        padding: 12px 16px;
+        background: #fafafa;
+        border-bottom: 1px solid #e8eaed;
+      }
+      .ecm-thickness-section.visible {
+        display: block;
+      }
+      .ecm-thickness-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #5f6368;
+        margin-bottom: 8px;
+        letter-spacing: 0.5px;
+      }
+      .ecm-thickness-controls {
+        display: flex;
+        gap: 6px;
+      }
+      .ecm-thickness-btn {
+        flex: 1;
+        padding: 6px 8px;
+        border: 2px solid #dadce0;
+        background: #fff;
+        color: #5f6368;
+        font-size: 12px;
+        font-weight: 500;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .ecm-thickness-btn:hover {
+        border-color: #1a73e8;
+        color: #1a73e8;
+      }
+      .ecm-thickness-btn.active {
+        border-color: #1a73e8;
+        background: #e8f0fe;
+        color: #1a73e8;
       }
 
       /* Palette Tabs */

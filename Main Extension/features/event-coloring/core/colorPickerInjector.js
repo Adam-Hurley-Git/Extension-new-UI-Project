@@ -339,6 +339,7 @@ export class ColorPickerInjector {
         background: colorData?.background || colorData?.hex || null,
         text: colorData?.text || null,
         border: colorData?.border || null,
+        borderWidth: colorData?.borderWidth || 2, // Default to 2px
       };
 
       console.log('[CF] Opening EventColorModal with colors:', currentColors);

@@ -1431,12 +1431,12 @@
   }
 
   /**
-   * Apply full colors (bg/text/border) to a single element
+   * Apply full colors (bg/text/border/borderWidth) to a single element
    */
   function applyFullColorsToElement(element, colors) {
     if (!element) return;
 
-    const { background, text, border } = colors;
+    const { background, text, border, borderWidth = 2 } = colors;
     const eventId = element.getAttribute('data-eventid');
     const isEventChip = element.matches('[data-eventchip]');
 
@@ -1468,10 +1468,10 @@
         });
       }
 
-      // Apply border using outline
+      // Apply border using outline (with configurable width)
       if (border) {
-        element.style.outline = `2px solid ${border}`;
-        element.style.outlineOffset = '-2px';
+        element.style.outline = `${borderWidth}px solid ${border}`;
+        element.style.outlineOffset = `-${borderWidth}px`;
       } else {
         element.style.outline = '';
         element.style.outlineOffset = '';
@@ -2071,7 +2071,7 @@
   function applyColorsToElement(element, colors) {
     if (!element) return;
 
-    const { background, text, border } = colors;
+    const { background, text, border, borderWidth = 2 } = colors;
     if (!background && !text && !border) return;
 
     // Only color the main event chip element - NOT child elements
@@ -2115,8 +2115,8 @@
 
       // Apply border using outline (since Google sets border-width: 0)
       if (border) {
-        element.style.outline = `2px solid ${border}`;
-        element.style.outlineOffset = '-2px';
+        element.style.outline = `${borderWidth}px solid ${border}`;
+        element.style.outlineOffset = `-${borderWidth}px`;
       } else {
         element.style.outline = '';
         element.style.outlineOffset = '';
@@ -2136,8 +2136,8 @@
       }
 
       if (border) {
-        element.style.outline = `2px solid ${border}`;
-        element.style.outlineOffset = '-2px';
+        element.style.outline = `${borderWidth}px solid ${border}`;
+        element.style.outlineOffset = `-${borderWidth}px`;
       }
     }
   }

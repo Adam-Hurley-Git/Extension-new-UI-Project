@@ -27,7 +27,7 @@ export class ColorRenderer {
   /**
    * Normalize event color data (handles both old and new formats)
    * @param {Object|string} colorData - Raw color data
-   * @returns {Object} Normalized { background, text, border, hex, isRecurring }
+   * @returns {Object} Normalized { background, text, border, borderWidth, hex, isRecurring }
    */
   normalizeColorData(colorData) {
     if (!colorData) return null;
@@ -38,6 +38,7 @@ export class ColorRenderer {
         background: colorData,
         text: null,
         border: null,
+        borderWidth: 2, // Default border width
         hex: colorData,
         isRecurring: false,
       };
@@ -49,6 +50,7 @@ export class ColorRenderer {
         background: colorData.hex,
         text: null,
         border: null,
+        borderWidth: colorData.borderWidth || 2, // Default if not set
         hex: colorData.hex,
         isRecurring: colorData.isRecurring || false,
       };
@@ -59,6 +61,7 @@ export class ColorRenderer {
       background: colorData.background || null,
       text: colorData.text || null,
       border: colorData.border || null,
+      borderWidth: colorData.borderWidth || 2, // Default if not set
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
     };
@@ -215,14 +218,14 @@ export class ColorRenderer {
   }
 
   /**
-   * Update the color of a single event element with full bg/text/border support
+   * Update the color of a single event element with full bg/text/border/borderWidth support
    * @param {HTMLElement} element - Event element
-   * @param {Object} colors - { background, text, border }
+   * @param {Object} colors - { background, text, border, borderWidth }
    */
   updateColorOfEventElementFull(element, colors) {
     if (!element) return;
 
-    const { background, text, border } = colors;
+    const { background, text, border, borderWidth = 2 } = colors;
 
     // Mark as modified to prevent re-processing
     element.setAttribute(DATA_ATTRIBUTES.CF_COLORED, 'true');
@@ -265,8 +268,8 @@ export class ColorRenderer {
 
     // Apply border using outline (since Google sets border-width: 0)
     if (border) {
-      element.style.outline = `2px solid ${border}`;
-      element.style.outlineOffset = '-2px';
+      element.style.outline = `${borderWidth}px solid ${border}`;
+      element.style.outlineOffset = `-${borderWidth}px`;
     } else {
       // Clear any existing outline
       element.style.outline = '';
