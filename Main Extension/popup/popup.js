@@ -8262,9 +8262,9 @@ Would you like to refresh all Google Calendar tabs?`;
     emptyEl.style.display = 'none';
 
     try {
-      // Fetch calendars from background script (reusing existing GET_CALENDAR_COLORS)
+      // Fetch calendars from background script with forceRefresh to get latest Google colors
       const calendars = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'GET_CALENDAR_COLORS' }, (response) => {
+        chrome.runtime.sendMessage({ type: 'GET_CALENDAR_COLORS', forceRefresh: true }, (response) => {
           resolve(response || {});
         });
       });
