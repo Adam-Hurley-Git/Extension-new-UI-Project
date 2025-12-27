@@ -231,6 +231,41 @@ function createCalendarStripeGradient(calendarColor, customColor) {
   return `linear-gradient(to right, ${calendarColor} 4px, ${customColor} 4px)`;
 }
 
+/**
+ * Convert Google Calendar API color to the actual display color
+ * Google Calendar internally transforms API colors before rendering.
+ * This function replicates that transformation.
+ *
+ * The transformation applies:
+ * - Hue shift: +14° (for saturated colors only)
+ * - Saturation: multiply by 0.64
+ * - Lightness: multiply by (0.50 + saturation/100 * 0.40)
+ *   - Grayscale (S=0): lightness × 0.50
+ *   - Fully saturated (S=100): lightness × 0.90
+ *
+ * @param {string} apiHex - Hex color from Google Calendar API
+ * @returns {string} Transformed hex color matching Google's display
+ */
+function apiColorToGoogleDisplayColor(apiHex) {
+  if (!apiHex) return apiHex;
+
+  const hsl = hexToHsl(apiHex);
+  if (!hsl) return apiHex;
+
+  // Calculate lightness multiplier based on saturation
+  // Less saturated colors get darkened more
+  // S=0% → mult=0.50, S=100% → mult=0.90
+  const lMultiplier = 0.50 + (hsl.s / 100) * 0.40;
+
+  // For saturated colors, shift hue toward indigo and reduce saturation
+  // For grayscale, keep hue unchanged (it's meaningless anyway)
+  const newH = hsl.s > 0 ? (hsl.h + 14) % 360 : hsl.h;
+  const newS = hsl.s * 0.64;
+  const newL = Math.max(0, Math.min(100, hsl.l * lMultiplier));
+
+  return hslToHex(newH, newS, newL);
+}
+
 // Export for different module systems
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -245,6 +280,7 @@ if (typeof module !== 'undefined' && module.exports) {
     isValidHex,
     normalizeHex,
     createCalendarStripeGradient,
+    apiColorToGoogleDisplayColor,
   };
 }
 
@@ -261,6 +297,7 @@ if (typeof window !== 'undefined') {
     isValidHex,
     normalizeHex,
     createCalendarStripeGradient,
+    apiColorToGoogleDisplayColor,
   };
 }
 
@@ -276,4 +313,5 @@ export {
   isValidHex,
   normalizeHex,
   createCalendarStripeGradient,
+  apiColorToGoogleDisplayColor,
 };

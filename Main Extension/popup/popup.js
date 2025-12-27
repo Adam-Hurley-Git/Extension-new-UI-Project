@@ -5,6 +5,7 @@
 // Import validation function (will be loaded as module via script tag)
 import { validateSubscription } from '../lib/subscription-validator.js';
 import { CONFIG, debugLog } from '../config.production.js';
+import { apiColorToGoogleDisplayColor } from '../shared/utils/colorUtils.js';
 
 // Auth state
 let isAuthenticated = false;
@@ -8330,17 +8331,19 @@ Would you like to refresh all Google Calendar tabs?`;
     // Calculate preview styles
     // Use Google's foreground color for text unless user explicitly set one
     // This matches what Google Calendar actually displays
-    const previewBg = bgColor || calendar.backgroundColor || '#039be5';
+    // Transform API colors to match Google's actual display colors
+    const googleDisplayColor = apiColorToGoogleDisplayColor(calendar.backgroundColor || '#039be5');
+    const previewBg = bgColor || googleDisplayColor;
     const previewText = textColor || calendar.foregroundColor || '#ffffff';
     const previewBorder = borderColor ? `outline: 2px solid ${borderColor}; outline-offset: -2px;` : '';
-    const stripeColor = calendar.backgroundColor || '#1a73e8';
+    const stripeColor = googleDisplayColor;
 
     item.innerHTML = `
       <div class="event-calendar-card">
         <div class="event-calendar-header">
           <div class="event-calendar-title-group">
             <div class="event-calendar-title">
-              <span class="event-calendar-google-color" style="background-color: ${calendar.backgroundColor};" title="Google calendar color"></span>
+              <span class="event-calendar-google-color" style="background-color: ${googleDisplayColor};" title="Google calendar color"></span>
               <span class="event-calendar-name" title="${escapeHtml(calendar.name)}">${escapeHtml(calendar.name)}</span>
             </div>
             <div class="event-calendar-meta">Google Calendar</div>
@@ -8667,7 +8670,8 @@ Would you like to refresh all Google Calendar tabs?`;
     // Get all current colors for this calendar
     const colors = eventCalendarColors[calendarId] || {};
     const calendar = eventCalendarsList.find(c => c.id === calendarId);
-    const googleBgColor = calendar?.backgroundColor || '#039be5';
+    // Transform API color to match Google's actual display color
+    const googleBgColor = apiColorToGoogleDisplayColor(calendar?.backgroundColor || '#039be5');
     const googleFgColor = calendar?.foregroundColor || '#ffffff';
 
     // Update the unified preview card

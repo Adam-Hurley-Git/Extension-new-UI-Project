@@ -25,6 +25,7 @@
   let categories = {};
   let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor } (from Google API)
   let calendarDefaultColors = {}; // User-defined per-calendar colors: calendarId → { background, text, border }
+  let originalDomColors = {}; // Cache: eventId → actual DOM display color (captured before custom styling)
   let isEnabled = false;
   let colorPickerObserver = null;
   let colorRenderObserver = null;
@@ -1140,12 +1141,21 @@
     };
     const eventTitle = domColors.title;
 
-    // Get calendar color for the stripe
-    const calendarColor = getCalendarColorForEvent(eventId) || domColors.background || '#f4511e';
+    // Get calendar color for the stripe - prefer stripe element (always accurate)
+    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+    const originalColor = eventElement ? getOriginalCalendarColor(eventElement, eventId) : null;
+
+    // Determine calendar color and whether it's from DOM
+    let calendarColor = domColors.background || '#f4511e';
+    let isFromDom = false;
+    if (originalColor) {
+      calendarColor = originalColor.color;
+      isFromDom = originalColor.isFromDom;
+    }
 
     // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal
     if (typeof window.EventColorModal === 'function') {
-      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors, 'calendarColor:', calendarColor);
+      console.log('[EventColoring] Opening EventColorModal with colors:', currentColors, 'original:', originalColors, 'calendarColor:', calendarColor, isFromDom ? '(from stripe/DOM)' : '(from API)');
 
       activeColorModal = new window.EventColorModal({
         id: `cf-event-color-modal-${Date.now()}`,
@@ -1153,6 +1163,7 @@
         originalColors,
         eventTitle,
         calendarColor,
+        isCalendarColorFromDom: isFromDom, // true if color is from stripe/DOM
         onApply: async (colors) => {
           console.log('[EventColoring] Event colors applied:', colors);
           await handleFullColorSelection(eventId, colors);
@@ -1829,21 +1840,27 @@
       // Merge: manual colors take precedence, calendar defaults fill in gaps
       const mergedColors = mergeEventColors(manualColors, calendarDefaultColorsForEvent);
 
+      // IMPORTANT: Capture original DOM color BEFORE applying any custom colors
+      // This captures Google's actual display color for later use when clearing
+      if (!mergedColors && !element.dataset.cfEventColored && !element.dataset.cfTempGoogleColor) {
+        captureOriginalDomColor(element, eventId);
+      }
+
       if (mergedColors) {
         applyColorsToElement(element, mergedColors);
       } else if (element.dataset.cfEventColored) {
         // No colors to apply but element was previously colored
-        // Apply Google Calendar API color temporarily for visual feedback
-        const googleCalendarColor = getCalendarColorForEvent(eventId);
+        // Get the best available original color (stripe > captured > API)
+        const originalColor = getOriginalCalendarColor(element, eventId);
 
-        if (googleCalendarColor) {
-          // Apply Google's calendar color temporarily
-          // On navigation/refresh, Google's CSS will apply naturally
-          console.log('[EventColoring] Applying Google API color:', googleCalendarColor, 'for event:', eventId);
-          applyTemporaryGoogleColor(element, googleCalendarColor);
+        if (originalColor) {
+          console.log('[EventColoring] Using original color:', originalColor.color,
+            originalColor.isFromDom ? '(from stripe/DOM)' : '(from API, needs transform)',
+            'for event:', eventId);
+          applyTemporaryGoogleColor(element, originalColor.color, originalColor.isFromDom);
         } else {
           // No color available, fall back to removing all styling
-          console.log('[EventColoring] No Google API color available, removing styling for event:', eventId);
+          console.log('[EventColoring] No color available, removing styling for event:', eventId);
           removeColorsFromElement(element);
         }
       }
@@ -1877,7 +1894,7 @@
   }
 
   /**
-   * Apply the original Google Calendar API color temporarily
+   * Apply the original Google Calendar color temporarily
    * This is used when user clears custom colors - we show the Google color
    * temporarily until navigation/refresh when Google's CSS will take over.
    *
@@ -1886,21 +1903,28 @@
    * which may not match Google's original styling.
    *
    * @param {HTMLElement} element - The event element
-   * @param {string} googleBgColor - Background color from Google Calendar API
+   * @param {string} color - Background color (either from API or captured from DOM)
+   * @param {boolean} isAlreadyDisplayColor - If true, color is already the display color (from DOM).
+   *                                          If false, color is from API and needs transformation.
    */
-  function applyTemporaryGoogleColor(element, googleBgColor) {
-    if (!element || !googleBgColor) return;
+  function applyTemporaryGoogleColor(element, color, isAlreadyDisplayColor = false) {
+    if (!element || !color) return;
+
+    // If the color is from API, transform it to match Google's display color
+    // If it's already captured from DOM, use it directly
+    const displayColor = isAlreadyDisplayColor ? color : apiColorToGoogleDisplayColor(color);
+    console.log('[EventColoring] Temp color:', color, isAlreadyDisplayColor ? '(from DOM)' : '->', displayColor);
 
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // Apply just the Google calendar color as solid background
+      // Apply the transformed Google calendar color as solid background
       // No gradient needed since we're showing the "original" color
       // Use 'background' shorthand to override any gradient that was previously set
-      element.style.setProperty('background', googleBgColor, 'important');
+      element.style.setProperty('background', displayColor, 'important');
 
       // Set border to match (cosmetic consistency)
-      element.style.borderColor = adjustColorBrightness(googleBgColor, -15);
+      element.style.borderColor = adjustColorBrightness(displayColor, -15);
 
       // Clear outline (our custom border feature)
       element.style.outline = '';
@@ -1924,9 +1948,9 @@
       // Mark as temporarily colored for debugging
       element.dataset.cfTempGoogleColor = 'true';
     } else if (element.matches('[data-draggable-id]')) {
-      // For draggable items
-      element.style.setProperty('background', googleBgColor, 'important');
-      element.style.borderColor = adjustColorBrightness(googleBgColor, -15);
+      // For draggable items - use the transformed display color
+      element.style.setProperty('background', displayColor, 'important');
+      element.style.borderColor = adjustColorBrightness(displayColor, -15);
 
       // Clear text color - let Google handle it
       element.style.color = '';
@@ -2013,9 +2037,17 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // Get the calendar's color from API cache (using event ID to determine calendar)
+      // Get the calendar stripe color - prefer stripe element (always accurate)
       const eventId = element.getAttribute('data-eventid');
-      const calendarColor = getCalendarColorForEvent(eventId);
+      const originalColor = getOriginalCalendarColor(element, eventId);
+
+      // Get the display color (already from DOM or transform from API)
+      let calendarColor = null;
+      if (originalColor) {
+        calendarColor = originalColor.isFromDom
+          ? originalColor.color
+          : apiColorToGoogleDisplayColor(originalColor.color);
+      }
 
       // Apply or clear background color
       if (background) {
@@ -2153,6 +2185,202 @@
     const g = Math.round(adjust(rgb.g)).toString(16).padStart(2, '0');
     const b = Math.round(adjust(rgb.b)).toString(16).padStart(2, '0');
     return `#${r}${g}${b}`;
+  }
+
+  /**
+   * Capture the original DOM background color from an event element
+   * This should be called BEFORE any custom colors are applied
+   * @param {HTMLElement} element - The event element
+   * @param {string} eventId - The event ID
+   * @returns {string|null} The captured hex color or null
+   */
+  function captureOriginalDomColor(element, eventId) {
+    if (!element || !eventId) return null;
+
+    // Already captured for this event - don't overwrite
+    if (originalDomColors[eventId]) {
+      return originalDomColors[eventId];
+    }
+
+    // If element already has our custom coloring, don't capture (it's not original)
+    if (element.dataset.cfEventColored || element.dataset.cfTempGoogleColor) {
+      return null;
+    }
+
+    // Get the computed background color from the DOM
+    const computedStyle = window.getComputedStyle(element);
+    let bgColor = computedStyle.backgroundColor;
+
+    // Skip if transparent or not set
+    if (!bgColor || bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') {
+      return null;
+    }
+
+    // Convert RGB to hex
+    const hexColor = rgbToHex(bgColor);
+    if (!hexColor) return null;
+
+    // Store the captured color
+    originalDomColors[eventId] = hexColor;
+    console.log('[EventColoring] Captured original DOM color:', eventId, '->', hexColor);
+
+    return hexColor;
+  }
+
+  /**
+   * Get the original DOM color for an event (if captured)
+   * @param {string} eventId - The event ID
+   * @returns {string|null} The stored hex color or null
+   */
+  function getOriginalDomColor(eventId) {
+    return originalDomColors[eventId] || null;
+  }
+
+  /**
+   * Get the calendar color from the stripe element (.jSrjCf)
+   * This is the most reliable source of the original Google display color
+   * because we never modify the stripe element.
+   * @param {HTMLElement} element - The event chip element
+   * @returns {string|null} The stripe color in hex or null
+   */
+  function getStripeColor(element) {
+    if (!element) return null;
+
+    // Find the stripe element within the event chip
+    const stripeEl = element.querySelector('.jSrjCf');
+    if (!stripeEl) return null;
+
+    // Get the computed background color
+    const computedStyle = window.getComputedStyle(stripeEl);
+    const bgColor = computedStyle.backgroundColor;
+
+    // Skip if transparent or not set
+    if (!bgColor || bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') {
+      return null;
+    }
+
+    // Convert RGB to hex
+    return rgbToHex(bgColor);
+  }
+
+  /**
+   * Get the best available original calendar color for an event
+   * Priority: 1) Stripe element (always accurate), 2) Captured DOM color, 3) API color with formula
+   * @param {HTMLElement} element - The event chip element
+   * @param {string} eventId - The event ID
+   * @returns {{color: string, isFromDom: boolean}|null}
+   */
+  function getOriginalCalendarColor(element, eventId) {
+    // Priority 1: Read from stripe element (most reliable, always accurate)
+    const stripeColor = getStripeColor(element);
+    if (stripeColor) {
+      return { color: stripeColor, isFromDom: true };
+    }
+
+    // Priority 2: Use captured DOM color
+    const capturedColor = getOriginalDomColor(eventId);
+    if (capturedColor) {
+      return { color: capturedColor, isFromDom: true };
+    }
+
+    // Priority 3: Fall back to API color (needs transformation)
+    const apiColor = getCalendarColorForEvent(eventId);
+    if (apiColor) {
+      return { color: apiColor, isFromDom: false };
+    }
+
+    return null;
+  }
+
+  /**
+   * Convert hex to HSL
+   * @param {string} hex - Hex color
+   * @returns {{h: number, s: number, l: number}}
+   */
+  function hexToHsl(hex) {
+    const rgb = hexToRgb(hex);
+    const r = rgb.r / 255;
+    const g = rgb.g / 255;
+    const b = rgb.b / 255;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+
+    return {
+      h: Math.round(h * 360),
+      s: Math.round(s * 100),
+      l: Math.round(l * 100)
+    };
+  }
+
+  /**
+   * Convert HSL to hex
+   * @param {number} h - Hue (0-360)
+   * @param {number} s - Saturation (0-100)
+   * @param {number} l - Lightness (0-100)
+   * @returns {string} Hex color
+   */
+  function hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+
+    let r, g, b;
+    if (h >= 0 && h < 60) { [r, g, b] = [c, x, 0]; }
+    else if (h >= 60 && h < 120) { [r, g, b] = [x, c, 0]; }
+    else if (h >= 120 && h < 180) { [r, g, b] = [0, c, x]; }
+    else if (h >= 180 && h < 240) { [r, g, b] = [0, x, c]; }
+    else if (h >= 240 && h < 300) { [r, g, b] = [x, 0, c]; }
+    else { [r, g, b] = [c, 0, x]; }
+
+    const toHex = (val) => Math.round((val + m) * 255).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
+  /**
+   * Convert Google Calendar API color to the actual display color
+   * Google Calendar internally transforms API colors before rendering.
+   *
+   * Transformation:
+   * - Hue: +14° (for saturated colors)
+   * - Saturation: × 0.64
+   * - Lightness: × (0.50 + saturation/100 × 0.40)
+   *
+   * @param {string} apiHex - Hex color from Google Calendar API
+   * @returns {string} Transformed hex color matching Google's display
+   */
+  function apiColorToGoogleDisplayColor(apiHex) {
+    if (!apiHex) return apiHex;
+
+    const hsl = hexToHsl(apiHex);
+    if (!hsl) return apiHex;
+
+    // Lightness multiplier based on saturation (less saturated = more darkening)
+    const lMultiplier = 0.50 + (hsl.s / 100) * 0.40;
+
+    // For saturated colors, shift hue and reduce saturation
+    const newH = hsl.s > 0 ? (hsl.h + 14) % 360 : hsl.h;
+    const newS = hsl.s * 0.64;
+    const newL = Math.max(0, Math.min(100, hsl.l * lMultiplier));
+
+    return hslToHex(newH, newS, newL);
   }
 
   // ========================================
