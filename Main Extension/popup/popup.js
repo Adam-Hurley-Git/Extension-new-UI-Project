@@ -8663,8 +8663,12 @@ Would you like to refresh all Google Calendar tabs?`;
     const calendar = eventCalendarsList.find(c => c.id === calendarId);
     showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} color cleared for "${calendar?.name || calendarId}"`);
 
-    // Notify content script
-    broadcastEventCalendarColorChange();
+    // Force page refresh on calendar tabs to show cleared state correctly
+    chrome.tabs.query({ url: 'https://calendar.google.com/*' }, (tabs) => {
+      tabs.forEach((tab) => {
+        chrome.tabs.reload(tab.id);
+      });
+    });
   }
 
   // Update preview card and swatches without rebuilding the entire list
