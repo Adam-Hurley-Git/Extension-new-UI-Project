@@ -341,6 +341,10 @@
         background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       }
 
+      .section.event-coloring-section .section-icon {
+        background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%);
+      }
+
       .section.reset-section .section-icon {
         background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
       }
@@ -5464,12 +5468,17 @@
                 </svg>
                 <h3><span class="section-icon">🎨</span>Event Coloring</h3>
               </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="eventColoringToggle" checked />
-                <span class="toggle-slider"></span>
-              </label>
             </div>
             <div class="section-content">
+              <!-- Enable Toggle -->
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 10px 12px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e8eaed;">
+                <span style="font-size: 13px; font-weight: 500; color: #202124;">Enable Event Coloring</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="eventColoringToggle" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
               <!-- Info box -->
               <div
                 id="eventColoringInfoCard"
