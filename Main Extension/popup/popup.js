@@ -8391,7 +8391,7 @@ Would you like to refresh all Google Calendar tabs?`;
             <div class="event-calendar-color-row" data-type="text">
               <div class="event-calendar-color-label">Text Color</div>
               <div class="event-calendar-color-actions">
-                <div class="event-calendar-color-preview ${textColor ? 'has-color' : ''}" style="${textColor ? `background-color: ${textColor};` : ''}" data-type="text" data-calendar-id="${calendar.id}"></div>
+                <div class="event-calendar-color-preview ${textColor ? 'has-color' : 'computed'}" style="background-color: ${previewText};" data-type="text" data-calendar-id="${calendar.id}"></div>
                 ${textColor ? `<button class="event-calendar-clear-btn" data-type="text" data-calendar-id="${calendar.id}">Clear</button>` : ''}
               </div>
             </div>
@@ -8731,10 +8731,31 @@ Would you like to refresh all Google Calendar tabs?`;
     if (detailsPreview) {
       if (color) {
         detailsPreview.classList.add('has-color');
+        detailsPreview.classList.remove('computed');
         detailsPreview.style.backgroundColor = color;
+      } else if (type === 'text') {
+        // For text color, show the computed contrast color when no custom color is set
+        const bgColor = colors.background || googleBgColor;
+        const computedTextColor = getContrastColor(bgColor);
+        detailsPreview.classList.remove('has-color');
+        detailsPreview.classList.add('computed');
+        detailsPreview.style.backgroundColor = computedTextColor;
       } else {
         detailsPreview.classList.remove('has-color');
+        detailsPreview.classList.remove('computed');
         detailsPreview.style.backgroundColor = '';
+      }
+    }
+
+    // When background changes, also update the text color swatch if it's using computed color
+    if (type === 'background' && !colors.text) {
+      const textPreview = item.querySelector('.event-calendar-color-preview[data-type="text"]');
+      if (textPreview) {
+        const bgColor = color || googleBgColor;
+        const computedTextColor = getContrastColor(bgColor);
+        textPreview.classList.remove('has-color');
+        textPreview.classList.add('computed');
+        textPreview.style.backgroundColor = computedTextColor;
       }
     }
 
