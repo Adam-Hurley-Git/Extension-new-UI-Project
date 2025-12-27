@@ -1211,6 +1211,10 @@
       borderWidth: colorData?.borderWidth ?? calendarDefaults?.borderWidth ?? 2,
     };
 
+    console.log('[EventColoring] openCustomColorModal - colorData:', colorData);
+    console.log('[EventColoring] openCustomColorModal - calendarDefaults:', calendarDefaults);
+    console.log('[EventColoring] openCustomColorModal - currentColors to pass to modal:', currentColors);
+
     // Get original event colors from DOM for accurate preview
     const domColors = getEventColorsFromDOM(eventId);
     const originalColors = {
