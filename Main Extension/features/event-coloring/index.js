@@ -1886,6 +1886,7 @@
         background: colorData,
         text: null,
         border: null,
+        borderWidth: null,
         hex: colorData,
         isRecurring: false,
       };
@@ -1897,6 +1898,7 @@
         background: colorData.hex,
         text: null,
         border: null,
+        borderWidth: colorData.borderWidth || null,
         hex: colorData.hex,
         isRecurring: colorData.isRecurring || false,
       };
@@ -1907,6 +1909,7 @@
       background: colorData.background || null,
       text: colorData.text || null,
       border: colorData.border || null,
+      borderWidth: colorData.borderWidth || null,
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
     };
