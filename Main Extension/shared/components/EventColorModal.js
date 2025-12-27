@@ -84,13 +84,19 @@ class EventColorModal {
    */
   constructor(options) {
     this.id = options.id || `ecm-${Date.now()}`;
+
+    console.log('[EventColorModal] Constructor called with options.currentColors:', options.currentColors);
+
     // Custom colors that have been set by user
     this.currentColors = {
       background: options.currentColors?.background || null,
       text: options.currentColors?.text || null,
       border: options.currentColors?.border || null,
-      borderWidth: options.currentColors?.borderWidth || 2, // Default 2px
+      borderWidth: options.currentColors?.borderWidth ?? 2, // Default 2px, use ?? to preserve 0
     };
+
+    console.log('[EventColorModal] Initialized currentColors:', JSON.stringify(this.currentColors));
+
     // Original event colors from DOM (for accurate preview when no custom color set)
     this.originalColors = {
       background: options.originalColors?.background || '#039be5',
@@ -101,6 +107,8 @@ class EventColorModal {
     this.eventTitle = options.eventTitle || 'Sample Event';
     // Working copy for live preview
     this.workingColors = { ...this.currentColors };
+
+    console.log('[EventColorModal] Initialized workingColors:', JSON.stringify(this.workingColors));
     this.onApply = options.onApply;
     this.onClose = options.onClose;
     this.container = options.container || document.body;
@@ -467,8 +475,12 @@ class EventColorModal {
         e.stopPropagation();
         const newWidth = parseInt(btn.dataset.width);
 
+        console.log('[EventColorModal] Thickness button clicked:', newWidth);
+
         // Update working colors
         this.workingColors.borderWidth = newWidth;
+
+        console.log('[EventColorModal] Updated workingColors.borderWidth to:', this.workingColors.borderWidth);
 
         // Update active states
         buttons.forEach((b) => b.classList.toggle('active', parseInt(b.dataset.width) === newWidth));
@@ -551,6 +563,8 @@ class EventColorModal {
 
     if (applyBtn) {
       applyBtn.addEventListener('click', () => {
+        console.log('[EventColorModal] Apply clicked, workingColors:', JSON.stringify(this.workingColors));
+        console.log('[EventColorModal] borderWidth value:', this.workingColors.borderWidth, 'type:', typeof this.workingColors.borderWidth);
         if (this.onApply) {
           this.onApply(this.workingColors);
         }
