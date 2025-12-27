@@ -3230,37 +3230,14 @@
         align-items: center;
       }
 
-      .google-color-preview-container {
-        display: flex;
-        gap: 2px;
-        border-radius: 4px;
-        overflow: hidden;
-        border: 1.5px solid #dadce0;
-        transition: all 0.15s ease;
-      }
-
-      .google-color-preview-container:hover {
-        transform: scale(1.05);
-        border-color: #f59e0b;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-      }
-
       .google-color-preview {
-        width: 18px;
+        width: 36px;
         height: 36px;
+        border-radius: 4px;
+        border: 1.5px solid #dadce0;
         cursor: pointer;
         transition: all 0.15s ease;
         flex-shrink: 0;
-        border: none;
-        border-radius: 0;
-      }
-
-      .google-color-preview.google-color-modern {
-        border-radius: 2px 0 0 2px;
-      }
-
-      .google-color-preview.google-color-classic {
-        border-radius: 0 2px 2px 0;
       }
 
       .google-color-preview:hover {
@@ -5623,8 +5600,22 @@
 
               <!-- Google Colors -->
               <div style="margin-top: 16px; margin-bottom: 16px;">
-                <div style="font-weight: 600; color: #202124; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-                  Google Color Labels
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <div style="font-weight: 600; color: #202124; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Google Color Labels
+                  </div>
+                  <select id="googleColorSchemeSelect" style="
+                    padding: 4px 8px;
+                    font-size: 11px;
+                    border: 1px solid #dadce0;
+                    border-radius: 4px;
+                    background: white;
+                    color: #5f6368;
+                    cursor: pointer;
+                  ">
+                    <option value="modern">Modern</option>
+                    <option value="classic">Classic</option>
+                  </select>
                 </div>
                 <div id="googleColorLabelsList" class="google-colors-grid" style="max-height: 200px; overflow-y: auto;">
                   <!-- Populated by JS -->

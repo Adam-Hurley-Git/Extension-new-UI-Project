@@ -8270,7 +8270,7 @@ Would you like to refresh all Google Calendar tabs?`;
   }
 
   // Render Google color labels
-  // Shows both Modern and Classic color swatches for each color name
+  // Uses the selected color scheme (Modern or Classic) to display swatches
   // Labels are stored using Modern hex as the key for consistency
   async function renderGoogleColorLabels() {
     const container = qs('googleColorLabelsList');
@@ -8278,40 +8278,42 @@ Would you like to refresh all Google Calendar tabs?`;
 
     const customLabels = eventColoringSettings.googleColorLabels || {};
 
+    // Get the selected color scheme
+    const schemeSelect = qs('googleColorSchemeSelect');
+    const selectedScheme = eventColoringSettings.googleColorScheme || 'modern';
+
+    // Set the dropdown value
+    if (schemeSelect) {
+      schemeSelect.value = selectedScheme;
+    }
+
+    // Choose color array based on scheme
+    const colors = selectedScheme === 'classic' ? GOOGLE_COLORS_CLASSIC : GOOGLE_COLORS_MODERN;
+
     container.innerHTML = '';
 
-    // Iterate using Modern colors as the reference (they define the canonical color names)
-    for (let i = 0; i < GOOGLE_COLORS_MODERN.length; i++) {
+    for (let i = 0; i < colors.length; i++) {
+      const color = colors[i];
       const modernColor = GOOGLE_COLORS_MODERN[i];
-      const classicColor = GOOGLE_COLORS_CLASSIC[i];
 
       // Always use Modern hex as the storage key for consistency
       const storageKey = modernColor.hex.toLowerCase();
-      const customLabel = customLabels[storageKey] || modernColor.default;
+      const customLabel = customLabels[storageKey] || color.default;
 
       const itemDiv = document.createElement('div');
       itemDiv.className = 'google-color-item';
       itemDiv.innerHTML = `
-        <div class="google-color-preview-container" style="display: flex; gap: 2px;">
-          <div
-            class="google-color-preview google-color-modern"
-            style="background-color: ${modernColor.hex}; border-radius: 4px 0 0 4px;"
-            title="Modern: ${modernColor.hex}"
-          ></div>
-          <div
-            class="google-color-preview google-color-classic"
-            style="background-color: ${classicColor.hex}; border-radius: 0 4px 4px 0;"
-            title="Classic: ${classicColor.hex}"
-          ></div>
-        </div>
+        <div
+          class="google-color-preview"
+          style="background-color: ${color.hex};"
+          title="${color.default}: ${color.hex}"
+        ></div>
         <input
           type="text"
           class="google-color-label-input"
           value="${escapeHtml(customLabel)}"
           data-color="${storageKey}"
-          data-color-modern="${modernColor.hex}"
-          data-color-classic="${classicColor.hex}"
-          placeholder="${modernColor.default}"
+          placeholder="${color.default}"
         />
       `;
 
@@ -8324,7 +8326,15 @@ Would you like to refresh all Google Calendar tabs?`;
       container.appendChild(itemDiv);
     }
 
-    debugLog('Google color labels rendered (with Modern + Classic swatches)');
+    debugLog('Google color labels rendered (scheme:', selectedScheme, ')');
+  }
+
+  // Handle color scheme change
+  async function handleColorSchemeChange(scheme) {
+    eventColoringSettings.googleColorScheme = scheme;
+    await window.cc3Storage.setGoogleColorScheme(scheme);
+    await renderGoogleColorLabels();
+    debugLog('Color scheme changed to:', scheme);
   }
 
   // Update Google color label
@@ -8965,6 +8975,14 @@ Would you like to refresh all Google Calendar tabs?`;
           }).catch(() => {});
         }
       });
+    });
+  }
+
+  // Color scheme selector (Modern vs Classic)
+  const colorSchemeSelect = qs('googleColorSchemeSelect');
+  if (colorSchemeSelect) {
+    colorSchemeSelect.addEventListener('change', async (e) => {
+      await handleColorSchemeChange(e.target.value);
     });
   }
 
