@@ -3230,14 +3230,37 @@
         align-items: center;
       }
 
-      .google-color-preview {
-        width: 36px;
-        height: 36px;
+      .google-color-preview-container {
+        display: flex;
+        gap: 2px;
         border-radius: 4px;
+        overflow: hidden;
         border: 1.5px solid #dadce0;
+        transition: all 0.15s ease;
+      }
+
+      .google-color-preview-container:hover {
+        transform: scale(1.05);
+        border-color: #f59e0b;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      }
+
+      .google-color-preview {
+        width: 18px;
+        height: 36px;
         cursor: pointer;
         transition: all 0.15s ease;
         flex-shrink: 0;
+        border: none;
+        border-radius: 0;
+      }
+
+      .google-color-preview.google-color-modern {
+        border-radius: 2px 0 0 2px;
+      }
+
+      .google-color-preview.google-color-classic {
+        border-radius: 0 2px 2px 0;
       }
 
       .google-color-preview:hover {
