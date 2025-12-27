@@ -1498,6 +1498,8 @@
             const storedParsed = EventIdUtils.fromEncoded(storedId);
             if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
               delete eventColors[storedId];
+              // Also remove from persistent storage
+              window.cc3Storage.removeEventColor(storedId);
             }
           } catch (e) {}
         });
@@ -1978,6 +1980,8 @@
             const storedParsed = EventIdUtils.fromEncoded(storedId);
             if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
               delete eventColors[storedId];
+              // Also remove from persistent storage
+              window.cc3Storage.removeEventColor(storedId);
             }
           } catch (e) {}
         });
