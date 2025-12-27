@@ -1195,10 +1195,20 @@
 
     // Get current custom colors for this event (support new format)
     const colorData = findColorForEvent(eventId);
+
+    // Get calendar default colors to merge with event colors
+    // This ensures we inherit borderWidth from calendar if event doesn't have one
+    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+
+    // Merge: event colors take precedence, calendar colors fill in gaps
+    // This is critical for borderWidth - if user hasn't set a manual borderWidth,
+    // we should show the calendar's borderWidth, not the default 2px
     const currentColors = {
       background: colorData?.background || colorData?.hex || null,
       text: colorData?.text || null,
       border: colorData?.border || null,
+      // Use event borderWidth, fall back to calendar borderWidth, then default to 2
+      borderWidth: colorData?.borderWidth ?? calendarDefaults?.borderWidth ?? 2,
     };
 
     // Get original event colors from DOM for accurate preview
@@ -1362,7 +1372,9 @@
       background: colors.background || null,
       text: colors.text || null,
       border: colors.border || null,
-      borderWidth: colors.borderWidth || null,
+      // Use null-coalescing to preserve the borderWidth value (even if it's falsy like 0)
+      // Only fall back to null if it's truly undefined/null
+      borderWidth: colors.borderWidth ?? null,
       hex: colors.background || null, // Backward compatibility
       isRecurring: false,
       appliedAt: Date.now(),
@@ -1389,7 +1401,8 @@
       background: colors.background || null,
       text: colors.text || null,
       border: colors.border || null,
-      borderWidth: colors.borderWidth || null,
+      // Use null-coalescing to preserve the borderWidth value
+      borderWidth: colors.borderWidth ?? null,
       hex: colors.background || null,
       isRecurring: applyToAll && parsed.isRecurring,
       appliedAt: Date.now(),
@@ -1422,12 +1435,19 @@
 
   /**
    * Apply full colors to an event element
+   * Merges with calendar defaults to ensure inherited properties (like border) are applied
    */
   function applyFullColorsToEvent(eventId, colors) {
+    // Get calendar default colors and merge - this ensures that if the user
+    // only changed borderWidth but not border color, we still apply the
+    // inherited border color from the calendar
+    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+    const mergedColors = mergeEventColors(colors, calendarDefaults);
+
     const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
     elements.forEach((element) => {
       if (!element.closest('[role="dialog"]')) {
-        applyFullColorsToElement(element, colors);
+        applyFullColorsToElement(element, mergedColors || colors);
       }
     });
   }
@@ -1876,6 +1896,7 @@
 
   /**
    * Normalize color data from storage (handles old and new formats)
+   * Preserves borderWidth if set, otherwise returns null to allow inheritance from calendar
    */
   function normalizeColorData(colorData) {
     if (!colorData) return null;
@@ -1886,7 +1907,7 @@
         background: colorData,
         text: null,
         border: null,
-        borderWidth: null,
+        borderWidth: null, // Allow inheritance from calendar
         hex: colorData,
         isRecurring: false,
       };
@@ -1898,18 +1919,20 @@
         background: colorData.hex,
         text: null,
         border: null,
-        borderWidth: colorData.borderWidth || null,
+        // Use null-coalescing to preserve 0 if somehow set, but treat undefined as null
+        borderWidth: colorData.borderWidth ?? null,
         hex: colorData.hex,
         isRecurring: colorData.isRecurring || false,
       };
     }
 
-    // New format - return as-is with defaults
+    // New format - return as-is with proper null handling
+    // Use null-coalescing (??) to preserve explicit values including 0
     return {
       background: colorData.background || null,
       text: colorData.text || null,
       border: colorData.border || null,
-      borderWidth: colorData.borderWidth || null,
+      borderWidth: colorData.borderWidth ?? null,
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
     };
