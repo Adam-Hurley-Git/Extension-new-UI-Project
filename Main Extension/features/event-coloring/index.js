@@ -1355,13 +1355,14 @@
   }
 
   /**
-   * Save full colors (bg/text/border) for a single event
+   * Save full colors (bg/text/border/borderWidth) for a single event
    */
   async function saveFullColors(eventId, colors) {
     const colorData = {
       background: colors.background || null,
       text: colors.text || null,
       border: colors.border || null,
+      borderWidth: colors.borderWidth || null,
       hex: colors.background || null, // Backward compatibility
       isRecurring: false,
       appliedAt: Date.now(),
@@ -1388,6 +1389,7 @@
       background: colors.background || null,
       text: colors.text || null,
       border: colors.border || null,
+      borderWidth: colors.borderWidth || null,
       hex: colors.background || null,
       isRecurring: applyToAll && parsed.isRecurring,
       appliedAt: Date.now(),
@@ -2010,8 +2012,8 @@
   /**
    * Merge manual event colors with calendar default colors
    * Manual colors take precedence for each property independently
-   * @param {Object|null} manualColors - { background, text, border } from event coloring
-   * @param {Object|null} calendarColors - { background, text, border } from calendar defaults
+   * @param {Object|null} manualColors - { background, text, border, borderWidth } from event coloring
+   * @param {Object|null} calendarColors - { background, text, border, borderWidth } from calendar defaults
    * @returns {Object|null} Merged colors or null if no colors
    */
   function mergeEventColors(manualColors, calendarColors) {
@@ -2020,10 +2022,12 @@
     if (!manualColors) return calendarColors;
 
     // Merge: manual takes precedence for each property
+    // For borderWidth: use manual if set, else calendar, else default 2
     return {
       background: manualColors.background || calendarColors.background || null,
       text: manualColors.text || calendarColors.text || null,
       border: manualColors.border || calendarColors.border || null,
+      borderWidth: manualColors.borderWidth || calendarColors.borderWidth || 2,
       // Preserve isRecurring from manual if present
       isRecurring: manualColors.isRecurring || false,
     };
