@@ -1957,8 +1957,20 @@
     }
   }
 
-  function applyStoredColors() {
+  async function applyStoredColors() {
     console.log('[EventColoring] Applying stored colors');
+
+    // Always refresh calendar default colors from storage to ensure we have the latest
+    // This handles cases where the broadcast message might not have been received
+    try {
+      const freshCalendarColors = await window.cc3Storage.getEventCalendarColors();
+      if (freshCalendarColors && Object.keys(freshCalendarColors).length > 0) {
+        calendarDefaultColors = freshCalendarColors;
+        console.log('[EventColoring] Refreshed calendar colors from storage:', JSON.stringify(calendarDefaultColors));
+      }
+    } catch (e) {
+      console.log('[EventColoring] Could not refresh calendar colors:', e);
+    }
 
     // Build lookup maps for manual colors
     const recurringEventColors = new Map(); // base event ID -> colors
