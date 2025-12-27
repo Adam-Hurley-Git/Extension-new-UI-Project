@@ -684,8 +684,55 @@ export class ColorPickerInjector {
     try {
       console.log('[CF] handleFullColorSelect:', { eventId, colors });
 
+      // Check if all colors are cleared (all null)
+      const allColorsCleared = !colors.background && !colors.text && !colors.border;
+
       // Check if this is a recurring event
       const parsed = EventIdUtils.fromEncoded(eventId);
+
+      if (allColorsCleared) {
+        console.log('[CF] All colors cleared, removing event color');
+
+        if (parsed.isRecurring) {
+          // For recurring events, show dialog to choose clear scope
+          showRecurringEventDialog({
+            eventId,
+            color: null, // No color for display (clearing)
+            onConfirm: async (applyToAll) => {
+              console.log('[CF] Recurring clear confirmed, applyToAll:', applyToAll);
+              // Remove the event color from storage
+              await this.storageService.removeEventColor(eventId);
+
+              // Close modal and menus
+              if (this.activeModal) {
+                this.activeModal.close();
+                this.activeModal = null;
+              }
+              this.closeMenus();
+
+              // Force page refresh to show cleared state
+              window.location.reload();
+            },
+            onClose: () => {
+              console.log('[CF] Recurring clear dialog closed');
+            },
+          });
+        } else {
+          // Single event - remove color and refresh
+          await this.storageService.removeEventColor(eventId);
+
+          // Close modal and menus
+          if (this.activeModal) {
+            this.activeModal.close();
+            this.activeModal = null;
+          }
+          this.closeMenus();
+
+          // Force page refresh to show cleared state
+          window.location.reload();
+        }
+        return;
+      }
 
       if (parsed.isRecurring) {
         // Show recurring event dialog with custom message for full colors
