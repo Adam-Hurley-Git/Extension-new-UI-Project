@@ -8986,21 +8986,85 @@ Would you like to refresh all Google Calendar tabs?`;
     });
   }
 
-  // Info toggle for event coloring
-  const eventColoringInfoToggle = qs('eventColoringInfoToggle');
-  if (eventColoringInfoToggle) {
-    eventColoringInfoToggle.addEventListener('click', () => {
-      const expanded = qs('eventColoringInfoExpanded');
-      if (expanded) {
-        const isHidden = expanded.style.display === 'none';
-        expanded.style.display = isHidden ? 'block' : 'none';
-
-        const chevron = eventColoringInfoToggle.querySelector('svg');
-        if (chevron) {
-          chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
-        }
+  // Calendar Colors info card toggle
+  const calendarColorsInfoToggle = qs('calendarColorsInfoToggle');
+  const calendarColorsInfoExpanded = qs('calendarColorsInfoExpanded');
+  if (calendarColorsInfoToggle && calendarColorsInfoExpanded) {
+    calendarColorsInfoToggle.onclick = (e) => {
+      e.preventDefault();
+      const isExpanded = calendarColorsInfoExpanded.style.display !== 'none';
+      if (isExpanded) {
+        calendarColorsInfoExpanded.style.display = 'none';
+        calendarColorsInfoToggle.innerHTML = `
+          See how to use
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transition: transform 0.2s ease;">
+            <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+      } else {
+        calendarColorsInfoExpanded.style.display = 'block';
+        calendarColorsInfoToggle.innerHTML = `
+          Hide
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transform: rotate(180deg); transition: transform 0.2s ease;">
+            <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
       }
-    });
+    };
+  }
+
+  // Google Color Labels info card toggle
+  const googleColorLabelsInfoToggle = qs('googleColorLabelsInfoToggle');
+  const googleColorLabelsInfoExpanded = qs('googleColorLabelsInfoExpanded');
+  if (googleColorLabelsInfoToggle && googleColorLabelsInfoExpanded) {
+    googleColorLabelsInfoToggle.onclick = (e) => {
+      e.preventDefault();
+      const isExpanded = googleColorLabelsInfoExpanded.style.display !== 'none';
+      if (isExpanded) {
+        googleColorLabelsInfoExpanded.style.display = 'none';
+        googleColorLabelsInfoToggle.innerHTML = `
+          See how to use
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transition: transform 0.2s ease;">
+            <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+      } else {
+        googleColorLabelsInfoExpanded.style.display = 'block';
+        googleColorLabelsInfoToggle.innerHTML = `
+          Hide
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transform: rotate(180deg); transition: transform 0.2s ease;">
+            <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+      }
+    };
+  }
+
+  // Event Coloring (Custom Categories) info card toggle
+  const eventColoringInfoToggle = qs('eventColoringInfoToggle');
+  const eventColoringInfoExpanded = qs('eventColoringInfoExpanded');
+  if (eventColoringInfoToggle && eventColoringInfoExpanded) {
+    eventColoringInfoToggle.onclick = (e) => {
+      e.preventDefault();
+      const isExpanded = eventColoringInfoExpanded.style.display !== 'none';
+      if (isExpanded) {
+        eventColoringInfoExpanded.style.display = 'none';
+        eventColoringInfoToggle.innerHTML = `
+          See how to use
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transition: transform 0.2s ease;">
+            <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+      } else {
+        eventColoringInfoExpanded.style.display = 'block';
+        eventColoringInfoToggle.innerHTML = `
+          Hide
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transform: rotate(180deg); transition: transform 0.2s ease;">
+            <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+      }
+    };
   }
 
   // Load event coloring settings on popup open
