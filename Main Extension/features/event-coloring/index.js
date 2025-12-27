@@ -373,8 +373,10 @@
     const buttonsContainer = document.createElement('div');
     buttonsContainer.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
 
-    const allEventsBtn = createDialogButton('All events in series', true);
-    const thisOnlyBtn = createDialogButton('This event only', false);
+    // mode can be: 'all', 'allExceptManual', 'single'
+    const allEventsBtn = createDialogButton('All events in series', 'all', true);
+    const allExceptManualBtn = createDialogButton('All except manually colored', 'allExceptManual', false);
+    const thisOnlyBtn = createDialogButton('This event only', 'single', false);
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
     cancelBtn.style.cssText = `
@@ -388,13 +390,13 @@
     `;
     cancelBtn.addEventListener('click', close);
 
-    function createDialogButton(text, applyToAll) {
+    function createDialogButton(text, mode, isPrimary) {
       const btn = document.createElement('button');
       btn.textContent = text;
       btn.style.cssText = `
-        background: ${applyToAll ? '#1a73e8' : 'white'};
-        color: ${applyToAll ? 'white' : '#1a73e8'};
-        border: ${applyToAll ? 'none' : '1px solid #1a73e8'};
+        background: ${isPrimary ? '#1a73e8' : 'white'};
+        color: ${isPrimary ? 'white' : '#1a73e8'};
+        border: ${isPrimary ? 'none' : '1px solid #1a73e8'};
         border-radius: 4px;
         padding: 12px 24px;
         font-size: 14px;
@@ -402,7 +404,7 @@
         cursor: pointer;
       `;
       btn.addEventListener('click', () => {
-        if (onConfirm) onConfirm(applyToAll);
+        if (onConfirm) onConfirm(mode);
         close();
       });
       return btn;
@@ -425,6 +427,7 @@
     document.addEventListener('keydown', handleKeyDown);
 
     buttonsContainer.appendChild(allEventsBtn);
+    buttonsContainer.appendChild(allExceptManualBtn);
     buttonsContainer.appendChild(thisOnlyBtn);
     buttonsContainer.appendChild(cancelBtn);
 
@@ -1304,11 +1307,37 @@
         showRecurringEventDialog({
           eventId,
           color: null, // No color for display (clearing)
-          onConfirm: async (applyToAll) => {
-            console.log('[EventColoring] Recurring clear confirmed, applyToAll:', applyToAll);
-            // Remove the event color from storage
-            await window.cc3Storage.removeEventColor(eventId);
-            delete eventColors[eventId];
+          onConfirm: async (mode) => {
+            console.log('[EventColoring] Recurring clear confirmed, mode:', mode);
+
+            const normalizedMode = mode === true ? 'all' : (mode === false ? 'single' : mode);
+            const applyToAll = normalizedMode === 'all' || normalizedMode === 'allExceptManual';
+            const preserveManualColors = normalizedMode === 'allExceptManual';
+
+            if (applyToAll) {
+              const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
+
+              // Remove the base recurring color
+              await window.cc3Storage.removeEventColor(baseStorageId);
+              delete eventColors[baseStorageId];
+
+              // Only remove individual instance colors if NOT preserving manual colors
+              if (!preserveManualColors) {
+                Object.keys(eventColors).forEach((storedId) => {
+                  try {
+                    const storedParsed = EventIdUtils.fromEncoded(storedId);
+                    if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
+                      delete eventColors[storedId];
+                      window.cc3Storage.removeEventColor(storedId);
+                    }
+                  } catch (e) {}
+                });
+              }
+            } else {
+              // Just remove this single instance color
+              await window.cc3Storage.removeEventColor(eventId);
+              delete eventColors[eventId];
+            }
 
             // Close modal and color picker
             if (activeColorModal) {
@@ -1348,9 +1377,9 @@
       showRecurringEventDialog({
         eventId,
         color: colors.background, // For display
-        onConfirm: async (applyToAll) => {
-          console.log('[EventColoring] Recurring confirmed for full colors, applyToAll:', applyToAll);
-          await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
+        onConfirm: async (mode) => {
+          console.log('[EventColoring] Recurring confirmed for full colors, mode:', mode);
+          await saveFullColorsWithRecurringSupport(eventId, colors, mode);
 
           // Update the Google color swatch before closing
           if (colors.background) {
@@ -1422,9 +1451,17 @@
 
   /**
    * Save full colors with recurring event support
+   * @param {string} eventId - The event ID
+   * @param {object} colors - Color data
+   * @param {string|boolean} mode - 'all', 'allExceptManual', 'single', or boolean for backwards compat
    */
-  async function saveFullColorsWithRecurringSupport(eventId, colors, applyToAll) {
+  async function saveFullColorsWithRecurringSupport(eventId, colors, mode) {
     const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Normalize mode for backwards compatibility (boolean -> string)
+    const normalizedMode = mode === true ? 'all' : (mode === false ? 'single' : mode);
+    const applyToAll = normalizedMode === 'all' || normalizedMode === 'allExceptManual';
+    const preserveManualColors = normalizedMode === 'allExceptManual';
 
     const colorData = {
       background: colors.background || null,
@@ -1454,15 +1491,17 @@
         await window.cc3Storage.saveEventColorAdvanced(eventId, colors.background, { applyToAll: true });
       }
 
-      // Clean up individual instance colors (cache was already updated at function start)
-      Object.keys(eventColors).forEach((storedId) => {
-        try {
-          const storedParsed = EventIdUtils.fromEncoded(storedId);
-          if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
-            delete eventColors[storedId];
-          }
-        } catch (e) {}
-      });
+      // Only clean up individual instance colors if NOT preserving manual colors
+      if (!preserveManualColors) {
+        Object.keys(eventColors).forEach((storedId) => {
+          try {
+            const storedParsed = EventIdUtils.fromEncoded(storedId);
+            if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
+              delete eventColors[storedId];
+            }
+          } catch (e) {}
+        });
+      }
     } else {
       await saveFullColors(eventId, colors);
     }
@@ -1841,9 +1880,9 @@
       showRecurringEventDialog({
         eventId,
         color: colorHex,
-        onConfirm: async (applyToAll) => {
-          console.log('[EventColoring] Recurring confirmed, applyToAll:', applyToAll);
-          await saveColorWithRecurringSupport(eventId, colorHex, applyToAll);
+        onConfirm: async (mode) => {
+          console.log('[EventColoring] Recurring confirmed, mode:', mode);
+          await saveColorWithRecurringSupport(eventId, colorHex, mode);
 
           // Update the Google color swatch before closing
           updateGoogleColorSwatch(eventId, colorHex);
@@ -1904,8 +1943,19 @@
     }
   }
 
-  async function saveColorWithRecurringSupport(eventId, colorHex, applyToAll) {
+  /**
+   * Save color with recurring event support
+   * @param {string} eventId - The event ID
+   * @param {string} colorHex - Hex color value
+   * @param {string|boolean} mode - 'all', 'allExceptManual', 'single', or boolean for backwards compat
+   */
+  async function saveColorWithRecurringSupport(eventId, colorHex, mode) {
     const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Normalize mode for backwards compatibility (boolean -> string)
+    const normalizedMode = mode === true ? 'all' : (mode === false ? 'single' : mode);
+    const applyToAll = normalizedMode === 'all' || normalizedMode === 'allExceptManual';
+    const preserveManualColors = normalizedMode === 'allExceptManual';
 
     if (applyToAll && parsed.isRecurring) {
       // Store under base ID for recurring events
@@ -1921,15 +1971,17 @@
       // Update local cache
       eventColors[baseStorageId] = { hex: colorHex, isRecurring: true, appliedAt: Date.now() };
 
-      // Clean up individual instance colors
-      Object.keys(eventColors).forEach((storedId) => {
-        try {
-          const storedParsed = EventIdUtils.fromEncoded(storedId);
-          if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
-            delete eventColors[storedId];
-          }
-        } catch (e) {}
-      });
+      // Only clean up individual instance colors if NOT preserving manual colors
+      if (!preserveManualColors) {
+        Object.keys(eventColors).forEach((storedId) => {
+          try {
+            const storedParsed = EventIdUtils.fromEncoded(storedId);
+            if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
+              delete eventColors[storedId];
+            }
+          } catch (e) {}
+        });
+      }
     } else {
       await window.cc3Storage.saveEventColor(eventId, colorHex, false);
       eventColors[eventId] = { hex: colorHex, isRecurring: false, appliedAt: Date.now() };
