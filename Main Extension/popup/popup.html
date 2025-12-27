@@ -5556,24 +5556,6 @@
                 </div>
               </div>
 
-              <!-- Quick Actions -->
-              <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                <button class="primary-btn" id="addEventColorCategoryBtn" style="flex: 1; padding: 8px 12px; font-size: 12px;">
-                  + New Category
-                </button>
-                <label class="checkbox-label" style="flex: 1; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; margin: 0;">
-                  <input type="checkbox" id="disableCustomColorsCheckbox" style="cursor: pointer; margin: 0;" />
-                  <span style="white-space: nowrap;">Hide custom</span>
-                </label>
-              </div>
-
-              <!-- Categories List -->
-              <div id="eventColorCategoriesList" style="margin-bottom: 16px;">
-                <div style="padding: 20px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
-                  No categories. Click "New Category" to start.
-                </div>
-              </div>
-
               <!-- Calendar Colors Section -->
               <div style="margin-top: 16px; margin-bottom: 16px;">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -5612,12 +5594,30 @@
               </div>
 
               <!-- Google Colors -->
-              <div style="margin-top: 16px;">
+              <div style="margin-top: 16px; margin-bottom: 16px;">
                 <div style="font-weight: 600; color: #202124; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
                   Google Color Labels
                 </div>
                 <div id="googleColorLabelsList" class="google-colors-grid" style="max-height: 200px; overflow-y: auto;">
                   <!-- Populated by JS -->
+                </div>
+              </div>
+
+              <!-- Quick Actions -->
+              <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                <button class="primary-btn" id="addEventColorCategoryBtn" style="flex: 1; padding: 8px 12px; font-size: 12px;">
+                  + New Category
+                </button>
+                <label class="checkbox-label" style="flex: 1; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; margin: 0;">
+                  <input type="checkbox" id="disableCustomColorsCheckbox" style="cursor: pointer; margin: 0;" />
+                  <span style="white-space: nowrap;">Hide custom</span>
+                </label>
+              </div>
+
+              <!-- Categories List -->
+              <div id="eventColorCategoriesList">
+                <div style="padding: 20px; text-align: center; color: #9aa0a6; font-size: 12px; background: #f8f9fa; border-radius: 6px;">
+                  No categories. Click "New Category" to start.
                 </div>
               </div>
             </div>
