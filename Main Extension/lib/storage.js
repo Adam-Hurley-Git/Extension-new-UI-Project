@@ -1374,16 +1374,16 @@
   /**
    * Save event color with recurring event support
    * When saving a recurring event with applyToAll=true, stores under base event ID
-   * and cleans up individual instance colors
+   * and cleans up individual instance colors (unless preserveInstanceColors=true)
    * @param {string} eventId - Calendar event ID
    * @param {string} colorHex - Color hex code (legacy single color)
-   * @param {Object} options - Options { applyToAll: boolean }
+   * @param {Object} options - Options { applyToAll: boolean, preserveInstanceColors: boolean }
    * @returns {Promise<void>}
    */
   async function saveEventColorAdvanced(eventId, colorHex, options = {}) {
     if (!eventId || !colorHex) return;
 
-    const { applyToAll = false } = options;
+    const { applyToAll = false, preserveInstanceColors = false } = options;
 
     return new Promise((resolve) => {
       chrome.storage.local.get('cf.eventColors', (result) => {
@@ -1401,6 +1401,7 @@
             emailSuffix: parsed.emailSuffix,
             storageId: baseStorageId,
             color: colorHex,
+            preserveInstanceColors,
           });
 
           // Save with recurring flag
@@ -1410,17 +1411,19 @@
             appliedAt: Date.now(),
           };
 
-          // Clean up any individual instance colors for this recurring event
-          Object.keys(eventColors).forEach((storedId) => {
-            try {
-              const storedParsed = parseEventId(storedId);
-              if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
-                delete eventColors[storedId];
+          // Only clean up individual instance colors if NOT preserving them
+          if (!preserveInstanceColors) {
+            Object.keys(eventColors).forEach((storedId) => {
+              try {
+                const storedParsed = parseEventId(storedId);
+                if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
+                  delete eventColors[storedId];
+                }
+              } catch (e) {
+                // Skip invalid IDs
               }
-            } catch (e) {
-              // Skip invalid IDs
-            }
-          });
+            });
+          }
         } else {
           // Single event or single instance
           eventColors[eventId] = {
@@ -1441,16 +1444,16 @@
    * Save event colors with full background/text/border/borderWidth support
    * @param {string} eventId - Calendar event ID
    * @param {Object} colors - Colors { background, text, border, borderWidth }
-   * @param {Object} options - Options { applyToAll: boolean }
+   * @param {Object} options - Options { applyToAll: boolean, preserveInstanceColors: boolean }
    * @returns {Promise<void>}
    */
   async function saveEventColorsFullAdvanced(eventId, colors, options = {}) {
     if (!eventId) return;
 
-    console.log('[Storage] saveEventColorsFullAdvanced called:', { eventId: eventId.slice(0, 30) + '...', colors });
+    console.log('[Storage] saveEventColorsFullAdvanced called:', { eventId: eventId.slice(0, 30) + '...', colors, options });
     console.log('[Storage] colors.borderWidth:', colors.borderWidth, 'type:', typeof colors.borderWidth);
 
-    const { applyToAll = false } = options;
+    const { applyToAll = false, preserveInstanceColors = false } = options;
 
     return new Promise((resolve) => {
       chrome.storage.local.get('cf.eventColors', (result) => {
@@ -1483,22 +1486,26 @@
             emailSuffix: parsed.emailSuffix,
             storageId: baseStorageId,
             colors,
+            preserveInstanceColors,
           });
 
           colorData.isRecurring = true;
           eventColors[baseStorageId] = colorData;
 
-          // Clean up any individual instance colors for this recurring event
-          Object.keys(eventColors).forEach((storedId) => {
-            try {
-              const storedParsed = parseEventId(storedId);
-              if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
-                delete eventColors[storedId];
+          // Only clean up individual instance colors if NOT preserving them
+          // preserveInstanceColors=true means "All except manually colored" option
+          if (!preserveInstanceColors) {
+            Object.keys(eventColors).forEach((storedId) => {
+              try {
+                const storedParsed = parseEventId(storedId);
+                if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
+                  delete eventColors[storedId];
+                }
+              } catch (e) {
+                // Skip invalid IDs
               }
-            } catch (e) {
-              // Skip invalid IDs
-            }
-          });
+            });
+          }
         } else {
           // Single event or single instance
           eventColors[eventId] = colorData;

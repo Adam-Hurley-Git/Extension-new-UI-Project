@@ -1485,21 +1485,28 @@
     if (applyToAll && parsed.isRecurring) {
       const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
 
+      // Pass preserveInstanceColors flag to storage - this tells storage whether to
+      // clean up instance colors or preserve them ("All except manually colored" mode)
       if (window.cc3Storage.saveEventColorsFullAdvanced) {
-        await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: true });
+        await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, {
+          applyToAll: true,
+          preserveInstanceColors: preserveManualColors,
+        });
       } else if (window.cc3Storage.saveEventColorAdvanced) {
-        await window.cc3Storage.saveEventColorAdvanced(eventId, colors.background, { applyToAll: true });
+        await window.cc3Storage.saveEventColorAdvanced(eventId, colors.background, {
+          applyToAll: true,
+          preserveInstanceColors: preserveManualColors,
+        });
       }
 
-      // Only clean up individual instance colors if NOT preserving manual colors
+      // Local cache cleanup - only needed if NOT preserving manual colors
+      // Note: Storage already handles this, but we also update local cache for immediate effect
       if (!preserveManualColors) {
         Object.keys(eventColors).forEach((storedId) => {
           try {
             const storedParsed = EventIdUtils.fromEncoded(storedId);
             if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
               delete eventColors[storedId];
-              // Also remove from persistent storage
-              window.cc3Storage.removeEventColor(storedId);
             }
           } catch (e) {}
         });
@@ -1963,9 +1970,12 @@
       // Store under base ID for recurring events
       const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
 
-      // Use advanced storage if available
+      // Use advanced storage if available, passing preserveInstanceColors flag
       if (window.cc3Storage.saveEventColorAdvanced) {
-        await window.cc3Storage.saveEventColorAdvanced(eventId, colorHex, { applyToAll: true });
+        await window.cc3Storage.saveEventColorAdvanced(eventId, colorHex, {
+          applyToAll: true,
+          preserveInstanceColors: preserveManualColors,
+        });
       } else {
         await window.cc3Storage.saveEventColor(baseStorageId, colorHex, true);
       }
@@ -1973,15 +1983,14 @@
       // Update local cache
       eventColors[baseStorageId] = { hex: colorHex, isRecurring: true, appliedAt: Date.now() };
 
-      // Only clean up individual instance colors if NOT preserving manual colors
+      // Local cache cleanup - only needed if NOT preserving manual colors
+      // Note: Storage already handles this via preserveInstanceColors flag
       if (!preserveManualColors) {
         Object.keys(eventColors).forEach((storedId) => {
           try {
             const storedParsed = EventIdUtils.fromEncoded(storedId);
             if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
               delete eventColors[storedId];
-              // Also remove from persistent storage
-              window.cc3Storage.removeEventColor(storedId);
             }
           } catch (e) {}
         });
