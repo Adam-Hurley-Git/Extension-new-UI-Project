@@ -1387,7 +1387,7 @@
           }
 
           closeColorPicker();
-          refreshColors();
+          await refreshColors();
         },
         onClose: () => {
           console.log('[EventColoring] Recurring dialog closed');
@@ -1897,7 +1897,7 @@
           updateGoogleColorSwatch(eventId, colorHex);
 
           closeColorPicker();
-          refreshColors();
+          await refreshColors();
         },
         onClose: () => {
           console.log('[EventColoring] Recurring dialog closed');
@@ -2075,7 +2075,7 @@
   async function refreshColors() {
     eventColors = await window.cc3Storage.getAllEventColors();
     calendarDefaultColors = await window.cc3Storage.getEventCalendarColors();
-    applyStoredColors();
+    await applyStoredColors();
 
     // Also update the color swatch if we're in an event editor
     const currentEventId = lastClickedEventId || getEventIdFromContext();
