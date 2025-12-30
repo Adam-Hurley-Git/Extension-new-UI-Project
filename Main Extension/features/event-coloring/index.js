@@ -821,19 +821,6 @@
     separator.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.SEPARATOR;
     parentContainer.appendChild(separator);
 
-    // Get unassigned templates (not assigned to any category)
-    const unassignedTemplates = Object.values(templates)
-      .filter(t => !t.categoryId)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-    // Add templates section if there are unassigned templates
-    if (unassignedTemplates.length > 0) {
-      const templatesSection = createTemplatesSection(unassignedTemplates, colorPickerElement, scenario);
-      if (templatesSection) {
-        parentContainer.appendChild(templatesSection);
-      }
-    }
-
     // Add categories
     const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
 
@@ -843,6 +830,11 @@
         .filter(t => t.categoryId === categoryId)
         .sort((a, b) => (a.order || 0) - (b.order || 0));
     };
+
+    // Get unassigned templates (not assigned to any category)
+    const unassignedTemplates = Object.values(templates)
+      .filter(t => !t.categoryId)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
 
     const hasContent = categoriesArray.length > 0 || unassignedTemplates.length > 0;
 
@@ -861,6 +853,7 @@
       `;
       parentContainer.appendChild(emptyState);
     } else {
+      // Add categories first
       categoriesArray.forEach((category) => {
         const categoryTemplates = getTemplatesForCategory(category.id);
         const section = createCategorySection(category, categoryTemplates, colorPickerElement, scenario);
@@ -868,6 +861,14 @@
           parentContainer.appendChild(section);
         }
       });
+
+      // Add unassigned templates section at the bottom (after categories)
+      if (unassignedTemplates.length > 0) {
+        const templatesSection = createTemplatesSection(unassignedTemplates, colorPickerElement, scenario);
+        if (templatesSection) {
+          parentContainer.appendChild(templatesSection);
+        }
+      }
     }
 
     // Add "Custom Color" section with "+" button for full color picker
