@@ -8337,16 +8337,32 @@ Would you like to refresh all Google Calendar tabs?`;
   function openTemplateEditorModal(existingTemplate = null) {
     const isEdit = !!existingTemplate;
 
-    // Current template state
+    // Current template state - start with null/empty values for new templates
+    // This allows partial templates (e.g., only setting border color)
     const templateState = existingTemplate ? { ...existingTemplate } : {
       id: null,
       name: '',
-      background: '#1a73e8',
-      text: '#ffffff',
-      border: '#1557b0',
-      borderWidth: 2,
+      background: null,
+      text: null,
+      border: null,
+      borderWidth: null,
       categoryId: null
     };
+
+    // Helper to get display color (for preview/swatches when value is null)
+    const getDisplayColor = (type) => {
+      if (templateState[type]) return templateState[type];
+      // Return placeholder colors for preview
+      switch(type) {
+        case 'background': return '#e8eaed';
+        case 'text': return '#5f6368';
+        case 'border': return '#dadce0';
+        default: return '#e8eaed';
+      }
+    };
+
+    // Check if a color is set (not null)
+    const isColorSet = (type) => templateState[type] !== null;
 
     // Track which color property is currently being edited
     let activeColorType = null;
@@ -8408,14 +8424,14 @@ Would you like to refresh all Google Calendar tabs?`;
 
         <!-- Live Preview -->
         <div class="form-group" style="margin-bottom: 16px;">
-          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Preview</label>
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Preview <span style="font-weight: 400; color: #999;">(gray = unchanged)</span></label>
           <div id="templateLivePreview" style="
             padding: 10px 14px;
             border-radius: 6px;
-            background: ${templateState.background};
-            color: ${templateState.text};
-            outline: ${templateState.borderWidth}px solid ${templateState.border};
-            outline-offset: -${Math.round(templateState.borderWidth * 0.3)}px;
+            background: ${templateState.background || '#e8eaed'};
+            color: ${templateState.text || '#5f6368'};
+            outline: ${templateState.borderWidth ?? 0}px solid ${templateState.border || '#dadce0'};
+            outline-offset: -${Math.round((templateState.borderWidth ?? 0) * 0.3)}px;
             font-size: 12px;
             font-weight: 500;
           ">
@@ -8426,7 +8442,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
         <!-- Color Swatches Row -->
         <div class="form-group" style="margin-bottom: 16px;">
-          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 8px;">Colors</label>
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 8px;">Colors <span style="font-weight: 400; color: #999;">(click to set, empty = no change)</span></label>
           <div style="display: flex; gap: 12px; align-items: center;">
             <!-- Background Swatch -->
             <div style="text-align: center;">
@@ -8434,11 +8450,12 @@ Would you like to refresh all Google Calendar tabs?`;
                 width: 36px;
                 height: 36px;
                 border-radius: 6px;
-                background: ${templateState.background};
-                border: 2px solid #e0e0e0;
+                background: ${templateState.background || 'repeating-linear-gradient(-45deg, #f0f0f0, #f0f0f0 4px, #fff 4px, #fff 8px)'};
+                border: 2px ${templateState.background ? 'solid' : 'dashed'} #e0e0e0;
                 cursor: pointer;
                 transition: all 0.15s;
-              " title="Background Color"></div>
+                position: relative;
+              " title="Background Color${templateState.background ? '' : ' (not set)'}"></div>
               <div style="font-size: 9px; color: #666; margin-top: 4px;">BG</div>
             </div>
             <!-- Text Swatch -->
@@ -8447,11 +8464,11 @@ Would you like to refresh all Google Calendar tabs?`;
                 width: 36px;
                 height: 36px;
                 border-radius: 6px;
-                background: ${templateState.text};
-                border: 2px solid #e0e0e0;
+                background: ${templateState.text || 'repeating-linear-gradient(-45deg, #f0f0f0, #f0f0f0 4px, #fff 4px, #fff 8px)'};
+                border: 2px ${templateState.text ? 'solid' : 'dashed'} #e0e0e0;
                 cursor: pointer;
                 transition: all 0.15s;
-              " title="Text Color"></div>
+              " title="Text Color${templateState.text ? '' : ' (not set)'}"></div>
               <div style="font-size: 9px; color: #666; margin-top: 4px;">Text</div>
             </div>
             <!-- Border Swatch -->
@@ -8460,11 +8477,11 @@ Would you like to refresh all Google Calendar tabs?`;
                 width: 36px;
                 height: 36px;
                 border-radius: 6px;
-                background: ${templateState.border};
-                border: 2px solid #e0e0e0;
+                background: ${templateState.border || 'repeating-linear-gradient(-45deg, #f0f0f0, #f0f0f0 4px, #fff 4px, #fff 8px)'};
+                border: 2px ${templateState.border ? 'solid' : 'dashed'} #e0e0e0;
                 cursor: pointer;
                 transition: all 0.15s;
-              " title="Border Color"></div>
+              " title="Border Color${templateState.border ? '' : ' (not set)'}"></div>
               <div style="font-size: 9px; color: #666; margin-top: 4px;">Border</div>
             </div>
           </div>
@@ -8504,8 +8521,9 @@ Would you like to refresh all Google Calendar tabs?`;
 
         <!-- Border Width -->
         <div class="form-group" style="margin-bottom: 16px;">
-          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 6px;">Border Width</label>
-          <div class="template-thickness-buttons" style="display: flex; gap: 4px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 6px;">Border Width <span style="font-weight: 400; color: #999;">(None = no change)</span></label>
+          <div class="template-thickness-buttons" style="display: flex; gap: 4px; flex-wrap: wrap;">
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === null ? ' active' : ''}" data-width="none" style="padding: 6px 10px; background: ${templateState.borderWidth === null ? '#fef3c7' : '#fff'}; color: ${templateState.borderWidth === null ? '#d97706' : '#5f6368'}; border: 1px ${templateState.borderWidth === null ? 'solid #d97706' : 'dashed #dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">None</button>
             <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 0 ? ' active' : ''}" data-width="0" style="padding: 6px 10px; background: ${templateState.borderWidth === 0 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 0 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 0 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">0px</button>
             <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 1 ? ' active' : ''}" data-width="1" style="padding: 6px 10px; background: ${templateState.borderWidth === 1 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 1 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 1 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">1px</button>
             <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 2 ? ' active' : ''}" data-width="2" style="padding: 6px 10px; background: ${templateState.borderWidth === 2 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 2 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 2 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">2px</button>
@@ -8550,18 +8568,76 @@ Would you like to refresh all Google Calendar tabs?`;
 
     // Update preview function
     function updatePreview() {
-      preview.style.background = templateState.background;
-      preview.style.color = templateState.text;
-      preview.style.outline = `${templateState.borderWidth}px solid ${templateState.border}`;
-      preview.style.outlineOffset = `-${Math.round(templateState.borderWidth * 0.3)}px`;
+      preview.style.background = templateState.background || '#e8eaed';
+      preview.style.color = templateState.text || '#5f6368';
+      const bw = templateState.borderWidth ?? 0;
+      preview.style.outline = `${bw}px solid ${templateState.border || '#dadce0'}`;
+      preview.style.outlineOffset = `-${Math.round(bw * 0.3)}px`;
     }
 
     // Update swatch colors
     function updateSwatches() {
       modal.querySelectorAll('.template-color-swatch').forEach(swatch => {
         const type = swatch.dataset.type;
-        swatch.style.background = templateState[type];
+        const color = templateState[type];
+        if (color) {
+          swatch.style.background = color;
+          swatch.style.border = '2px solid #e0e0e0';
+        } else {
+          // Show striped pattern for unset colors
+          swatch.style.background = 'repeating-linear-gradient(-45deg, #f0f0f0, #f0f0f0 4px, #fff 4px, #fff 8px)';
+          swatch.style.border = '2px dashed #e0e0e0';
+        }
       });
+    }
+
+    // Update border width buttons
+    function updateThicknessButtons() {
+      modal.querySelectorAll('.tmpl-thickness-btn').forEach(btn => {
+        const width = btn.dataset.width;
+        const isActive = (width === 'none' && templateState.borderWidth === null) ||
+                        (width !== 'none' && templateState.borderWidth === parseInt(width));
+        if (width === 'none') {
+          btn.style.background = isActive ? '#fef3c7' : '#fff';
+          btn.style.color = isActive ? '#d97706' : '#5f6368';
+          btn.style.border = isActive ? '1px solid #d97706' : '1px dashed #dadce0';
+        } else {
+          btn.style.background = isActive ? '#e8f0fe' : '#fff';
+          btn.style.color = isActive ? '#1a73e8' : '#5f6368';
+          btn.style.border = `1px solid ${isActive ? '#1a73e8' : '#dadce0'}`;
+        }
+      });
+    }
+
+    // Create "None" swatch (to clear/unset color)
+    function createNoneSwatch(container) {
+      const swatch = document.createElement('div');
+      swatch.style.cssText = `
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        background: repeating-linear-gradient(-45deg, #f0f0f0, #f0f0f0 3px, #fff 3px, #fff 6px);
+        border: 1px dashed #d97706;
+        cursor: pointer;
+        transition: all 0.15s;
+        position: relative;
+      `;
+      swatch.title = 'None (no change)';
+      swatch.dataset.color = 'none';
+      // Add a small "x" or slash indicator
+      swatch.innerHTML = '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 10px; color: #d97706; font-weight: bold;">∅</div>';
+      swatch.addEventListener('mouseenter', () => {
+        swatch.style.transform = 'scale(1.15)';
+        swatch.style.borderColor = '#b45309';
+      });
+      swatch.addEventListener('mouseleave', () => {
+        swatch.style.transform = 'scale(1)';
+        swatch.style.borderColor = '#d97706';
+      });
+      swatch.addEventListener('click', () => {
+        selectColor(null);
+      });
+      container.appendChild(swatch);
     }
 
     // Create color swatch
@@ -8598,21 +8674,36 @@ Would you like to refresh all Google Calendar tabs?`;
     const darkPaletteEl = modal.querySelector('.dark-palette');
     const customPaletteEl = modal.querySelector('.custom-palette');
 
+    // Add "None" swatch first in each palette
+    createNoneSwatch(vibrantPaletteEl);
+    createNoneSwatch(pastelPaletteEl);
+    createNoneSwatch(darkPaletteEl);
+    createNoneSwatch(customPaletteEl);
+
     colorPickerPalette.forEach(color => createSwatch(color, vibrantPaletteEl));
     pastelPalette.forEach(color => createSwatch(color, pastelPaletteEl));
     darkPalette.forEach(color => createSwatch(color, darkPaletteEl));
     customColors.forEach(color => createSwatch(color, customPaletteEl));
 
     if (customColors.length === 0) {
-      customPaletteEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #999; font-size: 11px; padding: 8px;">No custom colors saved yet</div>';
+      // Keep the None swatch, just add a note
+      const note = document.createElement('div');
+      note.style.cssText = 'grid-column: 2/-1; text-align: left; color: #999; font-size: 10px; padding: 4px;';
+      note.textContent = 'No custom colors yet';
+      customPaletteEl.appendChild(note);
     }
 
     // Select color function
     function selectColor(color) {
       if (!activeColorType) return;
       templateState[activeColorType] = color;
-      directColorInput.value = color;
-      hexInput.value = color.toUpperCase();
+      if (color) {
+        directColorInput.value = color;
+        hexInput.value = color.toUpperCase();
+      } else {
+        directColorInput.value = '#cccccc';
+        hexInput.value = '';
+      }
       updatePreview();
       updateSwatches();
     }
@@ -8622,8 +8713,14 @@ Would you like to refresh all Google Calendar tabs?`;
       activeColorType = type;
       const labels = { background: 'Background Color', text: 'Text Color', border: 'Border Color' };
       pickerLabel.textContent = labels[type];
-      directColorInput.value = templateState[type];
-      hexInput.value = templateState[type].toUpperCase();
+      const currentColor = templateState[type];
+      if (currentColor) {
+        directColorInput.value = currentColor;
+        hexInput.value = currentColor.toUpperCase();
+      } else {
+        directColorInput.value = '#cccccc';
+        hexInput.value = '';
+      }
       colorPickerPanel.style.display = 'block';
 
       // Highlight active swatch
@@ -8686,17 +8783,11 @@ Would you like to refresh all Google Calendar tabs?`;
     // Border width buttons
     modal.querySelectorAll('.tmpl-thickness-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const width = parseInt(btn.dataset.width, 10);
+        const widthStr = btn.dataset.width;
+        const width = widthStr === 'none' ? null : parseInt(widthStr, 10);
         templateState.borderWidth = width;
         updatePreview();
-
-        // Update button styles
-        modal.querySelectorAll('.tmpl-thickness-btn').forEach(b => {
-          const isActive = parseInt(b.dataset.width, 10) === width;
-          b.style.background = isActive ? '#e8f0fe' : '#fff';
-          b.style.color = isActive ? '#1a73e8' : '#5f6368';
-          b.style.borderColor = isActive ? '#1a73e8' : '#dadce0';
-        });
+        updateThicknessButtons();
       });
     });
 

@@ -1006,12 +1006,20 @@
                      getEventIdFromContext();
 
       if (eventId) {
+        // Get existing colors for this event to merge with template
+        const existingColors = findColorForEvent(eventId) || {};
+        const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
+
+        // Merge: template values override existing, but only if template value is set (not null)
+        // If template value is null, keep the existing value
         const colors = {
-          background: template.background,
-          text: template.text,
-          border: template.border,
-          borderWidth: template.borderWidth
+          background: template.background !== null ? template.background : (existingColors.background || calendarDefaults.background || null),
+          text: template.text !== null ? template.text : (existingColors.text || calendarDefaults.text || null),
+          border: template.border !== null ? template.border : (existingColors.border || calendarDefaults.border || null),
+          borderWidth: template.borderWidth !== null ? template.borderWidth : (existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null)
         };
+
+        console.log('[EventColoring] Applying template with merge:', { template: template.name, existingColors, calendarDefaults, mergedColors: colors });
         await handleFullColorSelection(eventId, colors);
       } else {
         console.warn('[EventColoring] Could not determine event ID for template');
