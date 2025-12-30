@@ -65,28 +65,6 @@
     });
     const dayToggleWrap = createEl('div', { className: 'cc3-toggle' }, [dayToggleLabel, dayToggle]);
 
-    // Task colors toggle
-    const taskToggleLabel = createEl('label', {}, ['Task Colors']);
-    const taskToggle = createEl('div', { className: 'cc3-switch' });
-    taskToggle.dataset.on = String(Boolean(settings.taskColoring?.enabled || false));
-    taskToggle.addEventListener('click', async () => {
-      const next = !state.settings?.taskColoring?.enabled;
-      taskToggle.dataset.on = String(next);
-
-      // Update local state
-      if (!state.settings.taskColoring) state.settings.taskColoring = {};
-      state.settings.taskColoring.enabled = next;
-
-      await window.cc3Storage.setTaskColoringEnabled(next);
-
-      // Trigger immediate update for task coloring feature
-      const newSettings = await window.cc3Storage.getSettings();
-      if (window.cc3Features && window.cc3Features.updateFeature) {
-        window.cc3Features.updateFeature('taskColoring', newSettings.taskColoring || {});
-      }
-    });
-    const taskToggleWrap = createEl('div', { className: 'cc3-toggle' }, [taskToggleLabel, taskToggle]);
-
     // Time blocking toggle
     const timeBlockToggleLabel = createEl('label', {}, ['Time Blocks']);
     const timeBlockToggle = createEl('div', { className: 'cc3-switch' });
@@ -110,8 +88,6 @@
     const timeBlockToggleWrap = createEl('div', { className: 'cc3-toggle' }, [timeBlockToggleLabel, timeBlockToggle]);
 
     row.appendChild(dayToggleWrap);
-    row.appendChild(createEl('span', {}, ['|']));
-    row.appendChild(taskToggleWrap);
     row.appendChild(createEl('span', {}, ['|']));
     row.appendChild(timeBlockToggleWrap);
 

@@ -6188,25 +6188,6 @@ checkAuthAndSubscription();
       await notifyFeatureToggle('dayColoring', newSettings);
     };
 
-    // Master task features toggle switch
-    qs('enableTaskFeatures').onclick = async (e) => {
-      e.stopPropagation(); // Prevent accordion trigger
-      const currentEnabled = settings.taskColoring?.enabled || settings.taskListColoring?.enabled;
-      const newEnabled = !currentEnabled;
-
-      // Enable/disable both task coloring and task list coloring together
-      await window.cc3Storage.setTaskColoringEnabled(newEnabled);
-      await window.cc3Storage.setTaskListColoringEnabled(newEnabled);
-      settings = await window.cc3Storage.getSettings();
-      updateTaskFeaturesToggle();
-      updateTaskListColoringToggle();
-      await saveSettings();
-
-      // Notify calendar tabs to refresh task coloring
-      const newSettings = await window.cc3Storage.getSettings();
-      await notifyFeatureToggle('taskColoring', newSettings.taskColoring || {});
-    };
-
     // Time blocking toggle switch
     qs('enableTimeBlocking').onclick = async (e) => {
       e.stopPropagation(); // Prevent accordion trigger
@@ -6220,100 +6201,6 @@ checkAuthAndSubscription();
       // Immediately notify content script
       notifyTimeBlockingChange();
     };
-
-    // OAuth grant button
-    const grantOAuthButton = qs('grantOAuthButton');
-    if (grantOAuthButton) {
-      grantOAuthButton.onclick = async () => {
-        try {
-          // Check if this is the first grant
-          const wasOAuthGranted = settings.taskListColoring?.oauthGranted || false;
-
-          // Show loading state
-          const originalText = grantOAuthButton.textContent;
-          grantOAuthButton.textContent = 'Granting access...';
-          grantOAuthButton.disabled = true;
-
-          const response = await chrome.runtime.sendMessage({ type: 'GOOGLE_OAUTH_REQUEST', interactive: true });
-
-          // Restore button state
-          grantOAuthButton.textContent = originalText;
-          grantOAuthButton.disabled = false;
-
-          if (response?.success) {
-            showToast('Access granted! Task lists synced successfully.');
-
-            // Note: No need to trigger sync here - handleOAuthRequest() already syncs
-            // This prevents duplicate API calls
-
-            // Reload the UI
-            settings = await window.cc3Storage.getSettings();
-            await initTaskListColoring();
-
-            // Note: No page reload needed anymore!
-            // The content script's global message handler will receive TASK_LISTS_UPDATED
-            // and dynamically initialize the feature. Colors will work immediately.
-          } else {
-            // Show specific error messages based on error type
-            if (response?.error === 'USER_DENIED') {
-              showToast('Access denied. ColorKit needs read-only access to your task lists.');
-            } else if (response?.error === 'RATE_LIMIT') {
-              showToast('Too many requests. Please wait a minute and try again.');
-            } else if (response?.error === 'NO_TOKEN') {
-              showToast('Failed to obtain access token. Please try again.');
-            } else {
-              showToast('Failed to grant access. Please try again.');
-            }
-          }
-        } catch (error) {
-          // Restore button state on error
-          grantOAuthButton.textContent = 'Grant Access';
-          grantOAuthButton.disabled = false;
-
-          console.error('[Task List Colors] OAuth grant error:', error);
-          showToast('Error granting access. Please try again.');
-        }
-      };
-    }
-
-    // Task list info card toggle
-    const taskListInfoToggle = qs('taskListInfoToggle');
-    const taskListInfoExpanded = qs('taskListInfoExpanded');
-    if (taskListInfoToggle && taskListInfoExpanded) {
-      taskListInfoToggle.onclick = (e) => {
-        e.preventDefault();
-        const isExpanded = taskListInfoExpanded.style.display !== 'none';
-
-        if (isExpanded) {
-          // Collapse
-          taskListInfoExpanded.style.display = 'none';
-          taskListInfoToggle.innerHTML = `
-            See how to use
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transition: transform 0.2s ease;">
-              <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          `;
-        } else {
-          // Expand
-          taskListInfoExpanded.style.display = 'block';
-          taskListInfoToggle.innerHTML = `
-            Hide
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transform: rotate(180deg); transition: transform 0.2s ease;">
-              <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          `;
-        }
-      };
-    }
-
-    // Task list video tutorial button
-    const taskListVideoTutorialBtn = qs('taskListVideoTutorialBtn');
-    if (taskListVideoTutorialBtn) {
-      taskListVideoTutorialBtn.onclick = (e) => {
-        e.preventDefault();
-        chrome.tabs.create({ url: 'https://www.calendarextension.com/help#task-list-coloring' });
-      };
-    }
 
     // Day Coloring info card toggle
     const dayColoringInfoToggle = qs('dayColoringInfoToggle');
@@ -6347,41 +6234,6 @@ checkAuthAndSubscription();
       dayColoringVideoTutorialBtn.onclick = (e) => {
         e.preventDefault();
         chrome.tabs.create({ url: 'https://www.calendarextension.com/help#day-coloring' });
-      };
-    }
-
-    // Quick Access Colors info card toggle
-    const quickAccessColorsInfoToggle = qs('quickAccessColorsInfoToggle');
-    const quickAccessColorsInfoExpanded = qs('quickAccessColorsInfoExpanded');
-    if (quickAccessColorsInfoToggle && quickAccessColorsInfoExpanded) {
-      quickAccessColorsInfoToggle.onclick = (e) => {
-        e.preventDefault();
-        const isExpanded = quickAccessColorsInfoExpanded.style.display !== 'none';
-        if (isExpanded) {
-          quickAccessColorsInfoExpanded.style.display = 'none';
-          quickAccessColorsInfoToggle.innerHTML = `
-            See how to use
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transition: transform 0.2s ease;">
-              <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          `;
-        } else {
-          quickAccessColorsInfoExpanded.style.display = 'block';
-          quickAccessColorsInfoToggle.innerHTML = `
-            Hide
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="transform: rotate(180deg); transition: transform 0.2s ease;">
-              <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          `;
-        }
-      };
-    }
-
-    const quickAccessColorsVideoTutorialBtn = qs('quickAccessColorsVideoTutorialBtn');
-    if (quickAccessColorsVideoTutorialBtn) {
-      quickAccessColorsVideoTutorialBtn.onclick = (e) => {
-        e.preventDefault();
-        chrome.tabs.create({ url: 'https://www.calendarextension.com/help#quick-access-colors' });
       };
     }
 
@@ -6487,37 +6339,6 @@ checkAuthAndSubscription();
       dateSpecificBlocksVideoTutorialBtn.onclick = (e) => {
         e.preventDefault();
         chrome.tabs.create({ url: 'https://www.calendarextension.com/help#date-specific-blocks' });
-      };
-    }
-
-    // Manual sync button
-    const manualSyncButton = qs('manualSyncButton');
-    if (manualSyncButton) {
-      manualSyncButton.onclick = async () => {
-        try {
-          manualSyncButton.disabled = true;
-          manualSyncButton.textContent = '⏳ Syncing...';
-
-          const response = await chrome.runtime.sendMessage({ type: 'SYNC_TASK_LISTS', fullSync: true });
-
-          if (response?.success) {
-            showToast(`Synced ${response.taskCount} tasks successfully!`);
-
-            // Reload task lists
-            settings = await window.cc3Storage.getSettings();
-            updateSyncStatus();
-            await loadTaskLists();
-          } else {
-            console.error('[Popup] Sync failed:', response);
-            showToast('Sync failed. Please try again.');
-          }
-        } catch (error) {
-          console.error('[Task List Colors] Sync error:', error);
-          showToast('Sync error. Please try again.');
-        } finally {
-          manualSyncButton.disabled = false;
-          manualSyncButton.textContent = '🔄 Sync Now';
-        }
       };
     }
 
@@ -7732,20 +7553,15 @@ Would you like to refresh all Google Calendar tabs?`;
     await loadSettings();
     await loadCustomColors();
     updateToggle();
-    updateTaskFeaturesToggle();
-    updateTaskColoringToggle();
     updateTimeBlockingToggle();
-    updateTaskListColoringToggle();
     updateColorLabToggle();
     updateColors();
     initializeEnhancedOpacityControls();
-    updateInlineColorsGrid();
     updateTimeBlockingSettings();
     updateColorLab();
     setupEventListeners();
     setupColorLabEventListeners();
     setupDayClickHandlers();
-    setupTaskClickHandlers(); // Add task color picker handlers
     setupTimeBlockClickHandlers(); // Add time block color picker handlers
     setupTabNavigation(); // Setup tab switching
     // Setup color picker toggle after all other event listeners
@@ -7759,36 +7575,11 @@ Would you like to refresh all Google Calendar tabs?`;
         const newSettings = changes.settings.newValue || {};
         settings = newSettings;
 
-        // Check if ONLY completedStyling values changed (colors/opacities)
-        // If so, we should NOT reload the entire task list (it destroys sliders while dragging)
-        const onlyCompletedStylingChanged = (() => {
-          if (!oldSettings.taskListColoring || !newSettings.taskListColoring) return false;
-
-          // Check if completedStyling is the only thing that changed
-          const oldCopy = JSON.parse(JSON.stringify(oldSettings));
-          const newCopy = JSON.parse(JSON.stringify(newSettings));
-
-          // Remove completedStyling from both
-          if (oldCopy.taskListColoring) delete oldCopy.taskListColoring.completedStyling;
-          if (newCopy.taskListColoring) delete newCopy.taskListColoring.completedStyling;
-
-          // If everything else is the same, only completedStyling changed
-          return JSON.stringify(oldCopy) === JSON.stringify(newCopy);
-        })();
-
         updateToggle();
-        updateTaskFeaturesToggle();
-        updateTaskColoringToggle();
         updateTimeBlockingToggle();
-
-        // Only reload task lists if something other than completedStyling changed
-        if (!onlyCompletedStylingChanged) {
-          updateTaskListColoringToggle();
-        }
 
         updateColors();
         initializeEnhancedOpacityControls();
-        updateInlineColorsGrid();
         updateTimeBlockingSettings();
       }
     };
