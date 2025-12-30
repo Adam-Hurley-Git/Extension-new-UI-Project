@@ -2585,13 +2585,13 @@
       .ec-panel-header {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
         margin-bottom: 12px;
       }
 
       .ec-panel-icon {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         border-radius: 8px;
         display: flex;
         align-items: center;
@@ -2604,18 +2604,23 @@
         height: 18px;
       }
 
+      .ec-panel-text {
+        flex: 1;
+        min-width: 0;
+      }
+
       .ec-panel-title {
         font-size: 14px;
         font-weight: 600;
         color: #202124;
-        margin: 0;
+        margin: 0 0 2px 0;
       }
 
       .ec-panel-desc {
-        font-size: 12px;
+        font-size: 11px;
         color: #5f6368;
         margin: 0;
-        line-height: 1.4;
+        line-height: 1.3;
       }
 
       /* Calendar Defaults - Blue Theme */
@@ -2685,6 +2690,8 @@
         align-items: center;
         gap: 4px;
         transition: all 0.2s ease;
+        flex-shrink: 0;
+        white-space: nowrap;
       }
 
       .ec-panel-action:hover {
@@ -2731,6 +2738,7 @@
         background: rgba(255, 255, 255, 0.9);
         cursor: pointer;
         transition: all 0.2s ease;
+        flex-shrink: 0;
       }
 
       .ec-panel-select:hover {
@@ -4481,7 +4489,7 @@
                       <line x1="3" y1="10" x2="21" y2="10"/>
                     </svg>
                   </div>
-                  <div>
+                  <div class="ec-panel-text">
                     <h4 class="ec-panel-title">Calendar Default Colors</h4>
                     <p class="ec-panel-desc">Set automatic colors for all events from each calendar</p>
                   </div>
@@ -4515,16 +4523,14 @@
                       <line x1="7" y1="7" x2="7.01" y2="7"/>
                     </svg>
                   </div>
-                  <div style="flex: 1;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                      <h4 class="ec-panel-title">Google Color Labels</h4>
-                      <select id="googleColorSchemeSelect" class="ec-panel-select">
-                        <option value="modern">Modern</option>
-                        <option value="classic">Classic</option>
-                      </select>
-                    </div>
+                  <div class="ec-panel-text">
+                    <h4 class="ec-panel-title">Google Color Labels</h4>
                     <p class="ec-panel-desc">Name Google's built-in colors to remember what each represents</p>
                   </div>
+                  <select id="googleColorSchemeSelect" class="ec-panel-select">
+                    <option value="modern">Modern</option>
+                    <option value="classic">Classic</option>
+                  </select>
                 </div>
 
                 <div id="googleColorLabelsList" class="google-colors-grid" style="max-height: 200px; overflow-y: auto;">
@@ -4540,19 +4546,17 @@
                       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                     </svg>
                   </div>
-                  <div style="flex: 1;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                      <h4 class="ec-panel-title">Custom Color Categories</h4>
-                      <button id="addEventColorCategoryBtn" class="ec-panel-action">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                          <line x1="12" y1="5" x2="12" y2="19"/>
-                          <line x1="5" y1="12" x2="19" y2="12"/>
-                        </svg>
-                        New Category
-                      </button>
-                    </div>
+                  <div class="ec-panel-text">
+                    <h4 class="ec-panel-title">Custom Color Categories</h4>
                     <p class="ec-panel-desc">Organize your own colors into groups that appear in the color picker</p>
                   </div>
+                  <button id="addEventColorCategoryBtn" class="ec-panel-action">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    New Category
+                  </button>
                 </div>
 
                 <div id="eventColorCategoriesList">
@@ -4573,19 +4577,17 @@
                       <rect x="14" y="14" width="7" height="7" rx="1"/>
                     </svg>
                   </div>
-                  <div style="flex: 1;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                      <h4 class="ec-panel-title">Color Templates</h4>
-                      <button id="addEventColorTemplateBtn" class="ec-panel-action">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                          <line x1="12" y1="5" x2="12" y2="19"/>
-                          <line x1="5" y1="12" x2="19" y2="12"/>
-                        </svg>
-                        New Template
-                      </button>
-                    </div>
+                  <div class="ec-panel-text">
+                    <h4 class="ec-panel-title">Color Templates</h4>
                     <p class="ec-panel-desc">Save complete styles (background, text, border) for quick reuse</p>
                   </div>
+                  <button id="addEventColorTemplateBtn" class="ec-panel-action">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    New Template
+                  </button>
                 </div>
 
                 <div id="eventColorTemplatesList">
