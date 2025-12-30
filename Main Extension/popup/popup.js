@@ -1229,26 +1229,6 @@ checkAuthAndSubscription();
     }
   }
 
-  function updateTaskFeaturesToggle() {
-    const toggle = qs('enableTaskFeatures');
-    const taskSettings = qs('taskSettings');
-
-    // Check if either task coloring or task list coloring is enabled
-    const isEnabled = settings.taskColoring?.enabled || settings.taskListColoring?.enabled;
-
-    if (isEnabled) {
-      toggle.classList.add('active');
-      taskSettings?.classList.remove('feature-disabled');
-    } else {
-      toggle.classList.remove('active');
-      taskSettings?.classList.add('feature-disabled');
-    }
-  }
-
-  function updateTaskColoringToggle() {
-    // No longer needed - kept for compatibility
-  }
-
   function updateTimeBlockingToggle() {
     const toggle = qs('enableTimeBlocking');
     const timeBlockSettings = qs('timeBlockSettings');
@@ -5301,223 +5281,6 @@ checkAuthAndSubscription();
     }
   }
 
-  function updateInlineColorsGrid() {
-    // Initialize task color previews with current settings
-    const inlineColors =
-      settings.taskColoring?.inlineColors || window.cc3Storage.defaultSettings.taskColoring.inlineColors;
-
-    inlineColors.forEach((color, index) => {
-      // Update preview color
-      const preview = qs(`taskPreview${index}`);
-      if (preview) {
-        preview.style.backgroundColor = color;
-      }
-
-      // Update color input value
-      const colorInput = qs(`taskColor${index}`);
-      if (colorInput) {
-        colorInput.value = color;
-      }
-
-      // Update hex input value
-      const hexInput = qs(`taskHex${index}`);
-      if (hexInput) {
-        hexInput.value = color.toUpperCase();
-      }
-    });
-
-    // Create all color palettes for each task color
-    for (let i = 0; i < 8; i++) {
-      createTaskColorPalette(i);
-      createTaskPastelColorPalette(i);
-      createTaskDarkColorPalette(i);
-      createTaskCustomColorPalette(i);
-    }
-
-    // Setup hex input sync for task colors
-    setupTaskColorHexInputs();
-  }
-
-  // Setup hex input synchronization for task inline colors
-  function setupTaskColorHexInputs() {
-    for (let i = 0; i < 8; i++) {
-      const colorInput = qs(`taskColor${i}`);
-      const hexInput = qs(`taskHex${i}`);
-      const preview = qs(`taskPreview${i}`);
-
-      if (colorInput && hexInput) {
-        // Color picker to hex sync
-        colorInput.oninput = (e) => {
-          hexInput.value = e.target.value.toUpperCase();
-        };
-
-        colorInput.onchange = async (e) => {
-          const color = e.target.value;
-          hexInput.value = color.toUpperCase();
-          if (preview) {
-            preview.style.backgroundColor = color;
-          }
-          await saveTaskColorChange(i, color);
-        };
-
-        // Hex input to color picker sync
-        hexInput.oninput = async () => {
-          const hexValue = hexInput.value.trim();
-          const normalizedHex = hexValue.startsWith('#') ? hexValue : '#' + hexValue;
-
-          if (/^#[0-9A-Fa-f]{6}$/.test(normalizedHex)) {
-            colorInput.value = normalizedHex;
-            hexInput.style.borderColor = '#1a73e8';
-            if (preview) {
-              preview.style.backgroundColor = normalizedHex;
-            }
-            await saveTaskColorChange(i, normalizedHex);
-          } else {
-            hexInput.style.borderColor = '#dc2626';
-          }
-        };
-
-        hexInput.onchange = hexInput.oninput;
-      }
-    }
-  }
-
-  // Task color palette creation functions
-  function createTaskColorPalette(taskIndex) {
-    const palette = qs(`taskPalette${taskIndex}`);
-    if (!palette) return;
-
-    palette.innerHTML = '';
-    colorPickerPalette.forEach((color) => {
-      palette.appendChild(createTaskColorSwatch(color, taskIndex, palette));
-    });
-  }
-
-  function createTaskPastelColorPalette(taskIndex) {
-    const palette = qs(`taskPastelPalette${taskIndex}`);
-    if (!palette) return;
-
-    palette.innerHTML = '';
-    pastelPalette.forEach((color) => {
-      palette.appendChild(createTaskColorSwatch(color, taskIndex, palette));
-    });
-  }
-
-  function createTaskDarkColorPalette(taskIndex) {
-    const palette = qs(`taskDarkPalette${taskIndex}`);
-    if (!palette) return;
-
-    palette.innerHTML = '';
-    darkPalette.forEach((color) => {
-      palette.appendChild(createTaskColorSwatch(color, taskIndex, palette));
-    });
-  }
-
-  function createTaskCustomColorPalette(taskIndex) {
-    const palette = qs(`taskCustomPalette${taskIndex}`);
-    if (!palette) return;
-
-    palette.innerHTML = '';
-
-    // Show empty state message if no custom colors
-    if (customColors.length === 0) {
-      palette.appendChild(createCustomColorsEmptyState());
-    } else {
-      customColors.forEach((color) => {
-        palette.appendChild(createTaskColorSwatch(color, taskIndex, palette, true));
-      });
-    }
-  }
-
-  // Create task color swatch with click handler
-  function createTaskColorSwatch(color, taskIndex, palette, isCustom = false) {
-    const swatch = document.createElement('div');
-    swatch.className = isCustom ? 'color-swatch custom-color-swatch' : 'color-swatch';
-    swatch.style.backgroundColor = color;
-    swatch.title = color;
-
-    swatch.onclick = () => {
-      // Remove selected class from all swatches in this task's palettes
-      document
-        .querySelectorAll(`#taskDetails${taskIndex} .color-swatch`)
-        .forEach((s) => s.classList.remove('selected'));
-      // Add selected class to clicked swatch
-      swatch.classList.add('selected');
-      // Update the color input and save
-      const colorInput = qs(`taskColor${taskIndex}`);
-      if (colorInput) {
-        colorInput.value = color;
-        // Update hex input
-        const hexInput = qs(`taskHex${taskIndex}`);
-        if (hexInput) {
-          hexInput.value = color.toUpperCase();
-        }
-        // Update preview
-        const preview = qs(`taskPreview${taskIndex}`);
-        if (preview) {
-          preview.style.backgroundColor = color;
-        }
-        // Save the change
-        saveTaskColorChange(taskIndex, color);
-      }
-    };
-
-    return swatch;
-  }
-
-  // Save task color change
-  async function saveTaskColorChange(taskIndex, color) {
-    try {
-      await window.cc3Storage.updateTaskInlineColor(taskIndex, color);
-      settings = await window.cc3Storage.getSettings();
-
-      // Notify content script of the change
-      const tabs = await chrome.tabs.query({ url: '*://calendar.google.com/*' });
-      for (const tab of tabs) {
-        try {
-          await chrome.tabs.sendMessage(tab.id, {
-            type: 'settingsChanged',
-            feature: 'taskColoring',
-            settings: settings.taskColoring,
-          });
-        } catch (e) {
-          // Tab might not be ready or extension not loaded
-        }
-      }
-    } catch (error) {
-      console.error('Error saving task color:', error);
-    }
-  }
-
-  // Handle task color tab switching
-  function switchTaskColorTab(taskIndex, tabName) {
-    // Update tab buttons
-    const tabs = document.querySelectorAll(`[data-task="${taskIndex}"][data-tab]`);
-    tabs.forEach((tab) => {
-      tab.classList.remove('active');
-      if (tab.dataset.tab === tabName) {
-        tab.classList.add('active');
-      }
-    });
-
-    // Update tab panels
-    const panels = [
-      `task-vibrant-panel-${taskIndex}`,
-      `task-pastel-panel-${taskIndex}`,
-      `task-dark-panel-${taskIndex}`,
-      `task-custom-panel-${taskIndex}`,
-    ];
-    panels.forEach((panelId) => {
-      const panel = qs(panelId);
-      if (panel) {
-        panel.classList.remove('active');
-        if (panelId === `task-${tabName}-panel-${taskIndex}`) {
-          panel.classList.add('active');
-        }
-      }
-    });
-  }
-
   // Time block color picker functions
   function createTimeBlockGlobalColorPalette() {
     const palette = qs('globalTimeBlockPalette');
@@ -6664,15 +6427,9 @@ checkAuthAndSubscription();
     // Reset button - Complete reset with dual confirmation
     qs('resetBtn').onclick = async () => {
       // Get current data for confirmation message
-      let taskColorCount = 0;
-      let listColorCount = 0;
       let timeBlockCount = 0;
 
       try {
-        const syncData = await chrome.storage.sync.get(['cf.taskColors', 'cf.taskListColors']);
-        taskColorCount = Object.keys(syncData['cf.taskColors'] || {}).length;
-        listColorCount = Object.keys(syncData['cf.taskListColors'] || {}).length;
-
         const schedules = settings?.timeBlocking?.weeklySchedule || {};
         timeBlockCount = Object.values(schedules).reduce((sum, blocks) => sum + blocks.length, 0);
       } catch (error) {
@@ -6685,11 +6442,8 @@ checkAuthAndSubscription();
 
 This will PERMANENTLY delete:
 • All day colors and opacity settings
-• All manual task colors (${taskColorCount} task${taskColorCount !== 1 ? 's' : ''})
-• All task list default colors (${listColorCount} list${listColorCount !== 1 ? 's' : ''})
-• All task list text colors
+• All event colors
 • All time blocking schedules (${timeBlockCount} block${timeBlockCount !== 1 ? 's' : ''})
-• Google Tasks OAuth authorization
 
 This will PRESERVE:
 • Your subscription status
@@ -6790,10 +6544,8 @@ If issues persist, reinstall the extension.`,
 
 Successfully reset:
 ✓ Day coloring settings
-✓ Task coloring settings (${taskColorCount} task${taskColorCount !== 1 ? 's' : ''} cleared)
-✓ Task list colors (${listColorCount} list${listColorCount !== 1 ? 's' : ''} cleared)
+✓ Event colors
 ✓ Time blocking schedules (${timeBlockCount} block${timeBlockCount !== 1 ? 's' : ''} cleared)
-✓ Google Tasks authorization
 
 Preserved:
 ✓ Your subscription status
@@ -7254,129 +7006,6 @@ Would you like to refresh all Google Calendar tabs?`;
         };
       }
     });
-  }
-
-  function setupTaskClickHandlers() {
-    // Set up click handlers for task color items
-    document.querySelectorAll('.task-color-item').forEach((taskItem, index) => {
-      const taskIndex = parseInt(taskItem.dataset.index);
-      const details = qs(`taskDetails${taskIndex}`);
-      const preview = qs(`taskPreview${taskIndex}`);
-
-      // Click handler for the entire task item
-      taskItem.onclick = (e) => {
-        // Don't expand/collapse if clicking inside the task-color-details dropdown
-        if (e.target.closest('.task-color-details')) {
-          return;
-        }
-
-        // Don't expand if clicking on color input or other controls
-        if (
-          e.target.tagName === 'INPUT' ||
-          e.target.tagName === 'BUTTON' ||
-          e.target.classList.contains('color-swatch')
-        ) {
-          return;
-        }
-
-        // Close all other expanded items (including day and time block pickers)
-        document
-          .querySelectorAll(
-            '.task-color-item, .day-color-item, .time-block-color-details, .time-block-global-color-details',
-          )
-          .forEach((item) => {
-            if (item !== taskItem) {
-              item.classList.remove('expanded');
-              const otherDetails = item.querySelector(
-                '.task-color-details, .day-details, .time-block-color-details, .time-block-global-color-details',
-              );
-              if (otherDetails) {
-                otherDetails.classList.remove('expanded');
-                otherDetails.style.zIndex = '';
-              }
-            }
-          });
-
-        // Toggle current item
-        taskItem.classList.toggle('expanded');
-        if (details) {
-          details.classList.toggle('expanded');
-          if (details.classList.contains('expanded')) {
-            // Ensure this picker has maximum z-index
-            details.style.zIndex = '2147483000';
-          } else {
-            details.style.zIndex = '';
-          }
-        }
-      };
-
-      // Also add click handler specifically for the preview square
-      if (preview) {
-        preview.onclick = (e) => {
-          e.stopPropagation();
-
-          // Close all other expanded items (including day and time block pickers)
-          document
-            .querySelectorAll(
-              '.task-color-item, .day-color-item, .time-block-color-details, .time-block-global-color-details',
-            )
-            .forEach((item) => {
-              if (item !== taskItem) {
-                item.classList.remove('expanded');
-                const otherDetails = item.querySelector(
-                  '.task-color-details, .day-details, .time-block-color-details, .time-block-global-color-details',
-                );
-                if (otherDetails) {
-                  otherDetails.classList.remove('expanded');
-                  otherDetails.style.zIndex = '';
-                }
-              }
-            });
-
-          // Toggle current item
-          taskItem.classList.toggle('expanded');
-          if (details) {
-            details.classList.toggle('expanded');
-            if (details.classList.contains('expanded')) {
-              // Ensure this picker has maximum z-index
-              details.style.zIndex = '2147483000';
-            } else {
-              details.style.zIndex = '';
-            }
-          }
-        };
-      }
-
-      // Prevent clicks inside task-color-details from bubbling up
-      if (details) {
-        details.onclick = (e) => {
-          e.stopPropagation();
-        };
-      }
-    });
-
-    // Set up task color tab switching
-    document.querySelectorAll('.task-color-details .color-tab').forEach((tab) => {
-      tab.onclick = () => {
-        const taskIndex = tab.dataset.task;
-        const tabName = tab.dataset.tab;
-        switchTaskColorTab(taskIndex, tabName);
-      };
-    });
-
-    // Set up task color inputs
-    for (let i = 0; i < 8; i++) {
-      const colorInput = qs(`taskColor${i}`);
-      if (colorInput) {
-        colorInput.onchange = async (e) => {
-          const preview = qs(`taskPreview${i}`);
-          if (preview) {
-            preview.style.backgroundColor = e.target.value;
-          }
-          await saveTaskColorChange(i, e.target.value);
-        };
-      }
-    }
   }
 
   function setupTimeBlockClickHandlers() {
