@@ -59,6 +59,7 @@
     eventColoring: {
       enabled: true, // Event coloring enabled by default
       categories: {}, // User-defined color categories
+      templates: {}, // User-defined color templates (bg/text/border/borderWidth presets)
       googleColorLabels: {}, // Custom labels for Google's built-in colors
       quickAccessColors: [], // Recently used colors
       disableCustomColors: false, // Hide custom categories, show only Google colors
@@ -77,6 +78,7 @@
       'completedStyling', // Completed styling needs hard replace for deletions
       'calendarColors', // Calendar colors need hard replace for deletions
       'categories', // Event color categories need hard replace for deletions
+      'templates', // Event color templates need hard replace for deletions
     ]);
 
     // If either side isn't a plain object, prefer partial directly
@@ -258,6 +260,138 @@
   async function getEventColorCategories() {
     const settings = await getSettings();
     return settings.eventColoring?.categories || {};
+  }
+
+  // ========================================
+  // EVENT COLOR TEMPLATES
+  // Templates are multi-property color presets (bg/text/border/borderWidth)
+  // ========================================
+
+  /**
+   * Get all event color templates
+   * @returns {Promise<Object>} - { templateId: templateData, ... }
+   */
+  async function getEventColorTemplates() {
+    const settings = await getSettings();
+    return settings.eventColoring?.templates || {};
+  }
+
+  /**
+   * Get a single template by ID
+   * @param {string} templateId
+   * @returns {Promise<Object|null>}
+   */
+  async function getEventColorTemplate(templateId) {
+    const templates = await getEventColorTemplates();
+    return templates[templateId] || null;
+  }
+
+  /**
+   * Save/update an event color template
+   * @param {Object} template - Template object with id, name, background, text, border, borderWidth, categoryId, order
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setEventColorTemplate(template) {
+    if (!template) return;
+
+    // Generate ID if not present
+    if (!template.id) {
+      template.id = `tmpl_${Date.now()}`;
+    }
+
+    // Set timestamps
+    template.updatedAt = Date.now();
+    if (!template.createdAt) {
+      template.createdAt = template.updatedAt;
+    }
+
+    const current = await getSettings();
+    const templates = current.eventColoring?.templates || {};
+    templates[template.id] = template;
+
+    return setSettings({
+      eventColoring: { templates },
+    });
+  }
+
+  /**
+   * Delete an event color template
+   * @param {string} templateId - Template ID to delete
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function deleteEventColorTemplate(templateId) {
+    if (!templateId) return;
+
+    const current = await getSettings();
+    const templates = { ...(current.eventColoring?.templates || {}) };
+    delete templates[templateId];
+
+    return setSettings({
+      eventColoring: { templates },
+    });
+  }
+
+  /**
+   * Reorder templates (update order field for multiple templates)
+   * @param {Array<{id: string, order: number}>} orderUpdates
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function reorderEventColorTemplates(orderUpdates) {
+    if (!orderUpdates || !Array.isArray(orderUpdates)) return;
+
+    const current = await getSettings();
+    const templates = { ...(current.eventColoring?.templates || {}) };
+
+    for (const update of orderUpdates) {
+      if (templates[update.id]) {
+        templates[update.id] = {
+          ...templates[update.id],
+          order: update.order,
+          updatedAt: Date.now(),
+        };
+      }
+    }
+
+    return setSettings({
+      eventColoring: { templates },
+    });
+  }
+
+  /**
+   * Get templates for a specific category (assigned to it)
+   * @param {string} categoryId
+   * @returns {Promise<Array>} - Sorted array of templates
+   */
+  async function getTemplatesForCategory(categoryId) {
+    const templates = await getEventColorTemplates();
+    return Object.values(templates)
+      .filter((t) => t.categoryId === categoryId)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+
+  /**
+   * Get unassigned templates (not assigned to any category)
+   * @returns {Promise<Array>} - Sorted array of templates
+   */
+  async function getUnassignedTemplates() {
+    const templates = await getEventColorTemplates();
+    return Object.values(templates)
+      .filter((t) => !t.categoryId)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+
+  /**
+   * Assign template to a category
+   * @param {string} templateId
+   * @param {string|null} categoryId - null to unassign
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function assignTemplateToCategory(templateId, categoryId) {
+    const template = await getEventColorTemplate(templateId);
+    if (template) {
+      template.categoryId = categoryId;
+      return setEventColorTemplate(template);
+    }
   }
 
   /**
@@ -1228,6 +1362,15 @@
     setEventColorCategory,
     deleteEventColorCategory,
     getEventColorCategories,
+    // Event color template functions
+    getEventColorTemplates,
+    getEventColorTemplate,
+    setEventColorTemplate,
+    deleteEventColorTemplate,
+    reorderEventColorTemplates,
+    getTemplatesForCategory,
+    getUnassignedTemplates,
+    assignTemplateToCategory,
     setGoogleColorLabel,
     getGoogleColorLabels,
     setGoogleColorScheme,

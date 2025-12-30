@@ -14,10 +14,24 @@ Add an **Event Color Template Builder** feature that allows users to create, man
 3. **Category Assignment**: Templates can optionally be assigned to categories
 4. **Display Logic**:
    - **Unassigned templates** → Appear in dedicated "Templates" section (below categories)
-   - **Assigned templates** → Appear ONLY within their assigned category section
+   - **Assigned templates** → Appear ONLY within their assigned category section (BELOW simple colors)
    - A template NEVER appears in both places (no duplicates)
 5. **Drag-to-Reorder**: Templates can be reordered via drag-and-drop
 6. **No Limit**: Unlimited templates allowed
+
+### Injected UI Design Decision
+**Mini-Preview Approach**: Template buttons in the injected color picker use a compact mini-preview design:
+- The button itself IS the preview (uses bg color as background, text color for the label, border styling)
+- The template name is the text content
+- This is space-efficient and shows the actual visual result
+```
+┌─────────────────────────────┐
+│  Professional Meeting       │  ← bg=#1a73e8, text=#fff, border=#1557b0 2px
+└─────────────────────────────┘
+┌─────────────────────────────┐
+│  Urgent Deadline            │  ← bg=#d93025, text=#fff, border=#a50e0e 3px
+└─────────────────────────────┘
+```
 
 ---
 

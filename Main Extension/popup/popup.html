@@ -4635,6 +4635,68 @@
                   No categories yet. Click "New Category" to start organizing your colors.
                 </div>
               </div>
+
+              <!-- Event Color Templates Section -->
+              <div id="eventColorTemplatesSection" style="margin-top: 24px;">
+                <!-- Section Header -->
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+                      <rect x="3" y="3" width="7" height="7" rx="1"/>
+                      <rect x="14" y="3" width="7" height="7" rx="1"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1"/>
+                      <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    <span style="font-weight: 600; font-size: 14px; color: #202124;">Color Templates</span>
+                  </div>
+                  <button
+                    id="addEventColorTemplateBtn"
+                    style="
+                      padding: 6px 12px;
+                      background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+                      color: white;
+                      border: none;
+                      border-radius: 6px;
+                      font-size: 12px;
+                      font-weight: 500;
+                      cursor: pointer;
+                      display: flex;
+                      align-items: center;
+                      gap: 4px;
+                      transition: all 0.2s ease;
+                      box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
+                    "
+                    onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(139, 92, 246, 0.4)';"
+                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(139, 92, 246, 0.3)';"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    New Template
+                  </button>
+                </div>
+
+                <!-- Info Card -->
+                <div style="margin-bottom: 12px; padding: 10px 12px; background: #faf5ff; border-radius: 8px; border: 1px solid #e9d5ff;">
+                  <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" style="flex-shrink: 0; margin-top: 1px;">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="16" x2="12" y2="12"/>
+                      <line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    <div style="font-size: 12px; color: #6b7280; line-height: 1.5;">
+                      Templates save complete color styles (background, text, border) for quick application.
+                      Assign templates to categories to organize them.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Templates List Container -->
+                <div id="eventColorTemplatesList">
+                  <!-- Rendered by JavaScript -->
+                </div>
+              </div>
             </div>
           </div>
         </div>
