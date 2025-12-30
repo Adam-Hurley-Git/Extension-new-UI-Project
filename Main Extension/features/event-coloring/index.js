@@ -821,19 +821,6 @@
     separator.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.SEPARATOR;
     parentContainer.appendChild(separator);
 
-    // Get unassigned templates (not assigned to any category)
-    const unassignedTemplates = Object.values(templates)
-      .filter(t => !t.categoryId)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-    // Add templates section if there are unassigned templates
-    if (unassignedTemplates.length > 0) {
-      const templatesSection = createTemplatesSection(unassignedTemplates, colorPickerElement, scenario);
-      if (templatesSection) {
-        parentContainer.appendChild(templatesSection);
-      }
-    }
-
     // Add categories
     const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
 
@@ -843,6 +830,11 @@
         .filter(t => t.categoryId === categoryId)
         .sort((a, b) => (a.order || 0) - (b.order || 0));
     };
+
+    // Get unassigned templates (not assigned to any category)
+    const unassignedTemplates = Object.values(templates)
+      .filter(t => !t.categoryId)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
 
     const hasContent = categoriesArray.length > 0 || unassignedTemplates.length > 0;
 
@@ -861,6 +853,7 @@
       `;
       parentContainer.appendChild(emptyState);
     } else {
+      // Add categories first
       categoriesArray.forEach((category) => {
         const categoryTemplates = getTemplatesForCategory(category.id);
         const section = createCategorySection(category, categoryTemplates, colorPickerElement, scenario);
@@ -868,6 +861,14 @@
           parentContainer.appendChild(section);
         }
       });
+
+      // Add unassigned templates section at the bottom (after categories)
+      if (unassignedTemplates.length > 0) {
+        const templatesSection = createTemplatesSection(unassignedTemplates, colorPickerElement, scenario);
+        if (templatesSection) {
+          parentContainer.appendChild(templatesSection);
+        }
+      }
     }
 
     // Add "Custom Color" section with "+" button for full color picker
@@ -1005,12 +1006,20 @@
                      getEventIdFromContext();
 
       if (eventId) {
+        // Get existing colors for this event to merge with template
+        const existingColors = findColorForEvent(eventId) || {};
+        const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
+
+        // Merge: template values override existing, but only if template value is set (not null)
+        // If template value is null, keep the existing value
         const colors = {
-          background: template.background,
-          text: template.text,
-          border: template.border,
-          borderWidth: template.borderWidth
+          background: template.background !== null ? template.background : (existingColors.background || calendarDefaults.background || null),
+          text: template.text !== null ? template.text : (existingColors.text || calendarDefaults.text || null),
+          border: template.border !== null ? template.border : (existingColors.border || calendarDefaults.border || null),
+          borderWidth: template.borderWidth !== null ? template.borderWidth : (existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null)
         };
+
+        console.log('[EventColoring] Applying template with merge:', { template: template.name, existingColors, calendarDefaults, mergedColors: colors });
         await handleFullColorSelection(eventId, colors);
       } else {
         console.warn('[EventColoring] Could not determine event ID for template');
