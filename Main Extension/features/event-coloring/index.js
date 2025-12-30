@@ -23,6 +23,7 @@
   let settings = {};
   let eventColors = {};
   let categories = {};
+  let templates = {}; // Color templates: templateId → { id, name, background, text, border, borderWidth, categoryId }
   let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor } (from Google API)
   let calendarDefaultColors = {}; // User-defined per-calendar colors: calendarId → { background, text, border }
   let isEnabled = false;
@@ -637,10 +638,12 @@
 
     isEnabled = settings.enabled !== false;
     categories = settings.categories || {};
+    templates = settings.templates || {};
 
     console.log('[EventColoring] Initializing (enhanced)...', {
       isEnabled,
       categoriesCount: Object.keys(categories).length,
+      templatesCount: Object.keys(templates).length,
       googleColorLabelsCount: Object.keys(settings.googleColorLabels || {}).length,
       disableCustomColors: settings.disableCustomColors || false,
     });
@@ -818,10 +821,32 @@
     separator.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.SEPARATOR;
     parentContainer.appendChild(separator);
 
+    // Get unassigned templates (not assigned to any category)
+    const unassignedTemplates = Object.values(templates)
+      .filter(t => !t.categoryId)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // Add templates section if there are unassigned templates
+    if (unassignedTemplates.length > 0) {
+      const templatesSection = createTemplatesSection(unassignedTemplates, colorPickerElement, scenario);
+      if (templatesSection) {
+        parentContainer.appendChild(templatesSection);
+      }
+    }
+
     // Add categories
     const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
 
-    if (categoriesArray.length === 0) {
+    // Get templates assigned to each category
+    const getTemplatesForCategory = (categoryId) => {
+      return Object.values(templates)
+        .filter(t => t.categoryId === categoryId)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+    };
+
+    const hasContent = categoriesArray.length > 0 || unassignedTemplates.length > 0;
+
+    if (!hasContent) {
       const emptyState = document.createElement('div');
       emptyState.style.cssText = `
         padding: 20px;
@@ -832,12 +857,13 @@
       `;
       emptyState.innerHTML = `
         <div style="font-weight: 600; margin-bottom: 4px;">No Custom Colors Yet</div>
-        <div>Open the extension popup to create color categories</div>
+        <div>Open the extension popup to create color categories or templates</div>
       `;
       parentContainer.appendChild(emptyState);
     } else {
       categoriesArray.forEach((category) => {
-        const section = createCategorySection(category, colorPickerElement, scenario);
+        const categoryTemplates = getTemplatesForCategory(category.id);
+        const section = createCategorySection(category, categoryTemplates, colorPickerElement, scenario);
         if (section) {
           parentContainer.appendChild(section);
         }
@@ -879,7 +905,130 @@
     return pickerElement.querySelector('div');
   }
 
-  function createCategorySection(category, pickerElement, scenario) {
+  // Create templates section for unassigned templates
+  function createTemplatesSection(templatesArray, pickerElement, scenario) {
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-top: 12px; padding: 0 12px;';
+    section.className = 'cf-templates-section';
+
+    // Label with icon
+    const label = document.createElement('div');
+    label.style.cssText = `
+      font-size: 11px;
+      font-weight: 600;
+      color: #8b5cf6;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    `;
+    label.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+      Templates
+    `;
+
+    // Templates container - compact grid layout
+    const templatesContainer = document.createElement('div');
+    templatesContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px;';
+
+    templatesArray.forEach((template) => {
+      const button = createTemplateButton(template, pickerElement, scenario);
+      templatesContainer.appendChild(button);
+    });
+
+    section.appendChild(label);
+    section.appendChild(templatesContainer);
+
+    return section;
+  }
+
+  // Create template button (compact pill style)
+  function createTemplateButton(template, pickerElement, scenario) {
+    const button = document.createElement('div');
+    button.className = 'cf-template-button';
+    button.setAttribute('role', 'button');
+    button.setAttribute('tabindex', '0');
+    button.setAttribute('aria-label', template.name);
+    button.dataset.templateId = template.id;
+
+    // Compact pill button styled with the template colors
+    button.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 12px;
+      background: ${template.background};
+      color: ${template.text};
+      outline: ${template.borderWidth}px solid ${template.border};
+      outline-offset: -${Math.round(template.borderWidth * 0.3)}px;
+      font-size: 10px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+      white-space: nowrap;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    `;
+
+    button.textContent = template.name;
+
+    // Hover effects
+    button.addEventListener('mouseenter', () => {
+      button.style.transform = 'scale(1.05)';
+      button.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.2)';
+    });
+    button.addEventListener('mouseleave', () => {
+      button.style.transform = 'scale(1)';
+      button.style.boxShadow = 'none';
+    });
+
+    // Click handler - apply template colors
+    button.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const container = pickerElement.closest(
+        COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR + ', ' +
+        COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
+      ) || pickerElement;
+
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario) ||
+                     lastClickedEventId ||
+                     getEventIdFromContext();
+
+      if (eventId) {
+        const colors = {
+          background: template.background,
+          text: template.text,
+          border: template.border,
+          borderWidth: template.borderWidth
+        };
+        await handleFullColorSelection(eventId, colors);
+      } else {
+        console.warn('[EventColoring] Could not determine event ID for template');
+      }
+    });
+
+    // Keyboard support
+    button.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        button.click();
+      }
+    });
+
+    return button;
+  }
+
+  function createCategorySection(category, categoryTemplates, pickerElement, scenario) {
     const section = document.createElement('div');
     section.style.cssText = 'margin-top: 16px; padding: 0 12px;';
     section.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.CATEGORY_SECTION;
@@ -896,31 +1045,48 @@
       letter-spacing: 0.5px;
     `;
 
-    // Color grid
-    const colorGrid = document.createElement('div');
-    colorGrid.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.COLOR_DIV_GROUP;
-    colorGrid.style.cssText = `
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 8px;
-    `;
+    section.appendChild(label);
 
+    // Add color swatches first
     const colors = category.colors || [];
-    if (colors.length === 0) {
-      const emptyNote = document.createElement('div');
-      emptyNote.textContent = 'No colors in this category';
-      emptyNote.style.cssText = 'font-size: 11px; color: #9aa0a6; font-style: italic;';
-      colorGrid.appendChild(emptyNote);
-    } else {
+    if (colors.length > 0) {
+      const colorGrid = document.createElement('div');
+      colorGrid.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.COLOR_DIV_GROUP;
+      colorGrid.style.cssText = `
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      `;
+
       colors.forEach((color) => {
         const button = createColorButton(color, pickerElement, scenario);
         colorGrid.appendChild(button);
       });
+
+      section.appendChild(colorGrid);
     }
 
-    section.appendChild(label);
-    section.appendChild(colorGrid);
+    // Add templates below colors (if any assigned to this category)
+    if (categoryTemplates && categoryTemplates.length > 0) {
+      const templatesContainer = document.createElement('div');
+      templatesContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;';
+
+      categoryTemplates.forEach((template) => {
+        const button = createTemplateButton(template, pickerElement, scenario);
+        templatesContainer.appendChild(button);
+      });
+
+      section.appendChild(templatesContainer);
+    }
+
+    // Show empty state only if no colors AND no templates
+    if (colors.length === 0 && (!categoryTemplates || categoryTemplates.length === 0)) {
+      const emptyNote = document.createElement('div');
+      emptyNote.textContent = 'No colors or templates in this category';
+      emptyNote.style.cssText = 'font-size: 11px; color: #9aa0a6; font-style: italic;';
+      section.appendChild(emptyNote);
+    }
 
     return section;
   }
@@ -935,8 +1101,8 @@
     button.title = color.label || color.hex;
 
     button.style.cssText = `
-      width: 24px;
-      height: 24px;
+      width: 18px;
+      height: 18px;
       border-radius: 50%;
       background-color: ${color.hex};
       cursor: pointer;
@@ -953,7 +1119,7 @@
     checkmark.className = 'google-material-icons cf-checkmark';
     checkmark.textContent = 'check';
     checkmark.style.cssText = `
-      font-size: 14px;
+      font-size: 12px;
       color: white;
       display: none;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);

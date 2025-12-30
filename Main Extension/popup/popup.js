@@ -7494,6 +7494,9 @@ Would you like to refresh all Google Calendar tabs?`;
     // Render categories
     await renderEventColorCategories();
 
+    // Render templates
+    await renderEventColorTemplates();
+
     // Render Google color labels
     await renderGoogleColorLabels();
 
@@ -7523,16 +7526,19 @@ Would you like to refresh all Google Calendar tabs?`;
     container.innerHTML = '';
 
     for (const category of categoriesArray) {
-      const categoryEl = createCategoryElement(category);
+      const categoryEl = await createCategoryElement(category);
       container.appendChild(categoryEl);
     }
   }
 
   // Create category element
-  function createCategoryElement(category) {
+  async function createCategoryElement(category) {
     const div = document.createElement('div');
     div.className = 'event-color-category';
     div.dataset.categoryId = category.id;
+
+    // Get templates assigned to this category
+    const assignedTemplates = await window.cc3Storage.getTemplatesForCategory(category.id);
 
     const colorsHtml = (category.colors || []).map(color => `
       <div
@@ -7549,6 +7555,50 @@ Would you like to refresh all Google Calendar tabs?`;
     const addColorBtn = `
       <button class="add-color-to-category-btn" data-category-id="${category.id}">+</button>
     `;
+
+    // Build assigned templates HTML
+    const templatesHtml = assignedTemplates.length > 0 ? `
+      <div class="category-templates" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">
+        <div style="font-size: 10px; color: #8b5cf6; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; display: flex; align-items: center; gap: 4px;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          Templates
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          ${assignedTemplates.map(t => `
+            <div class="category-template-item" data-template-id="${t.id}" style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              padding: 6px 8px;
+              background: ${t.background};
+              color: ${t.text};
+              outline: ${t.borderWidth}px solid ${t.border};
+              outline-offset: -${Math.round(t.borderWidth * 0.3)}px;
+              border-radius: 4px;
+              font-size: 11px;
+              font-weight: 500;
+            ">
+              <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(t.name)}</span>
+              <button class="unassign-template-btn" data-template-id="${t.id}" title="Remove from category" style="
+                background: rgba(255,255,255,0.3);
+                border: none;
+                cursor: pointer;
+                color: inherit;
+                padding: 2px 4px;
+                border-radius: 3px;
+                line-height: 1;
+                font-size: 12px;
+              ">×</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
 
     div.innerHTML = `
       <div class="category-header">
@@ -7568,6 +7618,7 @@ Would you like to refresh all Google Calendar tabs?`;
         ${colorsHtml}
         ${addColorBtn}
       </div>
+      ${templatesHtml}
     `;
 
     // Event listeners
@@ -7602,6 +7653,18 @@ Would you like to refresh all Google Calendar tabs?`;
     const addBtn = div.querySelector('.add-color-to-category-btn');
     addBtn.addEventListener('click', () => {
       openColorPickerForCategory(category.id);
+    });
+
+    // Unassign template buttons
+    div.querySelectorAll('.unassign-template-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const templateId = btn.dataset.templateId;
+        await window.cc3Storage.assignTemplateToCategory(templateId, null);
+        await renderEventColorTemplates();
+        await renderEventColorCategories();
+        notifyContentScriptSettingsChanged();
+      });
     });
 
     return div;
@@ -7645,22 +7708,236 @@ Would you like to refresh all Google Calendar tabs?`;
     debugLog('Category deleted:', categoryId);
   }
 
-  // Open color picker for category
+  // Open color picker modal for category
   function openColorPickerForCategory(categoryId) {
-    const colorInput = document.createElement('input');
-    colorInput.type = 'color';
-    colorInput.style.display = 'none';
-    document.body.appendChild(colorInput);
+    // State for the selected color
+    let selectedColor = '#4285F4';
+    let colorLabel = '';
 
-    colorInput.addEventListener('change', async (e) => {
-      const colorHex = e.target.value.toUpperCase();
-      const label = prompt('Enter a label for this color (optional):');
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'category-color-picker-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10001;
+    `;
 
-      await addColorToCategory(categoryId, colorHex, label || '');
-      document.body.removeChild(colorInput);
+    const modal = document.createElement('div');
+    modal.className = 'category-color-picker-modal';
+    modal.style.cssText = `
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      width: 320px;
+      max-height: 90vh;
+      overflow: hidden;
+    `;
+
+    modal.innerHTML = `
+      <div class="modal-header" style="padding: 16px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between;">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #202124;">Add Color to Category</h3>
+        <button class="modal-close-btn" style="width: 28px; height: 28px; border: none; background: #f1f3f4; cursor: pointer; font-size: 18px; color: #5f6368; border-radius: 50%; display: flex; align-items: center; justify-content: center;">×</button>
+      </div>
+
+      <div class="modal-body" style="padding: 16px;">
+        <!-- Color Preview -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 6px;">Preview</label>
+          <div id="categoryColorPreview" style="
+            width: 100%;
+            height: 40px;
+            border-radius: 8px;
+            background: ${selectedColor};
+            border: 1px solid #e0e0e0;
+          "></div>
+        </div>
+
+        <!-- Label Input -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Label (optional)</label>
+          <input type="text" id="categoryColorLabel" placeholder="e.g., Work, Personal..." style="
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 12px;
+            box-sizing: border-box;
+          ">
+        </div>
+
+        <!-- Color Picker with Tabs -->
+        <div class="form-group">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 6px;">Select Color</label>
+
+          <!-- Direct color input row -->
+          <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+            <input type="color" class="cat-direct-color" value="${selectedColor}" style="width: 50%; height: 28px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px;">
+            <input type="text" class="cat-hex-input" value="${selectedColor}" placeholder="#FF0000" maxlength="7" style="width: 50%; height: 28px; font-size: 10px; padding: 2px 6px; border: 1px solid #ccc; border-radius: 4px; text-transform: uppercase; font-family: monospace; box-sizing: border-box;">
+          </div>
+
+          <!-- Tabs -->
+          <div class="color-picker-tabs" style="display: flex; background: #f8f9fa; border-radius: 6px 6px 0 0; border: 1px solid #e8eaed; border-bottom: none;">
+            <button type="button" class="cat-color-tab active" data-tab="vibrant" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: white; border: none; cursor: pointer; color: #1a73e8; border-bottom: 2px solid #1a73e8; border-radius: 6px 0 0 0;">Vibrant</button>
+            <button type="button" class="cat-color-tab" data-tab="pastel" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Pastel</button>
+            <button type="button" class="cat-color-tab" data-tab="dark" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Dark</button>
+            <button type="button" class="cat-color-tab" data-tab="custom" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent; border-radius: 0 6px 0 0;">Custom</button>
+          </div>
+
+          <!-- Tab Panels -->
+          <div style="border: 1px solid #e8eaed; border-top: none; border-radius: 0 0 6px 6px; padding: 8px;">
+            <div class="cat-tab-panel active" data-panel="vibrant">
+              <div class="cat-palette vibrant-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;"></div>
+            </div>
+            <div class="cat-tab-panel" data-panel="pastel" style="display: none;">
+              <div class="cat-palette pastel-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;"></div>
+            </div>
+            <div class="cat-tab-panel" data-panel="dark" style="display: none;">
+              <div class="cat-palette dark-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;"></div>
+            </div>
+            <div class="cat-tab-panel" data-panel="custom" style="display: none;">
+              <div class="cat-palette custom-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="padding: 12px 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="modal-cancel-btn" style="padding: 8px 16px; border: 1px solid #e0e0e0; background: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; color: #5f6368;">
+          Cancel
+        </button>
+        <button class="modal-add-btn" style="padding: 8px 16px; border: none; background: linear-gradient(135deg, #34a853 0%, #1e8e3e 100%); color: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500;">
+          Add Color
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Get elements
+    const preview = modal.querySelector('#categoryColorPreview');
+    const labelInput = modal.querySelector('#categoryColorLabel');
+    const directColorInput = modal.querySelector('.cat-direct-color');
+    const hexInput = modal.querySelector('.cat-hex-input');
+
+    // Update preview function
+    function updatePreview(color) {
+      selectedColor = color.toUpperCase();
+      preview.style.background = selectedColor;
+      directColorInput.value = selectedColor;
+      hexInput.value = selectedColor;
+    }
+
+    // Create color swatch
+    function createSwatch(color, container) {
+      const swatch = document.createElement('div');
+      swatch.style.cssText = `
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        background: ${color};
+        border: 1px solid #e0e0e0;
+        cursor: pointer;
+        transition: all 0.15s;
+      `;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      swatch.addEventListener('mouseenter', () => {
+        swatch.style.transform = 'scale(1.15)';
+        swatch.style.borderColor = '#1a73e8';
+      });
+      swatch.addEventListener('mouseleave', () => {
+        swatch.style.transform = 'scale(1)';
+        swatch.style.borderColor = '#e0e0e0';
+      });
+      swatch.addEventListener('click', () => {
+        updatePreview(color);
+      });
+      container.appendChild(swatch);
+    }
+
+    // Populate palettes
+    const vibrantPaletteEl = modal.querySelector('.vibrant-palette');
+    const pastelPaletteEl = modal.querySelector('.pastel-palette');
+    const darkPaletteEl = modal.querySelector('.dark-palette');
+    const customPaletteEl = modal.querySelector('.custom-palette');
+
+    colorPickerPalette.forEach(color => createSwatch(color, vibrantPaletteEl));
+    pastelPalette.forEach(color => createSwatch(color, pastelPaletteEl));
+    darkPalette.forEach(color => createSwatch(color, darkPaletteEl));
+    customColors.forEach(color => createSwatch(color, customPaletteEl));
+
+    if (customColors.length === 0) {
+      customPaletteEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #999; font-size: 11px; padding: 8px;">No custom colors saved yet</div>';
+    }
+
+    // Tab switching
+    modal.querySelectorAll('.cat-color-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Update tab styles
+        modal.querySelectorAll('.cat-color-tab').forEach(t => {
+          t.classList.remove('active');
+          t.style.background = '#f8f9fa';
+          t.style.color = '#666';
+          t.style.borderBottom = '2px solid transparent';
+        });
+        tab.classList.add('active');
+        tab.style.background = 'white';
+        tab.style.color = '#1a73e8';
+        tab.style.borderBottom = '2px solid #1a73e8';
+
+        // Show corresponding panel
+        const panelName = tab.dataset.tab;
+        modal.querySelectorAll('.cat-tab-panel').forEach(panel => {
+          panel.style.display = panel.dataset.panel === panelName ? 'block' : 'none';
+        });
+      });
     });
 
-    colorInput.click();
+    // Direct color input handler
+    directColorInput.addEventListener('input', (e) => {
+      updatePreview(e.target.value);
+    });
+
+    // Hex input handler
+    hexInput.addEventListener('input', (e) => {
+      let value = e.target.value.toUpperCase();
+      if (!value.startsWith('#')) {
+        value = '#' + value;
+      }
+      if (/^#[0-9A-F]{6}$/i.test(value)) {
+        updatePreview(value);
+      }
+    });
+
+    // Close handlers
+    const closeModal = () => {
+      document.body.removeChild(overlay);
+    };
+
+    modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+    modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+
+    // Add color handler
+    modal.querySelector('.modal-add-btn').addEventListener('click', async () => {
+      colorLabel = labelInput.value.trim();
+      await addColorToCategory(categoryId, selectedColor, colorLabel);
+      closeModal();
+    });
+
+    // Focus label input
+    setTimeout(() => labelInput.focus(), 100);
   }
 
   // Add color to category
@@ -7776,6 +8053,710 @@ Would you like to refresh all Google Calendar tabs?`;
 
     // FIX #6a: CRITICAL - Notify content script that labels changed
     // Without this, content script keeps using cached settings with old labels
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          type: 'EVENT_COLORING_SETTINGS_CHANGED'
+        }).catch(() => {
+          // Ignore errors if tab is not a calendar tab
+        });
+      }
+    });
+  }
+
+  // ========================================
+  // EVENT COLOR TEMPLATES
+  // Multi-property color presets (bg/text/border/borderWidth)
+  // ========================================
+
+  // Render event color templates (only unassigned ones - assigned ones show in categories)
+  async function renderEventColorTemplates() {
+    const container = qs('eventColorTemplatesList');
+    if (!container) return;
+
+    const templates = await window.cc3Storage.getUnassignedTemplates();
+
+    if (templates.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 20px; text-align: center; color: #64748b; font-size: 13px; background: #faf5ff; border-radius: 8px; border: 1px dashed #e9d5ff;">
+          <div style="margin-bottom: 8px;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.5">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+          </div>
+          <div style="font-weight: 500; margin-bottom: 4px;">No templates yet</div>
+          <div style="font-size: 11px;">Click "New Template" to create your first color preset</div>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = '';
+
+    // Create sortable container for drag-and-drop
+    const sortableContainer = document.createElement('div');
+    sortableContainer.className = 'templates-sortable-container';
+    sortableContainer.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
+
+    for (const template of templates) {
+      const templateEl = createTemplateElement(template);
+      sortableContainer.appendChild(templateEl);
+    }
+
+    container.appendChild(sortableContainer);
+
+    // Initialize drag-and-drop for templates
+    initTemplatesDragDrop(sortableContainer);
+  }
+
+  // Create template element
+  function createTemplateElement(template) {
+    const div = document.createElement('div');
+    div.className = 'event-color-template';
+    div.dataset.templateId = template.id;
+    div.draggable = true;
+
+    div.style.cssText = `
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 12px;
+      cursor: grab;
+      transition: box-shadow 0.2s, border-color 0.2s;
+    `;
+
+    // Get categories for the dropdown
+    const categories = eventColoringSettings.categories || {};
+    const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const categoryOptions = categoriesArray.map(cat =>
+      `<option value="${cat.id}" ${cat.id === template.categoryId ? 'selected' : ''}>${escapeHtml(cat.name)}</option>`
+    ).join('');
+
+    div.innerHTML = `
+      <div class="template-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+          <div class="drag-handle" style="cursor: grab; color: #9ca3af; display: flex; align-items: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="9" cy="6" r="1.5"/>
+              <circle cx="15" cy="6" r="1.5"/>
+              <circle cx="9" cy="12" r="1.5"/>
+              <circle cx="15" cy="12" r="1.5"/>
+              <circle cx="9" cy="18" r="1.5"/>
+              <circle cx="15" cy="18" r="1.5"/>
+            </svg>
+          </div>
+          <input
+            type="text"
+            class="template-name-input"
+            value="${escapeHtml(template.name)}"
+            data-template-id="${template.id}"
+            style="border: none; background: transparent; font-weight: 500; font-size: 13px; color: #202124; flex: 1; padding: 4px 0; min-width: 0;"
+          />
+        </div>
+        <div class="template-actions" style="display: flex; gap: 4px;">
+          <button class="edit-template-btn" data-template-id="${template.id}" title="Edit Template" style="padding: 4px; border: none; background: none; cursor: pointer; color: #5f6368; border-radius: 4px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+          <button class="delete-template-btn" data-template-id="${template.id}" title="Delete Template" style="padding: 4px; border: none; background: none; cursor: pointer; color: #5f6368; border-radius: 4px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mini Preview -->
+      <div class="template-mini-preview" style="
+        padding: 8px 12px;
+        border-radius: 4px;
+        background: ${template.background};
+        color: ${template.text};
+        outline: ${template.borderWidth}px solid ${template.border};
+        outline-offset: -${Math.round(template.borderWidth * 0.3)}px;
+        font-size: 12px;
+        font-weight: 500;
+        margin-bottom: 10px;
+      ">
+        ${escapeHtml(template.name || 'Sample Event')}
+      </div>
+
+      <!-- Color swatches row -->
+      <div class="template-color-preview" style="display: flex; gap: 6px; align-items: center; margin-bottom: 10px;">
+        <div title="Background: ${template.background}" style="width: 18px; height: 18px; border-radius: 4px; background: ${template.background}; border: 1px solid rgba(0,0,0,0.1);"></div>
+        <div title="Text: ${template.text}" style="width: 18px; height: 18px; border-radius: 4px; background: ${template.text}; border: 1px solid rgba(0,0,0,0.1);"></div>
+        <div title="Border: ${template.border}" style="width: 18px; height: 18px; border-radius: 4px; background: ${template.border}; border: 1px solid rgba(0,0,0,0.1);"></div>
+        <div title="Border Width" style="font-size: 10px; color: #666; padding: 2px 6px; background: #f0f0f0; border-radius: 4px;">${template.borderWidth}px</div>
+      </div>
+
+      <!-- Category Assignment -->
+      <div class="template-category-assign" style="padding-top: 8px; border-top: 1px solid #f0f0f0;">
+        <label style="font-size: 11px; color: #666; display: flex; align-items: center; gap: 6px;">
+          <span>Category:</span>
+          <select class="template-category-select" data-template-id="${template.id}" style="font-size: 11px; padding: 4px 8px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fff; flex: 1; min-width: 0;">
+            <option value="">— None —</option>
+            ${categoryOptions}
+          </select>
+        </label>
+      </div>
+    `;
+
+    // Hover effects
+    div.addEventListener('mouseenter', () => {
+      div.style.borderColor = '#8b5cf6';
+      div.style.boxShadow = '0 2px 8px rgba(139, 92, 246, 0.15)';
+    });
+    div.addEventListener('mouseleave', () => {
+      div.style.borderColor = '#e0e0e0';
+      div.style.boxShadow = 'none';
+    });
+
+    // Event listeners
+    setupTemplateEventListeners(div, template);
+
+    return div;
+  }
+
+  // Setup event listeners for template element
+  function setupTemplateEventListeners(element, template) {
+    // Name input blur - save name
+    const nameInput = element.querySelector('.template-name-input');
+    nameInput.addEventListener('blur', async (e) => {
+      const newName = e.target.value.trim();
+      if (newName && newName !== template.name) {
+        template.name = newName;
+        await window.cc3Storage.setEventColorTemplate(template);
+        // Update the mini preview text too
+        const miniPreview = element.querySelector('.template-mini-preview');
+        if (miniPreview) {
+          miniPreview.textContent = newName;
+        }
+      }
+    });
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.target.blur();
+      }
+    });
+
+    // Edit button - open editor modal
+    const editBtn = element.querySelector('.edit-template-btn');
+    editBtn.addEventListener('click', () => {
+      openTemplateEditorModal(template);
+    });
+
+    // Delete button
+    const deleteBtn = element.querySelector('.delete-template-btn');
+    deleteBtn.addEventListener('click', async () => {
+      if (confirm(`Delete template "${template.name}"?`)) {
+        await window.cc3Storage.deleteEventColorTemplate(template.id);
+        await renderEventColorTemplates();
+        await renderEventColorCategories(); // Refresh categories in case template was assigned
+        notifyContentScriptSettingsChanged();
+      }
+    });
+
+    // Category assignment dropdown
+    const categorySelect = element.querySelector('.template-category-select');
+    categorySelect.addEventListener('change', async (e) => {
+      const categoryId = e.target.value || null;
+      await window.cc3Storage.assignTemplateToCategory(template.id, categoryId);
+      await renderEventColorTemplates();
+      await renderEventColorCategories();
+      notifyContentScriptSettingsChanged();
+    });
+  }
+
+  // Initialize drag-and-drop for templates
+  function initTemplatesDragDrop(container) {
+    let draggedItem = null;
+
+    container.addEventListener('dragstart', (e) => {
+      const templateEl = e.target.closest('.event-color-template');
+      if (templateEl) {
+        draggedItem = templateEl;
+        templateEl.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+      }
+    });
+
+    container.addEventListener('dragend', (e) => {
+      const templateEl = e.target.closest('.event-color-template');
+      if (templateEl) {
+        templateEl.style.opacity = '1';
+        draggedItem = null;
+        // Save new order
+        saveTemplatesOrder(container);
+      }
+    });
+
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const target = e.target.closest('.event-color-template');
+      if (target && target !== draggedItem && draggedItem) {
+        const rect = target.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+
+        if (e.clientY < midY) {
+          target.parentNode.insertBefore(draggedItem, target);
+        } else {
+          target.parentNode.insertBefore(draggedItem, target.nextSibling);
+        }
+      }
+    });
+  }
+
+  // Save templates order after drag
+  async function saveTemplatesOrder(container) {
+    const templateElements = container.querySelectorAll('.event-color-template');
+    const orderUpdates = [];
+
+    templateElements.forEach((el, index) => {
+      orderUpdates.push({
+        id: el.dataset.templateId,
+        order: index
+      });
+    });
+
+    await window.cc3Storage.reorderEventColorTemplates(orderUpdates);
+    notifyContentScriptSettingsChanged();
+  }
+
+  // Add new template (opens editor modal with empty template)
+  function addNewTemplate() {
+    openTemplateEditorModal(null);
+  }
+
+  // Open template editor modal with swatch-based color pickers
+  function openTemplateEditorModal(existingTemplate = null) {
+    const isEdit = !!existingTemplate;
+
+    // Current template state
+    const templateState = existingTemplate ? { ...existingTemplate } : {
+      id: null,
+      name: '',
+      background: '#1a73e8',
+      text: '#ffffff',
+      border: '#1557b0',
+      borderWidth: 2,
+      categoryId: null
+    };
+
+    // Track which color property is currently being edited
+    let activeColorType = null;
+
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'template-editor-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    `;
+
+    // Get categories for dropdown
+    const categories = eventColoringSettings.categories || {};
+    const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const categoryOptions = categoriesArray.map(cat =>
+      `<option value="${cat.id}" ${cat.id === templateState.categoryId ? 'selected' : ''}>${escapeHtml(cat.name)}</option>`
+    ).join('');
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'template-editor-modal';
+    modal.style.cssText = `
+      background: #fff;
+      border-radius: 12px;
+      width: 360px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    `;
+
+    modal.innerHTML = `
+      <div class="modal-header" style="padding: 14px 16px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #202124;">
+          ${isEdit ? 'Edit Template' : 'Create New Template'}
+        </h3>
+        <button class="modal-close-btn" style="background: none; border: none; cursor: pointer; padding: 4px; color: #5f6368; line-height: 1;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding: 16px;">
+        <!-- Template Name -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Template Name</label>
+          <input type="text" id="templateNameInput" value="${escapeHtml(templateState.name)}" placeholder="e.g., Professional Meeting" style="width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+        </div>
+
+        <!-- Live Preview -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Preview</label>
+          <div id="templateLivePreview" style="
+            padding: 10px 14px;
+            border-radius: 6px;
+            background: ${templateState.background};
+            color: ${templateState.text};
+            outline: ${templateState.borderWidth}px solid ${templateState.border};
+            outline-offset: -${Math.round(templateState.borderWidth * 0.3)}px;
+            font-size: 12px;
+            font-weight: 500;
+          ">
+            <div class="preview-title" style="font-weight: 600;">${escapeHtml(templateState.name) || 'Sample Event Title'}</div>
+            <div style="font-size: 11px; opacity: 0.9; margin-top: 2px;">10:00 AM - 11:00 AM</div>
+          </div>
+        </div>
+
+        <!-- Color Swatches Row -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 8px;">Colors</label>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <!-- Background Swatch -->
+            <div style="text-align: center;">
+              <div class="template-color-swatch" data-type="background" style="
+                width: 36px;
+                height: 36px;
+                border-radius: 6px;
+                background: ${templateState.background};
+                border: 2px solid #e0e0e0;
+                cursor: pointer;
+                transition: all 0.15s;
+              " title="Background Color"></div>
+              <div style="font-size: 9px; color: #666; margin-top: 4px;">BG</div>
+            </div>
+            <!-- Text Swatch -->
+            <div style="text-align: center;">
+              <div class="template-color-swatch" data-type="text" style="
+                width: 36px;
+                height: 36px;
+                border-radius: 6px;
+                background: ${templateState.text};
+                border: 2px solid #e0e0e0;
+                cursor: pointer;
+                transition: all 0.15s;
+              " title="Text Color"></div>
+              <div style="font-size: 9px; color: #666; margin-top: 4px;">Text</div>
+            </div>
+            <!-- Border Swatch -->
+            <div style="text-align: center;">
+              <div class="template-color-swatch" data-type="border" style="
+                width: 36px;
+                height: 36px;
+                border-radius: 6px;
+                background: ${templateState.border};
+                border: 2px solid #e0e0e0;
+                cursor: pointer;
+                transition: all 0.15s;
+              " title="Border Color"></div>
+              <div style="font-size: 9px; color: #666; margin-top: 4px;">Border</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Color Picker Panel (hidden by default) -->
+        <div id="templateColorPickerPanel" style="display: none; margin-bottom: 16px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+          <div class="template-picker-header" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">
+            <span id="templatePickerLabel" style="font-size: 12px; font-weight: 500; color: #202124;">Select Color</span>
+            <button class="template-picker-close" type="button" style="width: 20px; height: 20px; border: none; background: #e8eaed; cursor: pointer; font-size: 14px; color: #5f6368; border-radius: 4px; display: flex; align-items: center; justify-content: center;">×</button>
+          </div>
+          <div class="color-picker-tabs" style="display: flex; background: #f8f9fa; border-bottom: 1px solid #e8eaed;">
+            <button type="button" class="tmpl-color-tab active" data-tab="vibrant" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: white; border: none; cursor: pointer; color: #1a73e8; border-bottom: 2px solid #1a73e8;">Vibrant</button>
+            <button type="button" class="tmpl-color-tab" data-tab="pastel" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Pastel</button>
+            <button type="button" class="tmpl-color-tab" data-tab="dark" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Dark</button>
+            <button type="button" class="tmpl-color-tab" data-tab="custom" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Custom</button>
+          </div>
+          <div style="padding: 12px;">
+            <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+              <input type="color" class="tmpl-direct-color" value="#4285f4" style="width: 50%; height: 28px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px;">
+              <input type="text" class="tmpl-hex-input" value="#4285F4" placeholder="#FF0000" maxlength="7" style="width: 50%; height: 24px; font-size: 10px; padding: 2px 6px; border: 1px solid #ccc; border-radius: 4px; text-transform: uppercase; font-family: monospace;">
+            </div>
+            <div class="tmpl-tab-panel active" data-panel="vibrant">
+              <div class="tmpl-palette vibrant-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8eaed; max-height: 100px; overflow-y: auto;"></div>
+            </div>
+            <div class="tmpl-tab-panel" data-panel="pastel" style="display: none;">
+              <div class="tmpl-palette pastel-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8eaed; max-height: 100px; overflow-y: auto;"></div>
+            </div>
+            <div class="tmpl-tab-panel" data-panel="dark" style="display: none;">
+              <div class="tmpl-palette dark-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8eaed; max-height: 100px; overflow-y: auto;"></div>
+            </div>
+            <div class="tmpl-tab-panel" data-panel="custom" style="display: none;">
+              <div class="tmpl-palette custom-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8eaed; max-height: 100px; overflow-y: auto;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Border Width -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 6px;">Border Width</label>
+          <div class="template-thickness-buttons" style="display: flex; gap: 4px;">
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 0 ? ' active' : ''}" data-width="0" style="padding: 6px 10px; background: ${templateState.borderWidth === 0 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 0 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 0 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">0px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 1 ? ' active' : ''}" data-width="1" style="padding: 6px 10px; background: ${templateState.borderWidth === 1 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 1 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 1 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">1px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 2 ? ' active' : ''}" data-width="2" style="padding: 6px 10px; background: ${templateState.borderWidth === 2 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 2 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 2 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">2px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 3 ? ' active' : ''}" data-width="3" style="padding: 6px 10px; background: ${templateState.borderWidth === 3 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 3 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 3 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">3px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 4 ? ' active' : ''}" data-width="4" style="padding: 6px 10px; background: ${templateState.borderWidth === 4 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 4 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 4 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">4px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 5 ? ' active' : ''}" data-width="5" style="padding: 6px 10px; background: ${templateState.borderWidth === 5 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 5 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 5 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">5px</button>
+          </div>
+        </div>
+
+        <!-- Category Assignment -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Assign to Category (optional)</label>
+          <select id="templateCategorySelect" style="width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 12px; background: #fff;">
+            <option value="">— None (show in Templates section) —</option>
+            ${categoryOptions}
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="padding: 12px 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="modal-cancel-btn" style="padding: 8px 16px; border: 1px solid #e0e0e0; background: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; color: #5f6368;">
+          Cancel
+        </button>
+        <button class="modal-save-btn" style="padding: 8px 16px; border: none; background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%); color: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500;">
+          ${isEdit ? 'Save Changes' : 'Create Template'}
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Get elements
+    const preview = modal.querySelector('#templateLivePreview');
+    const previewTitle = preview.querySelector('.preview-title');
+    const nameInput = modal.querySelector('#templateNameInput');
+    const colorPickerPanel = modal.querySelector('#templateColorPickerPanel');
+    const pickerLabel = modal.querySelector('#templatePickerLabel');
+    const directColorInput = modal.querySelector('.tmpl-direct-color');
+    const hexInput = modal.querySelector('.tmpl-hex-input');
+    const categorySelect = modal.querySelector('#templateCategorySelect');
+
+    // Update preview function
+    function updatePreview() {
+      preview.style.background = templateState.background;
+      preview.style.color = templateState.text;
+      preview.style.outline = `${templateState.borderWidth}px solid ${templateState.border}`;
+      preview.style.outlineOffset = `-${Math.round(templateState.borderWidth * 0.3)}px`;
+    }
+
+    // Update swatch colors
+    function updateSwatches() {
+      modal.querySelectorAll('.template-color-swatch').forEach(swatch => {
+        const type = swatch.dataset.type;
+        swatch.style.background = templateState[type];
+      });
+    }
+
+    // Create color swatch
+    function createSwatch(color, container) {
+      const swatch = document.createElement('div');
+      swatch.style.cssText = `
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        background: ${color};
+        border: 1px solid #e0e0e0;
+        cursor: pointer;
+        transition: all 0.15s;
+      `;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      swatch.addEventListener('mouseenter', () => {
+        swatch.style.transform = 'scale(1.15)';
+        swatch.style.borderColor = '#1a73e8';
+      });
+      swatch.addEventListener('mouseleave', () => {
+        swatch.style.transform = 'scale(1)';
+        swatch.style.borderColor = '#e0e0e0';
+      });
+      swatch.addEventListener('click', () => {
+        selectColor(color);
+      });
+      container.appendChild(swatch);
+    }
+
+    // Populate palettes
+    const vibrantPaletteEl = modal.querySelector('.vibrant-palette');
+    const pastelPaletteEl = modal.querySelector('.pastel-palette');
+    const darkPaletteEl = modal.querySelector('.dark-palette');
+    const customPaletteEl = modal.querySelector('.custom-palette');
+
+    colorPickerPalette.forEach(color => createSwatch(color, vibrantPaletteEl));
+    pastelPalette.forEach(color => createSwatch(color, pastelPaletteEl));
+    darkPalette.forEach(color => createSwatch(color, darkPaletteEl));
+    customColors.forEach(color => createSwatch(color, customPaletteEl));
+
+    if (customColors.length === 0) {
+      customPaletteEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #999; font-size: 11px; padding: 8px;">No custom colors saved yet</div>';
+    }
+
+    // Select color function
+    function selectColor(color) {
+      if (!activeColorType) return;
+      templateState[activeColorType] = color;
+      directColorInput.value = color;
+      hexInput.value = color.toUpperCase();
+      updatePreview();
+      updateSwatches();
+    }
+
+    // Open color picker for a specific type
+    function openColorPicker(type) {
+      activeColorType = type;
+      const labels = { background: 'Background Color', text: 'Text Color', border: 'Border Color' };
+      pickerLabel.textContent = labels[type];
+      directColorInput.value = templateState[type];
+      hexInput.value = templateState[type].toUpperCase();
+      colorPickerPanel.style.display = 'block';
+
+      // Highlight active swatch
+      modal.querySelectorAll('.template-color-swatch').forEach(s => {
+        s.style.borderColor = s.dataset.type === type ? '#1a73e8' : '#e0e0e0';
+        s.style.boxShadow = s.dataset.type === type ? '0 0 0 2px rgba(26, 115, 232, 0.2)' : 'none';
+      });
+    }
+
+    // Close color picker
+    function closeColorPicker() {
+      colorPickerPanel.style.display = 'none';
+      activeColorType = null;
+      modal.querySelectorAll('.template-color-swatch').forEach(s => {
+        s.style.borderColor = '#e0e0e0';
+        s.style.boxShadow = 'none';
+      });
+    }
+
+    // Color swatch click handlers
+    modal.querySelectorAll('.template-color-swatch').forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        openColorPicker(swatch.dataset.type);
+      });
+    });
+
+    // Close picker button
+    modal.querySelector('.template-picker-close').addEventListener('click', closeColorPicker);
+
+    // Tab switching
+    modal.querySelectorAll('.tmpl-color-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        modal.querySelectorAll('.tmpl-color-tab').forEach(t => {
+          t.style.background = '#f8f9fa';
+          t.style.color = '#666';
+          t.style.borderBottomColor = 'transparent';
+        });
+        tab.style.background = 'white';
+        tab.style.color = '#1a73e8';
+        tab.style.borderBottomColor = '#1a73e8';
+
+        modal.querySelectorAll('.tmpl-tab-panel').forEach(p => p.style.display = 'none');
+        modal.querySelector(`.tmpl-tab-panel[data-panel="${tab.dataset.tab}"]`).style.display = 'block';
+      });
+    });
+
+    // Direct color input
+    directColorInput.addEventListener('input', () => {
+      hexInput.value = directColorInput.value.toUpperCase();
+      selectColor(directColorInput.value);
+    });
+
+    hexInput.addEventListener('input', () => {
+      if (/^#[0-9A-Fa-f]{6}$/.test(hexInput.value)) {
+        directColorInput.value = hexInput.value;
+        selectColor(hexInput.value);
+      }
+    });
+
+    // Border width buttons
+    modal.querySelectorAll('.tmpl-thickness-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const width = parseInt(btn.dataset.width, 10);
+        templateState.borderWidth = width;
+        updatePreview();
+
+        // Update button styles
+        modal.querySelectorAll('.tmpl-thickness-btn').forEach(b => {
+          const isActive = parseInt(b.dataset.width, 10) === width;
+          b.style.background = isActive ? '#e8f0fe' : '#fff';
+          b.style.color = isActive ? '#1a73e8' : '#5f6368';
+          b.style.borderColor = isActive ? '#1a73e8' : '#dadce0';
+        });
+      });
+    });
+
+    // Name input
+    nameInput.addEventListener('input', () => {
+      previewTitle.textContent = nameInput.value || 'Sample Event Title';
+    });
+
+    // Close handlers
+    const closeModal = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+    modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+    modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
+
+    // Escape key
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        closeModal();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+
+    // Save handler
+    modal.querySelector('.modal-save-btn').addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      if (!name) {
+        nameInput.style.borderColor = '#ef4444';
+        nameInput.focus();
+        return;
+      }
+
+      const allTemplates = await window.cc3Storage.getEventColorTemplates();
+      const newTemplate = {
+        id: templateState.id || `tmpl_${Date.now()}`,
+        name,
+        background: templateState.background,
+        text: templateState.text,
+        border: templateState.border,
+        borderWidth: templateState.borderWidth,
+        categoryId: categorySelect.value || null,
+        order: templateState.order ?? Object.keys(allTemplates).length,
+        createdAt: templateState.createdAt,
+        updatedAt: Date.now()
+      };
+
+      await window.cc3Storage.setEventColorTemplate(newTemplate);
+      closeModal();
+      await renderEventColorTemplates();
+      await renderEventColorCategories();
+      notifyContentScriptSettingsChanged();
+    });
+
+    // Focus name input
+    nameInput.focus();
+    nameInput.select();
+  }
+
+  // Notify content script that settings changed
+  function notifyContentScriptSettingsChanged() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
         chrome.tabs.sendMessage(tabs[0].id, {
@@ -8490,6 +9471,11 @@ Would you like to refresh all Google Calendar tabs?`;
   const addCategoryBtn = qs('addEventColorCategoryBtn');
   if (addCategoryBtn) {
     addCategoryBtn.addEventListener('click', addNewCategory);
+  }
+
+  const addTemplateBtn = qs('addEventColorTemplateBtn');
+  if (addTemplateBtn) {
+    addTemplateBtn.addEventListener('click', addNewTemplate);
   }
 
   const disableCustomColorsCheckbox = qs('disableCustomColorsCheckbox');
