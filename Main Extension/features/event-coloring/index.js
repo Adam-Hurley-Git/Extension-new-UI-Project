@@ -29,6 +29,7 @@
   let colorPickerObserver = null;
   let colorRenderObserver = null;
   let lastClickedEventId = null;
+  let lastClickedIsTask = false; // Track if last clicked element was a task
   let isInjecting = false;
 
   // ========================================
@@ -758,6 +759,12 @@
 
   function injectCustomCategories(colorPickerElement) {
     if (colorPickerElement.dataset.cfEventColorModified || isInjecting) {
+      return;
+    }
+
+    // Skip injection for task elements - tasks should not have color picker customization
+    if (lastClickedIsTask) {
+      console.log('[EventColoring] Skipping color picker injection for task');
       return;
     }
 
@@ -2314,13 +2321,26 @@
       const eventElement = e.target.closest('[data-eventid]');
       if (eventElement) {
         const eventId = eventElement.getAttribute('data-eventid');
-        if (eventId && !eventId.startsWith('tasks')) {
+
+        // Check if this is a task element
+        const isTask = isTaskElement(eventElement);
+        lastClickedIsTask = isTask;
+
+        if (eventId && !isTask) {
           lastClickedEventId = eventId;
           console.log('[EventColoring] Captured event ID:', eventId, 'from', e.type);
           setTimeout(() => {
             if (lastClickedEventId === eventId) {
               lastClickedEventId = null;
             }
+          }, 10000);
+        } else if (isTask) {
+          console.log('[EventColoring] Captured task click, skipping color picker injection');
+          // Clear lastClickedEventId to prevent stale event association
+          lastClickedEventId = null;
+          // Reset task flag after a delay (similar to event ID timeout)
+          setTimeout(() => {
+            lastClickedIsTask = false;
           }, 10000);
         }
       }
