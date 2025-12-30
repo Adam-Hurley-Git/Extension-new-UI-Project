@@ -29,6 +29,7 @@
   let colorPickerObserver = null;
   let colorRenderObserver = null;
   let lastClickedEventId = null;
+  let lastClickedIsTask = false; // Track if last clicked element was a task
   let isInjecting = false;
 
   // ========================================
@@ -758,6 +759,12 @@
 
   function injectCustomCategories(colorPickerElement) {
     if (colorPickerElement.dataset.cfEventColorModified || isInjecting) {
+      return;
+    }
+
+    // Skip injection for task elements - tasks should not have color picker customization
+    if (lastClickedIsTask) {
+      console.log('[EventColoring] Skipping color picker injection for task');
       return;
     }
 
@@ -1500,6 +1507,9 @@
   function applyFullColorsToElement(element, colors) {
     if (!element) return;
 
+    // Skip task elements - tasks should not receive event coloring
+    if (isTaskElement(element)) return;
+
     const { background, text, border, borderWidth = 2 } = colors;
     const eventId = element.getAttribute('data-eventid');
     const isEventChip = element.matches('[data-eventchip]');
@@ -2063,6 +2073,9 @@
       // Skip events in dialogs
       if (element.closest('[role="dialog"]')) return;
 
+      // Skip task elements - tasks should not receive calendar list colors
+      if (isTaskElement(element)) return;
+
       const eventId = element.getAttribute('data-eventid');
       if (!eventId) return;
 
@@ -2169,6 +2182,9 @@
   function applyColorsToElement(element, colors) {
     if (!element) return;
 
+    // Skip task elements - tasks should not receive event coloring
+    if (isTaskElement(element)) return;
+
     const { background, text, border, borderWidth = 2 } = colors;
     if (!background && !text && !border) return;
 
@@ -2245,6 +2261,37 @@
   // UTILITIES
   // ========================================
 
+  /**
+   * Check if an element represents a task (not a calendar event)
+   * Handles both OLD UI (tasks. prefix) and NEW UI (ttb_ with Mark complete button)
+   * @param {Element} element - DOM element with data-eventid
+   * @returns {boolean} - true if this is a task element
+   */
+  function isTaskElement(element) {
+    if (!element) return false;
+
+    const eventId = element.getAttribute('data-eventid');
+    if (!eventId) return false;
+
+    // OLD UI: Direct task ID prefix
+    if (eventId.startsWith('tasks.') || eventId.startsWith('tasks_')) {
+      return true;
+    }
+
+    // NEW UI: Tasks have a "Mark complete" checkbox button
+    // Primary check: aria-label (accessibility attribute, stable)
+    if (element.querySelector('[aria-label="Mark complete"]')) {
+      return true;
+    }
+
+    // Fallback: jsname attribute (from Google's internal framework)
+    if (element.querySelector('button[jsname="nWuQKb"]')) {
+      return true;
+    }
+
+    return false;
+  }
+
   function closeColorPicker() {
     document.querySelectorAll('[role="menu"], [role="dialog"]').forEach((el) => {
       if (!el.closest('.' + COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.RECURRING_DIALOG)) {
@@ -2274,13 +2321,26 @@
       const eventElement = e.target.closest('[data-eventid]');
       if (eventElement) {
         const eventId = eventElement.getAttribute('data-eventid');
-        if (eventId && !eventId.startsWith('tasks')) {
+
+        // Check if this is a task element
+        const isTask = isTaskElement(eventElement);
+        lastClickedIsTask = isTask;
+
+        if (eventId && !isTask) {
           lastClickedEventId = eventId;
           console.log('[EventColoring] Captured event ID:', eventId, 'from', e.type);
           setTimeout(() => {
             if (lastClickedEventId === eventId) {
               lastClickedEventId = null;
             }
+          }, 10000);
+        } else if (isTask) {
+          console.log('[EventColoring] Captured task click, skipping color picker injection');
+          // Clear lastClickedEventId to prevent stale event association
+          lastClickedEventId = null;
+          // Reset task flag after a delay (similar to event ID timeout)
+          setTimeout(() => {
+            lastClickedIsTask = false;
           }, 10000);
         }
       }
