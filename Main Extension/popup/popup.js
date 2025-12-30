@@ -8119,12 +8119,12 @@ Would you like to refresh all Google Calendar tabs?`;
     openTemplateEditorModal(null);
   }
 
-  // Open template editor modal
+  // Open template editor modal with swatch-based color pickers
   function openTemplateEditorModal(existingTemplate = null) {
     const isEdit = !!existingTemplate;
 
-    // Default values for new template
-    const template = existingTemplate ? { ...existingTemplate } : {
+    // Current template state
+    const templateState = existingTemplate ? { ...existingTemplate } : {
       id: null,
       name: '',
       background: '#1a73e8',
@@ -8133,6 +8133,9 @@ Would you like to refresh all Google Calendar tabs?`;
       borderWidth: 2,
       categoryId: null
     };
+
+    // Track which color property is currently being edited
+    let activeColorType = null;
 
     // Create modal overlay
     const overlay = document.createElement('div');
@@ -8154,7 +8157,7 @@ Would you like to refresh all Google Calendar tabs?`;
     const categories = eventColoringSettings.categories || {};
     const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
     const categoryOptions = categoriesArray.map(cat =>
-      `<option value="${cat.id}" ${cat.id === template.categoryId ? 'selected' : ''}>${escapeHtml(cat.name)}</option>`
+      `<option value="${cat.id}" ${cat.id === templateState.categoryId ? 'selected' : ''}>${escapeHtml(cat.name)}</option>`
     ).join('');
 
     // Create modal
@@ -8163,7 +8166,7 @@ Would you like to refresh all Google Calendar tabs?`;
     modal.style.cssText = `
       background: #fff;
       border-radius: 12px;
-      width: 340px;
+      width: 360px;
       max-height: 90vh;
       overflow-y: auto;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
@@ -8186,7 +8189,7 @@ Would you like to refresh all Google Calendar tabs?`;
         <!-- Template Name -->
         <div class="form-group" style="margin-bottom: 16px;">
           <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Template Name</label>
-          <input type="text" id="templateNameInput" value="${escapeHtml(template.name)}" placeholder="e.g., Professional Meeting" style="width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+          <input type="text" id="templateNameInput" value="${escapeHtml(templateState.name)}" placeholder="e.g., Professional Meeting" style="width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
         </div>
 
         <!-- Live Preview -->
@@ -8195,50 +8198,106 @@ Would you like to refresh all Google Calendar tabs?`;
           <div id="templateLivePreview" style="
             padding: 10px 14px;
             border-radius: 6px;
-            background: ${template.background};
-            color: ${template.text};
-            outline: ${template.borderWidth}px solid ${template.border};
-            outline-offset: -${Math.round(template.borderWidth * 0.3)}px;
+            background: ${templateState.background};
+            color: ${templateState.text};
+            outline: ${templateState.borderWidth}px solid ${templateState.border};
+            outline-offset: -${Math.round(templateState.borderWidth * 0.3)}px;
             font-size: 12px;
             font-weight: 500;
           ">
-            <div style="font-weight: 600;">${escapeHtml(template.name) || 'Sample Event Title'}</div>
+            <div class="preview-title" style="font-weight: 600;">${escapeHtml(templateState.name) || 'Sample Event Title'}</div>
             <div style="font-size: 11px; opacity: 0.9; margin-top: 2px;">10:00 AM - 11:00 AM</div>
           </div>
         </div>
 
-        <!-- Color Inputs -->
-        <div class="color-inputs-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-          <div class="form-group">
-            <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Background</label>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <input type="color" id="templateBgColor" value="${template.background}" style="width: 32px; height: 28px; border: 1px solid #e0e0e0; border-radius: 4px; cursor: pointer; padding: 1px;">
-              <input type="text" id="templateBgHex" value="${template.background}" style="flex: 1; padding: 5px 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 11px; font-family: monospace; min-width: 0;">
+        <!-- Color Swatches Row -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 8px;">Colors</label>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <!-- Background Swatch -->
+            <div style="text-align: center;">
+              <div class="template-color-swatch" data-type="background" style="
+                width: 36px;
+                height: 36px;
+                border-radius: 6px;
+                background: ${templateState.background};
+                border: 2px solid #e0e0e0;
+                cursor: pointer;
+                transition: all 0.15s;
+              " title="Background Color"></div>
+              <div style="font-size: 9px; color: #666; margin-top: 4px;">BG</div>
+            </div>
+            <!-- Text Swatch -->
+            <div style="text-align: center;">
+              <div class="template-color-swatch" data-type="text" style="
+                width: 36px;
+                height: 36px;
+                border-radius: 6px;
+                background: ${templateState.text};
+                border: 2px solid #e0e0e0;
+                cursor: pointer;
+                transition: all 0.15s;
+              " title="Text Color"></div>
+              <div style="font-size: 9px; color: #666; margin-top: 4px;">Text</div>
+            </div>
+            <!-- Border Swatch -->
+            <div style="text-align: center;">
+              <div class="template-color-swatch" data-type="border" style="
+                width: 36px;
+                height: 36px;
+                border-radius: 6px;
+                background: ${templateState.border};
+                border: 2px solid #e0e0e0;
+                cursor: pointer;
+                transition: all 0.15s;
+              " title="Border Color"></div>
+              <div style="font-size: 9px; color: #666; margin-top: 4px;">Border</div>
             </div>
           </div>
+        </div>
 
-          <div class="form-group">
-            <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Text</label>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <input type="color" id="templateTextColor" value="${template.text}" style="width: 32px; height: 28px; border: 1px solid #e0e0e0; border-radius: 4px; cursor: pointer; padding: 1px;">
-              <input type="text" id="templateTextHex" value="${template.text}" style="flex: 1; padding: 5px 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 11px; font-family: monospace; min-width: 0;">
+        <!-- Color Picker Panel (hidden by default) -->
+        <div id="templateColorPickerPanel" style="display: none; margin-bottom: 16px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+          <div class="template-picker-header" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">
+            <span id="templatePickerLabel" style="font-size: 12px; font-weight: 500; color: #202124;">Select Color</span>
+            <button class="template-picker-close" type="button" style="width: 20px; height: 20px; border: none; background: #e8eaed; cursor: pointer; font-size: 14px; color: #5f6368; border-radius: 4px; display: flex; align-items: center; justify-content: center;">×</button>
+          </div>
+          <div class="color-picker-tabs" style="display: flex; background: #f8f9fa; border-bottom: 1px solid #e8eaed;">
+            <button type="button" class="tmpl-color-tab active" data-tab="vibrant" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: white; border: none; cursor: pointer; color: #1a73e8; border-bottom: 2px solid #1a73e8;">Vibrant</button>
+            <button type="button" class="tmpl-color-tab" data-tab="pastel" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Pastel</button>
+            <button type="button" class="tmpl-color-tab" data-tab="dark" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Dark</button>
+            <button type="button" class="tmpl-color-tab" data-tab="custom" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Custom</button>
+          </div>
+          <div style="padding: 12px;">
+            <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+              <input type="color" class="tmpl-direct-color" value="#4285f4" style="width: 50%; height: 28px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px;">
+              <input type="text" class="tmpl-hex-input" value="#4285F4" placeholder="#FF0000" maxlength="7" style="width: 50%; height: 24px; font-size: 10px; padding: 2px 6px; border: 1px solid #ccc; border-radius: 4px; text-transform: uppercase; font-family: monospace;">
+            </div>
+            <div class="tmpl-tab-panel active" data-panel="vibrant">
+              <div class="tmpl-palette vibrant-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8eaed; max-height: 100px; overflow-y: auto;"></div>
+            </div>
+            <div class="tmpl-tab-panel" data-panel="pastel" style="display: none;">
+              <div class="tmpl-palette pastel-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8eaed; max-height: 100px; overflow-y: auto;"></div>
+            </div>
+            <div class="tmpl-tab-panel" data-panel="dark" style="display: none;">
+              <div class="tmpl-palette dark-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8eaed; max-height: 100px; overflow-y: auto;"></div>
+            </div>
+            <div class="tmpl-tab-panel" data-panel="custom" style="display: none;">
+              <div class="tmpl-palette custom-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8eaed; max-height: 100px; overflow-y: auto;"></div>
             </div>
           </div>
+        </div>
 
-          <div class="form-group">
-            <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Border</label>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <input type="color" id="templateBorderColor" value="${template.border}" style="width: 32px; height: 28px; border: 1px solid #e0e0e0; border-radius: 4px; cursor: pointer; padding: 1px;">
-              <input type="text" id="templateBorderHex" value="${template.border}" style="flex: 1; padding: 5px 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 11px; font-family: monospace; min-width: 0;">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Border Width</label>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <input type="range" id="templateBorderWidth" value="${template.borderWidth}" min="0" max="5" step="1" style="flex: 1; height: 28px;">
-              <span id="templateBorderWidthValue" style="font-size: 11px; color: #5f6368; min-width: 28px; text-align: right;">${template.borderWidth}px</span>
-            </div>
+        <!-- Border Width -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 6px;">Border Width</label>
+          <div class="template-thickness-buttons" style="display: flex; gap: 4px;">
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 0 ? ' active' : ''}" data-width="0" style="padding: 6px 10px; background: ${templateState.borderWidth === 0 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 0 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 0 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">0px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 1 ? ' active' : ''}" data-width="1" style="padding: 6px 10px; background: ${templateState.borderWidth === 1 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 1 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 1 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">1px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 2 ? ' active' : ''}" data-width="2" style="padding: 6px 10px; background: ${templateState.borderWidth === 2 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 2 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 2 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">2px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 3 ? ' active' : ''}" data-width="3" style="padding: 6px 10px; background: ${templateState.borderWidth === 3 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 3 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 3 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">3px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 4 ? ' active' : ''}" data-width="4" style="padding: 6px 10px; background: ${templateState.borderWidth === 4 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 4 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 4 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">4px</button>
+            <button type="button" class="tmpl-thickness-btn${templateState.borderWidth === 5 ? ' active' : ''}" data-width="5" style="padding: 6px 10px; background: ${templateState.borderWidth === 5 ? '#e8f0fe' : '#fff'}; color: ${templateState.borderWidth === 5 ? '#1a73e8' : '#5f6368'}; border: 1px solid ${templateState.borderWidth === 5 ? '#1a73e8' : '#dadce0'}; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">5px</button>
           </div>
         </div>
 
@@ -8267,59 +8326,169 @@ Would you like to refresh all Google Calendar tabs?`;
 
     // Get elements
     const preview = modal.querySelector('#templateLivePreview');
-    const previewTitle = preview.querySelector('div:first-child');
+    const previewTitle = preview.querySelector('.preview-title');
     const nameInput = modal.querySelector('#templateNameInput');
-    const bgColor = modal.querySelector('#templateBgColor');
-    const bgHex = modal.querySelector('#templateBgHex');
-    const textColor = modal.querySelector('#templateTextColor');
-    const textHex = modal.querySelector('#templateTextHex');
-    const borderColor = modal.querySelector('#templateBorderColor');
-    const borderHex = modal.querySelector('#templateBorderHex');
-    const borderWidth = modal.querySelector('#templateBorderWidth');
-    const borderWidthValue = modal.querySelector('#templateBorderWidthValue');
+    const colorPickerPanel = modal.querySelector('#templateColorPickerPanel');
+    const pickerLabel = modal.querySelector('#templatePickerLabel');
+    const directColorInput = modal.querySelector('.tmpl-direct-color');
+    const hexInput = modal.querySelector('.tmpl-hex-input');
     const categorySelect = modal.querySelector('#templateCategorySelect');
 
     // Update preview function
     function updatePreview() {
-      preview.style.background = bgHex.value;
-      preview.style.color = textHex.value;
-      preview.style.outline = `${borderWidth.value}px solid ${borderHex.value}`;
-      preview.style.outlineOffset = `-${Math.round(borderWidth.value * 0.3)}px`;
+      preview.style.background = templateState.background;
+      preview.style.color = templateState.text;
+      preview.style.outline = `${templateState.borderWidth}px solid ${templateState.border}`;
+      preview.style.outlineOffset = `-${Math.round(templateState.borderWidth * 0.3)}px`;
     }
 
-    // Update preview title when name changes
+    // Update swatch colors
+    function updateSwatches() {
+      modal.querySelectorAll('.template-color-swatch').forEach(swatch => {
+        const type = swatch.dataset.type;
+        swatch.style.background = templateState[type];
+      });
+    }
+
+    // Create color swatch
+    function createSwatch(color, container) {
+      const swatch = document.createElement('div');
+      swatch.style.cssText = `
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        background: ${color};
+        border: 1px solid #e0e0e0;
+        cursor: pointer;
+        transition: all 0.15s;
+      `;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      swatch.addEventListener('mouseenter', () => {
+        swatch.style.transform = 'scale(1.15)';
+        swatch.style.borderColor = '#1a73e8';
+      });
+      swatch.addEventListener('mouseleave', () => {
+        swatch.style.transform = 'scale(1)';
+        swatch.style.borderColor = '#e0e0e0';
+      });
+      swatch.addEventListener('click', () => {
+        selectColor(color);
+      });
+      container.appendChild(swatch);
+    }
+
+    // Populate palettes
+    const vibrantPaletteEl = modal.querySelector('.vibrant-palette');
+    const pastelPaletteEl = modal.querySelector('.pastel-palette');
+    const darkPaletteEl = modal.querySelector('.dark-palette');
+    const customPaletteEl = modal.querySelector('.custom-palette');
+
+    colorPickerPalette.forEach(color => createSwatch(color, vibrantPaletteEl));
+    pastelPalette.forEach(color => createSwatch(color, pastelPaletteEl));
+    darkPalette.forEach(color => createSwatch(color, darkPaletteEl));
+    customColors.forEach(color => createSwatch(color, customPaletteEl));
+
+    if (customColors.length === 0) {
+      customPaletteEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #999; font-size: 11px; padding: 8px;">No custom colors saved yet</div>';
+    }
+
+    // Select color function
+    function selectColor(color) {
+      if (!activeColorType) return;
+      templateState[activeColorType] = color;
+      directColorInput.value = color;
+      hexInput.value = color.toUpperCase();
+      updatePreview();
+      updateSwatches();
+    }
+
+    // Open color picker for a specific type
+    function openColorPicker(type) {
+      activeColorType = type;
+      const labels = { background: 'Background Color', text: 'Text Color', border: 'Border Color' };
+      pickerLabel.textContent = labels[type];
+      directColorInput.value = templateState[type];
+      hexInput.value = templateState[type].toUpperCase();
+      colorPickerPanel.style.display = 'block';
+
+      // Highlight active swatch
+      modal.querySelectorAll('.template-color-swatch').forEach(s => {
+        s.style.borderColor = s.dataset.type === type ? '#1a73e8' : '#e0e0e0';
+        s.style.boxShadow = s.dataset.type === type ? '0 0 0 2px rgba(26, 115, 232, 0.2)' : 'none';
+      });
+    }
+
+    // Close color picker
+    function closeColorPicker() {
+      colorPickerPanel.style.display = 'none';
+      activeColorType = null;
+      modal.querySelectorAll('.template-color-swatch').forEach(s => {
+        s.style.borderColor = '#e0e0e0';
+        s.style.boxShadow = 'none';
+      });
+    }
+
+    // Color swatch click handlers
+    modal.querySelectorAll('.template-color-swatch').forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        openColorPicker(swatch.dataset.type);
+      });
+    });
+
+    // Close picker button
+    modal.querySelector('.template-picker-close').addEventListener('click', closeColorPicker);
+
+    // Tab switching
+    modal.querySelectorAll('.tmpl-color-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        modal.querySelectorAll('.tmpl-color-tab').forEach(t => {
+          t.style.background = '#f8f9fa';
+          t.style.color = '#666';
+          t.style.borderBottomColor = 'transparent';
+        });
+        tab.style.background = 'white';
+        tab.style.color = '#1a73e8';
+        tab.style.borderBottomColor = '#1a73e8';
+
+        modal.querySelectorAll('.tmpl-tab-panel').forEach(p => p.style.display = 'none');
+        modal.querySelector(`.tmpl-tab-panel[data-panel="${tab.dataset.tab}"]`).style.display = 'block';
+      });
+    });
+
+    // Direct color input
+    directColorInput.addEventListener('input', () => {
+      hexInput.value = directColorInput.value.toUpperCase();
+      selectColor(directColorInput.value);
+    });
+
+    hexInput.addEventListener('input', () => {
+      if (/^#[0-9A-Fa-f]{6}$/.test(hexInput.value)) {
+        directColorInput.value = hexInput.value;
+        selectColor(hexInput.value);
+      }
+    });
+
+    // Border width buttons
+    modal.querySelectorAll('.tmpl-thickness-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const width = parseInt(btn.dataset.width, 10);
+        templateState.borderWidth = width;
+        updatePreview();
+
+        // Update button styles
+        modal.querySelectorAll('.tmpl-thickness-btn').forEach(b => {
+          const isActive = parseInt(b.dataset.width, 10) === width;
+          b.style.background = isActive ? '#e8f0fe' : '#fff';
+          b.style.color = isActive ? '#1a73e8' : '#5f6368';
+          b.style.borderColor = isActive ? '#1a73e8' : '#dadce0';
+        });
+      });
+    });
+
+    // Name input
     nameInput.addEventListener('input', () => {
       previewTitle.textContent = nameInput.value || 'Sample Event Title';
-    });
-
-    // Sync color picker and hex input
-    bgColor.addEventListener('input', () => { bgHex.value = bgColor.value; updatePreview(); });
-    bgHex.addEventListener('input', () => {
-      if (/^#[0-9A-Fa-f]{6}$/.test(bgHex.value)) {
-        bgColor.value = bgHex.value;
-        updatePreview();
-      }
-    });
-
-    textColor.addEventListener('input', () => { textHex.value = textColor.value; updatePreview(); });
-    textHex.addEventListener('input', () => {
-      if (/^#[0-9A-Fa-f]{6}$/.test(textHex.value)) {
-        textColor.value = textHex.value;
-        updatePreview();
-      }
-    });
-
-    borderColor.addEventListener('input', () => { borderHex.value = borderColor.value; updatePreview(); });
-    borderHex.addEventListener('input', () => {
-      if (/^#[0-9A-Fa-f]{6}$/.test(borderHex.value)) {
-        borderColor.value = borderHex.value;
-        updatePreview();
-      }
-    });
-
-    borderWidth.addEventListener('input', () => {
-      borderWidthValue.textContent = borderWidth.value + 'px';
-      updatePreview();
     });
 
     // Close handlers
@@ -8348,15 +8517,15 @@ Would you like to refresh all Google Calendar tabs?`;
 
       const allTemplates = await window.cc3Storage.getEventColorTemplates();
       const newTemplate = {
-        id: template.id || `tmpl_${Date.now()}`,
+        id: templateState.id || `tmpl_${Date.now()}`,
         name,
-        background: bgHex.value,
-        text: textHex.value,
-        border: borderHex.value,
-        borderWidth: parseInt(borderWidth.value, 10),
+        background: templateState.background,
+        text: templateState.text,
+        border: templateState.border,
+        borderWidth: templateState.borderWidth,
         categoryId: categorySelect.value || null,
-        order: template.order ?? Object.keys(allTemplates).length,
-        createdAt: template.createdAt,
+        order: templateState.order ?? Object.keys(allTemplates).length,
+        createdAt: templateState.createdAt,
         updatedAt: Date.now()
       };
 

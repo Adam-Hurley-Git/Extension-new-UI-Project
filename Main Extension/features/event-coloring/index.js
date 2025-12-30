@@ -934,9 +934,9 @@
       Templates
     `;
 
-    // Templates container
+    // Templates container - compact grid layout
     const templatesContainer = document.createElement('div');
-    templatesContainer.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
+    templatesContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px;';
 
     templatesArray.forEach((template) => {
       const button = createTemplateButton(template, pickerElement, scenario);
@@ -949,7 +949,7 @@
     return section;
   }
 
-  // Create template button (mini-preview style)
+  // Create template button (compact pill style)
   function createTemplateButton(template, pickerElement, scenario) {
     const button = document.createElement('div');
     button.className = 'cf-template-button';
@@ -958,19 +958,22 @@
     button.setAttribute('aria-label', template.name);
     button.dataset.templateId = template.id;
 
-    // The button itself is the preview - styled with the template colors
+    // Compact pill button styled with the template colors
     button.style.cssText = `
-      padding: 6px 10px;
-      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 12px;
       background: ${template.background};
       color: ${template.text};
       outline: ${template.borderWidth}px solid ${template.border};
       outline-offset: -${Math.round(template.borderWidth * 0.3)}px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 500;
       cursor: pointer;
       transition: transform 0.1s, box-shadow 0.1s;
       white-space: nowrap;
+      max-width: 120px;
       overflow: hidden;
       text-overflow: ellipsis;
     `;
@@ -979,11 +982,11 @@
 
     // Hover effects
     button.addEventListener('mouseenter', () => {
-      button.style.transform = 'translateX(2px)';
-      button.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.15)';
+      button.style.transform = 'scale(1.05)';
+      button.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.2)';
     });
     button.addEventListener('mouseleave', () => {
-      button.style.transform = 'translateX(0)';
+      button.style.transform = 'scale(1)';
       button.style.boxShadow = 'none';
     });
 
@@ -1067,7 +1070,7 @@
     // Add templates below colors (if any assigned to this category)
     if (categoryTemplates && categoryTemplates.length > 0) {
       const templatesContainer = document.createElement('div');
-      templatesContainer.style.cssText = 'display: flex; flex-direction: column; gap: 6px; margin-top: 8px;';
+      templatesContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;';
 
       categoryTemplates.forEach((template) => {
         const button = createTemplateButton(template, pickerElement, scenario);
