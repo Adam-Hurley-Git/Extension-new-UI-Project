@@ -6,6 +6,37 @@ import EventIdUtils from '../utils/eventIdUtils.js';
 import ScenarioDetector from '../utils/scenarioDetector.js';
 
 /**
+ * Check if an element represents a task (not a calendar event)
+ * Handles both OLD UI (tasks. prefix) and NEW UI (ttb_ with Mark complete button)
+ * @param {Element} element - DOM element with data-eventid
+ * @returns {boolean} - true if this is a task element
+ */
+function isTaskElement(element) {
+  if (!element) return false;
+
+  const eventId = element.getAttribute('data-eventid');
+  if (!eventId) return false;
+
+  // OLD UI: Direct task ID prefix
+  if (eventId.startsWith('tasks.') || eventId.startsWith('tasks_')) {
+    return true;
+  }
+
+  // NEW UI: Tasks have a "Mark complete" checkbox button
+  // Primary check: aria-label (accessibility attribute, stable)
+  if (element.querySelector('[aria-label="Mark complete"]')) {
+    return true;
+  }
+
+  // Fallback: jsname attribute (from Google's internal framework)
+  if (element.querySelector('button[jsname="nWuQKb"]')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * ColorRenderer - Applies custom colors to calendar events
  */
 export class ColorRenderer {
@@ -224,6 +255,9 @@ export class ColorRenderer {
    */
   updateColorOfEventElementFull(element, colors) {
     if (!element) return;
+
+    // Skip task elements - tasks should not receive event coloring
+    if (isTaskElement(element)) return;
 
     const { background, text, border, borderWidth = 2 } = colors;
 

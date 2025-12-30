@@ -1500,6 +1500,9 @@
   function applyFullColorsToElement(element, colors) {
     if (!element) return;
 
+    // Skip task elements - tasks should not receive event coloring
+    if (isTaskElement(element)) return;
+
     const { background, text, border, borderWidth = 2 } = colors;
     const eventId = element.getAttribute('data-eventid');
     const isEventChip = element.matches('[data-eventchip]');
@@ -2063,6 +2066,9 @@
       // Skip events in dialogs
       if (element.closest('[role="dialog"]')) return;
 
+      // Skip task elements - tasks should not receive calendar list colors
+      if (isTaskElement(element)) return;
+
       const eventId = element.getAttribute('data-eventid');
       if (!eventId) return;
 
@@ -2169,6 +2175,9 @@
   function applyColorsToElement(element, colors) {
     if (!element) return;
 
+    // Skip task elements - tasks should not receive event coloring
+    if (isTaskElement(element)) return;
+
     const { background, text, border, borderWidth = 2 } = colors;
     if (!background && !text && !border) return;
 
@@ -2244,6 +2253,37 @@
   // ========================================
   // UTILITIES
   // ========================================
+
+  /**
+   * Check if an element represents a task (not a calendar event)
+   * Handles both OLD UI (tasks. prefix) and NEW UI (ttb_ with Mark complete button)
+   * @param {Element} element - DOM element with data-eventid
+   * @returns {boolean} - true if this is a task element
+   */
+  function isTaskElement(element) {
+    if (!element) return false;
+
+    const eventId = element.getAttribute('data-eventid');
+    if (!eventId) return false;
+
+    // OLD UI: Direct task ID prefix
+    if (eventId.startsWith('tasks.') || eventId.startsWith('tasks_')) {
+      return true;
+    }
+
+    // NEW UI: Tasks have a "Mark complete" checkbox button
+    // Primary check: aria-label (accessibility attribute, stable)
+    if (element.querySelector('[aria-label="Mark complete"]')) {
+      return true;
+    }
+
+    // Fallback: jsname attribute (from Google's internal framework)
+    if (element.querySelector('button[jsname="nWuQKb"]')) {
+      return true;
+    }
+
+    return false;
+  }
 
   function closeColorPicker() {
     document.querySelectorAll('[role="menu"], [role="dialog"]').forEach((el) => {
