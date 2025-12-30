@@ -7794,16 +7794,16 @@ Would you like to refresh all Google Calendar tabs?`;
           <!-- Tab Panels -->
           <div style="border: 1px solid #e8eaed; border-top: none; border-radius: 0 0 6px 6px; padding: 8px;">
             <div class="cat-tab-panel active" data-panel="vibrant">
-              <div class="cat-palette vibrant-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; max-height: 80px; overflow-y: auto;"></div>
+              <div class="cat-palette vibrant-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;"></div>
             </div>
             <div class="cat-tab-panel" data-panel="pastel" style="display: none;">
-              <div class="cat-palette pastel-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; max-height: 80px; overflow-y: auto;"></div>
+              <div class="cat-palette pastel-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;"></div>
             </div>
             <div class="cat-tab-panel" data-panel="dark" style="display: none;">
-              <div class="cat-palette dark-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; max-height: 80px; overflow-y: auto;"></div>
+              <div class="cat-palette dark-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;"></div>
             </div>
             <div class="cat-tab-panel" data-panel="custom" style="display: none;">
-              <div class="cat-palette custom-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; max-height: 80px; overflow-y: auto;"></div>
+              <div class="cat-palette custom-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px;"></div>
             </div>
           </div>
         </div>
