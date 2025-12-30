@@ -7556,46 +7556,57 @@ Would you like to refresh all Google Calendar tabs?`;
       <button class="add-color-to-category-btn" data-category-id="${category.id}">+</button>
     `;
 
-    // Build assigned templates HTML
+    // Build assigned templates HTML - horizontal compact tabs
     const templatesHtml = assignedTemplates.length > 0 ? `
-      <div class="category-templates" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">
-        <div style="font-size: 10px; color: #8b5cf6; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; display: flex; align-items: center; gap: 4px;">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7" rx="1"/>
-            <rect x="14" y="3" width="7" height="7" rx="1"/>
-            <rect x="3" y="14" width="7" height="7" rx="1"/>
-            <rect x="14" y="14" width="7" height="7" rx="1"/>
-          </svg>
-          Templates
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 4px;">
-          ${assignedTemplates.map(t => `
-            <div class="category-template-item" data-template-id="${t.id}" style="
-              display: flex;
+      <div class="category-templates" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f0f0f0;">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <span style="font-size: 9px; color: #8b5cf6; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 500; margin-right: 2px;">
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align: middle; margin-right: 2px;">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+          </span>
+          ${assignedTemplates.map(t => {
+            const bgColor = t.background || '#f0f0f0';
+            const textColor = t.text || '#666';
+            const borderColor = t.border || 'transparent';
+            const borderWidth = t.borderWidth ?? 0;
+            return `
+            <div class="category-template-tab" data-template-id="${t.id}" style="
+              display: inline-flex;
               align-items: center;
-              gap: 8px;
-              padding: 6px 8px;
-              background: ${t.background};
-              color: ${t.text};
-              outline: ${t.borderWidth}px solid ${t.border};
-              outline-offset: -${Math.round(t.borderWidth * 0.3)}px;
-              border-radius: 4px;
+              gap: 4px;
+              padding: 4px 8px;
+              background: ${bgColor};
+              color: ${textColor};
+              outline: ${borderWidth}px solid ${borderColor};
+              outline-offset: -${Math.round(borderWidth * 0.3)}px;
+              border-radius: 12px;
               font-size: 11px;
               font-weight: 500;
+              max-width: 100px;
+              cursor: default;
             ">
-              <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(t.name)}</span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(t.name)}</span>
               <button class="unassign-template-btn" data-template-id="${t.id}" title="Remove from category" style="
-                background: rgba(255,255,255,0.3);
+                background: rgba(0,0,0,0.15);
                 border: none;
                 cursor: pointer;
                 color: inherit;
-                padding: 2px 4px;
-                border-radius: 3px;
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
                 line-height: 1;
-                font-size: 12px;
+                font-size: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
               ">×</button>
             </div>
-          `).join('')}
+          `}).join('')}
         </div>
       </div>
     ` : '';
@@ -8069,12 +8080,14 @@ Would you like to refresh all Google Calendar tabs?`;
   // Multi-property color presets (bg/text/border/borderWidth)
   // ========================================
 
-  // Render event color templates (only unassigned ones - assigned ones show in categories)
+  // Render event color templates (shows ALL templates - assigned ones also appear as references in categories)
   async function renderEventColorTemplates() {
     const container = qs('eventColorTemplatesList');
     if (!container) return;
 
-    const templates = await window.cc3Storage.getUnassignedTemplates();
+    // Get ALL templates (not just unassigned)
+    const allTemplates = await window.cc3Storage.getEventColorTemplates();
+    const templates = Object.values(allTemplates).sort((a, b) => (a.order || 0) - (b.order || 0));
 
     if (templates.length === 0) {
       container.innerHTML = `
