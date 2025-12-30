@@ -7559,7 +7559,7 @@ Would you like to refresh all Google Calendar tabs?`;
     // Build assigned templates HTML - horizontal compact tabs
     const templatesHtml = assignedTemplates.length > 0 ? `
       <div class="category-templates" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f0f0f0;">
-        <div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
           <span style="font-size: 9px; color: #8b5cf6; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 500; margin-right: 2px;">
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align: middle; margin-right: 2px;">
               <rect x="3" y="3" width="7" height="7" rx="1"/>
