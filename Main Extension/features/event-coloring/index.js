@@ -1101,8 +1101,8 @@
     button.title = color.label || color.hex;
 
     button.style.cssText = `
-      width: 24px;
-      height: 24px;
+      width: 18px;
+      height: 18px;
       border-radius: 50%;
       background-color: ${color.hex};
       cursor: pointer;
@@ -1119,7 +1119,7 @@
     checkmark.className = 'google-material-icons cf-checkmark';
     checkmark.textContent = 'check';
     checkmark.style.cssText = `
-      font-size: 14px;
+      font-size: 12px;
       color: white;
       display: none;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
