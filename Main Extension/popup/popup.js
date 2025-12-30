@@ -7708,22 +7708,236 @@ Would you like to refresh all Google Calendar tabs?`;
     debugLog('Category deleted:', categoryId);
   }
 
-  // Open color picker for category
+  // Open color picker modal for category
   function openColorPickerForCategory(categoryId) {
-    const colorInput = document.createElement('input');
-    colorInput.type = 'color';
-    colorInput.style.display = 'none';
-    document.body.appendChild(colorInput);
+    // State for the selected color
+    let selectedColor = '#4285F4';
+    let colorLabel = '';
 
-    colorInput.addEventListener('change', async (e) => {
-      const colorHex = e.target.value.toUpperCase();
-      const label = prompt('Enter a label for this color (optional):');
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'category-color-picker-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10001;
+    `;
 
-      await addColorToCategory(categoryId, colorHex, label || '');
-      document.body.removeChild(colorInput);
+    const modal = document.createElement('div');
+    modal.className = 'category-color-picker-modal';
+    modal.style.cssText = `
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      width: 320px;
+      max-height: 90vh;
+      overflow: hidden;
+    `;
+
+    modal.innerHTML = `
+      <div class="modal-header" style="padding: 16px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between;">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #202124;">Add Color to Category</h3>
+        <button class="modal-close-btn" style="width: 28px; height: 28px; border: none; background: #f1f3f4; cursor: pointer; font-size: 18px; color: #5f6368; border-radius: 50%; display: flex; align-items: center; justify-content: center;">×</button>
+      </div>
+
+      <div class="modal-body" style="padding: 16px;">
+        <!-- Color Preview -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 6px;">Preview</label>
+          <div id="categoryColorPreview" style="
+            width: 100%;
+            height: 40px;
+            border-radius: 8px;
+            background: ${selectedColor};
+            border: 1px solid #e0e0e0;
+          "></div>
+        </div>
+
+        <!-- Label Input -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 4px;">Label (optional)</label>
+          <input type="text" id="categoryColorLabel" placeholder="e.g., Work, Personal..." style="
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 12px;
+            box-sizing: border-box;
+          ">
+        </div>
+
+        <!-- Color Picker with Tabs -->
+        <div class="form-group">
+          <label style="display: block; font-size: 11px; font-weight: 500; color: #5f6368; margin-bottom: 6px;">Select Color</label>
+
+          <!-- Direct color input row -->
+          <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+            <input type="color" class="cat-direct-color" value="${selectedColor}" style="width: 50%; height: 28px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px;">
+            <input type="text" class="cat-hex-input" value="${selectedColor}" placeholder="#FF0000" maxlength="7" style="width: 50%; height: 28px; font-size: 10px; padding: 2px 6px; border: 1px solid #ccc; border-radius: 4px; text-transform: uppercase; font-family: monospace; box-sizing: border-box;">
+          </div>
+
+          <!-- Tabs -->
+          <div class="color-picker-tabs" style="display: flex; background: #f8f9fa; border-radius: 6px 6px 0 0; border: 1px solid #e8eaed; border-bottom: none;">
+            <button type="button" class="cat-color-tab active" data-tab="vibrant" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: white; border: none; cursor: pointer; color: #1a73e8; border-bottom: 2px solid #1a73e8; border-radius: 6px 0 0 0;">Vibrant</button>
+            <button type="button" class="cat-color-tab" data-tab="pastel" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Pastel</button>
+            <button type="button" class="cat-color-tab" data-tab="dark" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent;">Dark</button>
+            <button type="button" class="cat-color-tab" data-tab="custom" style="flex: 1; padding: 8px 6px; font-size: 10px; font-weight: 500; text-align: center; background: #f8f9fa; border: none; cursor: pointer; color: #666; border-bottom: 2px solid transparent; border-radius: 0 6px 0 0;">Custom</button>
+          </div>
+
+          <!-- Tab Panels -->
+          <div style="border: 1px solid #e8eaed; border-top: none; border-radius: 0 0 6px 6px; padding: 8px;">
+            <div class="cat-tab-panel active" data-panel="vibrant">
+              <div class="cat-palette vibrant-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; max-height: 80px; overflow-y: auto;"></div>
+            </div>
+            <div class="cat-tab-panel" data-panel="pastel" style="display: none;">
+              <div class="cat-palette pastel-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; max-height: 80px; overflow-y: auto;"></div>
+            </div>
+            <div class="cat-tab-panel" data-panel="dark" style="display: none;">
+              <div class="cat-palette dark-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; max-height: 80px; overflow-y: auto;"></div>
+            </div>
+            <div class="cat-tab-panel" data-panel="custom" style="display: none;">
+              <div class="cat-palette custom-palette" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; max-height: 80px; overflow-y: auto;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="padding: 12px 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="modal-cancel-btn" style="padding: 8px 16px; border: 1px solid #e0e0e0; background: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; color: #5f6368;">
+          Cancel
+        </button>
+        <button class="modal-add-btn" style="padding: 8px 16px; border: none; background: linear-gradient(135deg, #34a853 0%, #1e8e3e 100%); color: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500;">
+          Add Color
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Get elements
+    const preview = modal.querySelector('#categoryColorPreview');
+    const labelInput = modal.querySelector('#categoryColorLabel');
+    const directColorInput = modal.querySelector('.cat-direct-color');
+    const hexInput = modal.querySelector('.cat-hex-input');
+
+    // Update preview function
+    function updatePreview(color) {
+      selectedColor = color.toUpperCase();
+      preview.style.background = selectedColor;
+      directColorInput.value = selectedColor;
+      hexInput.value = selectedColor;
+    }
+
+    // Create color swatch
+    function createSwatch(color, container) {
+      const swatch = document.createElement('div');
+      swatch.style.cssText = `
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        background: ${color};
+        border: 1px solid #e0e0e0;
+        cursor: pointer;
+        transition: all 0.15s;
+      `;
+      swatch.title = color;
+      swatch.dataset.color = color;
+      swatch.addEventListener('mouseenter', () => {
+        swatch.style.transform = 'scale(1.15)';
+        swatch.style.borderColor = '#1a73e8';
+      });
+      swatch.addEventListener('mouseleave', () => {
+        swatch.style.transform = 'scale(1)';
+        swatch.style.borderColor = '#e0e0e0';
+      });
+      swatch.addEventListener('click', () => {
+        updatePreview(color);
+      });
+      container.appendChild(swatch);
+    }
+
+    // Populate palettes
+    const vibrantPaletteEl = modal.querySelector('.vibrant-palette');
+    const pastelPaletteEl = modal.querySelector('.pastel-palette');
+    const darkPaletteEl = modal.querySelector('.dark-palette');
+    const customPaletteEl = modal.querySelector('.custom-palette');
+
+    colorPickerPalette.forEach(color => createSwatch(color, vibrantPaletteEl));
+    pastelPalette.forEach(color => createSwatch(color, pastelPaletteEl));
+    darkPalette.forEach(color => createSwatch(color, darkPaletteEl));
+    customColors.forEach(color => createSwatch(color, customPaletteEl));
+
+    if (customColors.length === 0) {
+      customPaletteEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #999; font-size: 11px; padding: 8px;">No custom colors saved yet</div>';
+    }
+
+    // Tab switching
+    modal.querySelectorAll('.cat-color-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Update tab styles
+        modal.querySelectorAll('.cat-color-tab').forEach(t => {
+          t.classList.remove('active');
+          t.style.background = '#f8f9fa';
+          t.style.color = '#666';
+          t.style.borderBottom = '2px solid transparent';
+        });
+        tab.classList.add('active');
+        tab.style.background = 'white';
+        tab.style.color = '#1a73e8';
+        tab.style.borderBottom = '2px solid #1a73e8';
+
+        // Show corresponding panel
+        const panelName = tab.dataset.tab;
+        modal.querySelectorAll('.cat-tab-panel').forEach(panel => {
+          panel.style.display = panel.dataset.panel === panelName ? 'block' : 'none';
+        });
+      });
     });
 
-    colorInput.click();
+    // Direct color input handler
+    directColorInput.addEventListener('input', (e) => {
+      updatePreview(e.target.value);
+    });
+
+    // Hex input handler
+    hexInput.addEventListener('input', (e) => {
+      let value = e.target.value.toUpperCase();
+      if (!value.startsWith('#')) {
+        value = '#' + value;
+      }
+      if (/^#[0-9A-F]{6}$/i.test(value)) {
+        updatePreview(value);
+      }
+    });
+
+    // Close handlers
+    const closeModal = () => {
+      document.body.removeChild(overlay);
+    };
+
+    modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+    modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+
+    // Add color handler
+    modal.querySelector('.modal-add-btn').addEventListener('click', async () => {
+      colorLabel = labelInput.value.trim();
+      await addColorToCategory(categoryId, selectedColor, colorLabel);
+      closeModal();
+    });
+
+    // Focus label input
+    setTimeout(() => labelInput.focus(), 100);
   }
 
   // Add color to category
