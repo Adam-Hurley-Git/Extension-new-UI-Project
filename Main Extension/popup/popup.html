@@ -2672,6 +2672,82 @@
         background: rgba(255, 255, 255, 0.8);
       }
 
+      /* Panel action buttons - unified style */
+      .ec-panel-action {
+        padding: 6px 12px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1.5px solid;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: all 0.2s ease;
+      }
+
+      .ec-panel-action:hover {
+        background: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Theme-specific action styles */
+      .ec-panel-labels .ec-panel-action {
+        border-color: #f59e0b;
+        color: #b45309;
+      }
+
+      .ec-panel-labels .ec-panel-action:hover {
+        background: #fffbeb;
+      }
+
+      .ec-panel-categories .ec-panel-action {
+        border-color: #ec4899;
+        color: #be185d;
+      }
+
+      .ec-panel-categories .ec-panel-action:hover {
+        background: #fdf2f8;
+      }
+
+      .ec-panel-templates .ec-panel-action {
+        border-color: #8b5cf6;
+        color: #6d28d9;
+      }
+
+      .ec-panel-templates .ec-panel-action:hover {
+        background: #faf5ff;
+      }
+
+      /* Panel select/dropdown - unified style */
+      .ec-panel-select {
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 500;
+        border: 1.5px solid;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .ec-panel-select:hover {
+        background: white;
+      }
+
+      .ec-panel-labels .ec-panel-select {
+        border-color: #f59e0b;
+        color: #b45309;
+      }
+
+      .ec-panel-labels .ec-panel-select:hover,
+      .ec-panel-labels .ec-panel-select:focus {
+        background: #fffbeb;
+        outline: none;
+      }
+
       /* Event Color Category */
       .event-color-category {
         background: #ffffff;
@@ -4442,15 +4518,7 @@
                   <div style="flex: 1;">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                       <h4 class="ec-panel-title">Google Color Labels</h4>
-                      <select id="googleColorSchemeSelect" style="
-                        padding: 4px 8px;
-                        font-size: 11px;
-                        border: 1px solid rgba(0,0,0,0.15);
-                        border-radius: 4px;
-                        background: white;
-                        color: #5f6368;
-                        cursor: pointer;
-                      ">
+                      <select id="googleColorSchemeSelect" class="ec-panel-select">
                         <option value="modern">Modern</option>
                         <option value="classic">Classic</option>
                       </select>
@@ -4475,26 +4543,7 @@
                   <div style="flex: 1;">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                       <h4 class="ec-panel-title">Custom Color Categories</h4>
-                      <button
-                        id="addEventColorCategoryBtn"
-                        style="
-                          padding: 6px 12px;
-                          background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%);
-                          color: white;
-                          border: none;
-                          border-radius: 6px;
-                          font-size: 12px;
-                          font-weight: 500;
-                          cursor: pointer;
-                          display: flex;
-                          align-items: center;
-                          gap: 4px;
-                          transition: all 0.2s ease;
-                          box-shadow: 0 2px 4px rgba(236, 72, 153, 0.3);
-                        "
-                        onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(236, 72, 153, 0.4)';"
-                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(236, 72, 153, 0.3)';"
-                      >
+                      <button id="addEventColorCategoryBtn" class="ec-panel-action">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                           <line x1="12" y1="5" x2="12" y2="19"/>
                           <line x1="5" y1="12" x2="19" y2="12"/>
@@ -4527,26 +4576,7 @@
                   <div style="flex: 1;">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                       <h4 class="ec-panel-title">Color Templates</h4>
-                      <button
-                        id="addEventColorTemplateBtn"
-                        style="
-                          padding: 6px 12px;
-                          background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-                          color: white;
-                          border: none;
-                          border-radius: 6px;
-                          font-size: 12px;
-                          font-weight: 500;
-                          cursor: pointer;
-                          display: flex;
-                          align-items: center;
-                          gap: 4px;
-                          transition: all 0.2s ease;
-                          box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
-                        "
-                        onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(139, 92, 246, 0.4)';"
-                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(139, 92, 246, 0.3)';"
-                      >
+                      <button id="addEventColorTemplateBtn" class="ec-panel-action">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                           <line x1="12" y1="5" x2="12" y2="19"/>
                           <line x1="5" y1="12" x2="19" y2="12"/>
