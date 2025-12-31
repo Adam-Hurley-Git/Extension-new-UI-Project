@@ -671,7 +671,6 @@
     });
 
     // Also apply to mini calendar in day view
-    const currentDateStr = normalizeYmdFromDate(getCurrentDateInDayView());
     if (currentDateStr) {
       const miniCalElements = document.querySelectorAll(
         `#drawerMiniMonthNavigator [data-date="${currentDateStr}"], ` +
