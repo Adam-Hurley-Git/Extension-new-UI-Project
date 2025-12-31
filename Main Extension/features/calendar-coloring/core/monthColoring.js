@@ -1,337 +1,376 @@
-// LOCKED CALENDAR COLORING FEATURE - DO NOT MODIFY
-// This module contains the month view coloring functionality
-// All changes to calendar coloring should be made here only
-
-// Month view painter
-// Colors the grid cells ([role="gridcell"]) by mapping the 7 columns → weekdays.
-// Safe for locales / Monday-or-Sunday week start. No event-chip dependency.
+// Month View Coloring Module
+// Uses data-datekey attributes for reliable date detection
 
 let monthMo = null;
 let resizeBound = false;
 
-// idempotent clear - only clear div.MGaLHf.ChfiMc elements (NOT gridcells)
-function clearMonthColors() {
-  document.querySelectorAll('div.MGaLHf.ChfiMc[data-gce-month-painted="1"]').forEach((el) => {
-    el.style.backgroundColor = '';
-    el.removeAttribute('data-gce-month-painted');
-  });
-  console.log('CC3 Month Coloring: Cleared div.MGaLHf.ChfiMc elements only');
+// ============================================================================
+// DATEKEY SYSTEM - The robust solution for month view date detection
+// ============================================================================
+
+/**
+ * Build a map from datekey to ISO date string (YYYY-MM-DD)
+ *
+ * Strategy:
+ * 1. Find h2 elements with data-datekey that show month+day (class "avfuie")
+ *    These are anchor points like "Dec 1" -> 28545
+ * 2. Use sequential datekeys to fill in the rest
+ * 3. Fallback: parse gridcell aria-labels for full dates
+ */
+function buildDateKeyMap() {
+  const map = new Map();
+  const DEBUG = true;
+
+  if (DEBUG) console.log('CC3 Month: Building datekey map...');
+
+  // Strategy 1: Find h2 elements with month+day text (class avfuie)
+  // These show text like "Dec 1", "Jan 15" - reliable anchor points
+  const monthDayHeaders = document.querySelectorAll('h2[data-datekey].avfuie');
+
+  for (const h2 of monthDayHeaders) {
+    const dateKey = h2.getAttribute('data-datekey');
+    const text = h2.textContent?.trim(); // e.g., "Dec 1", "Jan 15"
+
+    if (dateKey && text) {
+      const parsed = parseMonthDayText(text);
+      if (parsed) {
+        map.set(dateKey, parsed);
+        if (DEBUG) console.log(`CC3 Month: Anchor found - datekey ${dateKey} = ${parsed} (from "${text}")`);
+      }
+    }
+  }
+
+  // Strategy 2: Parse gridcell aria-labels for full dates
+  // These have text like "3 events, Monday, December 1"
+  const gridcells = document.querySelectorAll('[role="gridcell"]');
+
+  for (const cell of gridcells) {
+    const ariaLabel = cell.getAttribute('aria-label');
+    if (!ariaLabel) continue;
+
+    // Look for h2 child with data-datekey
+    const h2 = cell.querySelector('h2[data-datekey]') || cell.querySelector('[data-datekey]');
+    if (!h2) continue;
+
+    const dateKey = h2.getAttribute('data-datekey');
+    if (!dateKey || map.has(dateKey)) continue;
+
+    // Parse full date from aria-label like "3 events, Monday, December 1"
+    const parsed = parseDateFromAriaLabel(ariaLabel);
+    if (parsed) {
+      map.set(dateKey, parsed);
+      if (DEBUG) console.log(`CC3 Month: From gridcell aria - datekey ${dateKey} = ${parsed}`);
+    }
+  }
+
+  // Strategy 3: Fill gaps using sequential datekeys
+  // If we have at least one anchor, we can calculate the rest
+  if (map.size > 0) {
+    fillDateKeyGaps(map);
+  }
+
+  if (DEBUG) console.log(`CC3 Month: DateKey map built with ${map.size} entries`);
+
+  return map;
 }
 
-function isLikelyMonthViewRoot() {
-  // The month grid is a [role="grid"] with many [role="gridcell"] entries.
-  const grid = document.querySelector('div[role="grid"]');
-  if (!grid) return null;
-  const cells = grid.querySelectorAll('[role="gridcell"]');
-  if (cells.length >= 35) return grid; // month usually 35-42 cells
+/**
+ * Parse month+day text like "Dec 1" or "Jan 15" to ISO date string
+ */
+function parseMonthDayText(text) {
+  if (!text) return null;
+
+  // Match patterns like "Dec 1", "January 15", etc.
+  const monthNames = {
+    jan: 0, january: 0,
+    feb: 1, february: 1,
+    mar: 2, march: 2,
+    apr: 3, april: 3,
+    may: 4,
+    jun: 5, june: 5,
+    jul: 6, july: 6,
+    aug: 7, august: 7,
+    sep: 8, sept: 8, september: 8,
+    oct: 9, october: 9,
+    nov: 10, november: 10,
+    dec: 11, december: 11
+  };
+
+  const match = text.match(/^(\w+)\s+(\d{1,2})$/i);
+  if (!match) return null;
+
+  const monthStr = match[1].toLowerCase();
+  const day = parseInt(match[2], 10);
+
+  if (!(monthStr in monthNames) || day < 1 || day > 31) return null;
+
+  const month = monthNames[monthStr];
+
+  // Determine year from URL or current date
+  const yearInfo = getYearFromContext();
+  const year = yearInfo.year;
+
+  // Handle year boundary (e.g., viewing January but anchor shows December)
+  let actualYear = year;
+  if (month === 11 && yearInfo.month <= 1) {
+    // December shown while viewing Jan/Feb - previous year
+    actualYear = year - 1;
+  } else if (month <= 1 && yearInfo.month === 11) {
+    // Jan/Feb shown while viewing December - next year
+    actualYear = year + 1;
+  }
+
+  const monthPadded = String(month + 1).padStart(2, '0');
+  const dayPadded = String(day).padStart(2, '0');
+
+  return `${actualYear}-${monthPadded}-${dayPadded}`;
+}
+
+/**
+ * Parse date from gridcell aria-label like "3 events, Monday, December 1"
+ */
+function parseDateFromAriaLabel(ariaLabel) {
+  if (!ariaLabel) return null;
+
+  // Try direct Date parsing first
+  const d1 = new Date(ariaLabel);
+  if (!Number.isNaN(d1.getTime())) {
+    return normalizeYmdFromDate(d1);
+  }
+
+  // Try patterns like "Monday, December 1" or "Tuesday, January 15"
+  const monthNames = {
+    january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+    july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+  };
+
+  // Match "December 1" or "January 15" anywhere in the string
+  for (const [name, monthIdx] of Object.entries(monthNames)) {
+    const regex = new RegExp(`${name}\\s+(\\d{1,2})`, 'i');
+    const match = ariaLabel.match(regex);
+    if (match) {
+      const day = parseInt(match[1], 10);
+      if (day >= 1 && day <= 31) {
+        const yearInfo = getYearFromContext();
+        let year = yearInfo.year;
+
+        // Handle year boundary
+        if (monthIdx === 11 && yearInfo.month <= 1) {
+          year = year - 1;
+        } else if (monthIdx <= 1 && yearInfo.month === 11) {
+          year = year + 1;
+        }
+
+        const monthPadded = String(monthIdx + 1).padStart(2, '0');
+        const dayPadded = String(day).padStart(2, '0');
+        return `${year}-${monthPadded}-${dayPadded}`;
+      }
+    }
+  }
+
   return null;
 }
 
-function selectMonthCells() {
-  // Target ONLY the div.MGaLHf.ChfiMc elements (day squares) - NOT gridcells
-  const daySquares = Array.from(document.querySelectorAll('div.MGaLHf.ChfiMc')).filter((c) => c.offsetParent !== null);
-  console.log(`CC3 Month Coloring: Found ${daySquares.length} div.MGaLHf.ChfiMc elements`);
+/**
+ * Fill gaps in the datekey map using sequential calculation
+ */
+function fillDateKeyGaps(map) {
+  if (map.size === 0) return;
 
-  // Handle both 5-column (weekends hidden) and 7-column (weekends shown) layouts
-  // 5 columns = ~25 cells, 7 columns = ~35 cells
-  const minCells = daySquares.length >= 25 ? 25 : 35;
-  return daySquares.length >= minCells ? daySquares : [];
+  // Find an anchor point (any entry in the map)
+  const entries = Array.from(map.entries());
+  const [anchorKey, anchorDate] = entries[0];
+  const anchorKeyNum = parseInt(anchorKey, 10);
+  const anchorDateObj = new Date(anchorDate + 'T00:00:00Z');
+
+  // Find all datekey attributes in the DOM
+  const allDateKeyElements = document.querySelectorAll('[data-datekey]');
+  const allDateKeys = new Set();
+
+  for (const el of allDateKeyElements) {
+    const dk = el.getAttribute('data-datekey');
+    if (dk) allDateKeys.add(dk);
+  }
+
+  // Fill in missing entries
+  for (const dk of allDateKeys) {
+    if (map.has(dk)) continue;
+
+    const dkNum = parseInt(dk, 10);
+    const daysDiff = dkNum - anchorKeyNum;
+
+    const targetDate = new Date(anchorDateObj.getTime() + daysDiff * 24 * 60 * 60 * 1000);
+    const isoDate = normalizeYmdFromDate(targetDate);
+
+    map.set(dk, isoDate);
+  }
 }
 
-function getDaySquare(cell) {
-  // Since we're now targeting div.MGaLHf.ChfiMc directly, return the cell itself
-  return cell;
+/**
+ * Get year and month from URL or current date
+ */
+function getYearFromContext() {
+  const url = window.location.href;
+
+  // Try URL patterns
+  let match = url.match(/\/(?:r\/)?month\/(\d{4})\/(\d{1,2})/);
+  if (match) {
+    return { year: parseInt(match[1], 10), month: parseInt(match[2], 10) - 1 };
+  }
+
+  match = url.match(/[?&]date=(\d{4})(\d{2})/);
+  if (match) {
+    return { year: parseInt(match[1], 10), month: parseInt(match[2], 10) - 1 };
+  }
+
+  // Fallback to current date
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() };
 }
 
-// -------- NEW: Column headers → weekday map (most reliable) -----------------
+/**
+ * Normalize Date object to YYYY-MM-DD string
+ */
+function normalizeYmdFromDate(date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Get ISO date string from a cell's data-datekey attribute
+ * This is the ONLY method we need - simple and reliable!
+ */
+function getCellDateString(cell, dateKeyMap) {
+  const dateKey = cell.getAttribute('data-datekey');
+  if (!dateKey) return null;
+
+  return dateKeyMap.get(dateKey) || null;
+}
+
+// ============================================================================
+// WEEKDAY COLORING (unchanged - works fine)
+// ============================================================================
+
 function textToWeekdayIndex(txt) {
   if (!txt) return null;
   const t = txt.trim().toLowerCase();
-  // Try English/short forms first; aria-labels are usually full day names in locale.
   const map = {
-    sunday: 0,
-    sun: 0,
-    monday: 1,
-    mon: 1,
-    tuesday: 2,
-    tue: 2,
-    tues: 2,
-    wednesday: 3,
-    wed: 3,
-    thursday: 4,
-    thu: 4,
-    thurs: 4,
-    friday: 5,
-    fri: 5,
-    saturday: 6,
-    sat: 6,
+    sunday: 0, sun: 0,
+    monday: 1, mon: 1,
+    tuesday: 2, tue: 2, tues: 2,
+    wednesday: 3, wed: 3,
+    thursday: 4, thu: 4, thurs: 4,
+    friday: 5, fri: 5,
+    saturday: 6, sat: 6
   };
-  if (t in map) return map[t];
-  // For other locales, rely on Date parsing trick: find next occurrence of that label in aria-label if possible.
-  // If we can't confidently map, return null and let fallback handle it.
-  return null;
+  return t in map ? map[t] : null;
 }
 
 function headerColumnWeekdayMap() {
-  // Month grid usually has 7 column headers with role="columnheader".
-  const headers = Array.from(document.querySelectorAll('[role="columnheader"]')).filter((h) => h.offsetParent !== null);
-  if (headers.length < 7) return null;
+  const headers = Array.from(document.querySelectorAll('[role="columnheader"]'))
+    .filter(h => h.offsetParent !== null);
+  if (headers.length < 5) return null;
 
-  // Sort by x-position to get visual order
   const items = headers
-    .map((h) => {
+    .map(h => {
       const r = h.getBoundingClientRect();
       return { el: h, center: (r.left + r.right) / 2 };
     })
-    .sort((a, b) => a.center - b.center)
-    .slice(0, 7);
+    .sort((a, b) => a.center - b.center);
 
-  const arr = new Array(7).fill(null);
-  for (let i = 0; i < items.length; i++) {
-    const h = items[i].el;
-    const w = textToWeekdayIndex(h.getAttribute('aria-label')) ?? textToWeekdayIndex(h.textContent || '');
-    if (w === null) return null; // unknown locale → bail and let fallback handle it
-    arr[i] = w;
+  const arr = [];
+  for (const item of items) {
+    const h = item.el;
+    const w = textToWeekdayIndex(h.getAttribute('aria-label')) ??
+              textToWeekdayIndex(h.textContent || '');
+    if (w !== null) arr.push(w);
   }
-  return arr.every((v) => v !== null) ? arr : null;
+
+  return arr.length >= 5 ? arr : null;
 }
 
-// --- NEW: Robust weekday extraction per gridcell -----------------------------
-function parseDateFromAriaLabel(aria) {
-  console.log('CC3 Month: parseDateFromAriaLabel input:', aria);
+// ============================================================================
+// CELL SELECTION AND COLUMN CLUSTERING
+// ============================================================================
 
-  if (!aria) {
-    console.log('CC3 Month: aria is null/undefined');
-    return null;
-  }
-
-  // Works for many locales (e.g., "Tuesday, September 2, 2025" or without year).
-  // Let Date try first:
-  const d1 = new Date(aria);
-  console.log('CC3 Month: Direct Date parse result:', d1, 'isValid:', !Number.isNaN(d1.getTime()));
-  if (!Number.isNaN(d1.getTime())) return d1;
-
-  // Try common Google Calendar formats:
-  // "January 14, 2025" (month name, day, year)
-  const monthNameMatch = aria.match(/(\w+)\s+(\d{1,2}),?\s+(\d{4})/);
-  if (monthNameMatch) {
-    console.log('CC3 Month: Month name pattern matched:', monthNameMatch);
-    const dateStr = `${monthNameMatch[1]} ${monthNameMatch[2]}, ${monthNameMatch[3]}`;
-    const d = new Date(dateStr);
-    if (!Number.isNaN(d.getTime())) {
-      console.log('CC3 Month: Parsed from month name pattern:', d);
-      return d;
-    }
-  }
-
-  // Try: "14 January 2025" (day, month name, year)
-  const dayFirstMatch = aria.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
-  if (dayFirstMatch) {
-    console.log('CC3 Month: Day-first pattern matched:', dayFirstMatch);
-    const dateStr = `${dayFirstMatch[2]} ${dayFirstMatch[1]}, ${dayFirstMatch[3]}`;
-    const d = new Date(dateStr);
-    if (!Number.isNaN(d.getTime())) {
-      console.log('CC3 Month: Parsed from day-first pattern:', d);
-      return d;
-    }
-  }
-
-  // Fallback: pick numeric pieces "dd", "mm" (month name not guaranteed parseable)
-  // Common GCal aria-label often includes an ISO-like "2025" — try regex:
-  const m = aria.match(/(\d{1,2})\D+(\d{1,2})\D+(\d{4})/); // dd .. mm .. yyyy
-  if (m) {
-    console.log('CC3 Month: Numeric pattern matched:', m);
-    // Ambiguous order; try two orders safely:
-    const [_, a, b, y] = m;
-    const try1 = new Date(Number(y), Number(b) - 1, Number(a));
-    if (!Number.isNaN(try1.getTime())) {
-      console.log('CC3 Month: Parsed as dd/mm/yyyy:', try1);
-      return try1;
-    }
-    const try2 = new Date(Number(y), Number(a) - 1, Number(b));
-    if (!Number.isNaN(try2.getTime())) {
-      console.log('CC3 Month: Parsed as mm/dd/yyyy:', try2);
-      return try2;
-    }
-  }
-
-  console.log('CC3 Month: Failed to parse aria-label');
-  return null;
+function clearMonthColors() {
+  document.querySelectorAll('div.MGaLHf.ChfiMc[data-gce-month-painted="1"]').forEach(el => {
+    el.style.backgroundColor = '';
+    el.removeAttribute('data-gce-month-painted');
+    el.removeAttribute('data-gce-date-colored');
+  });
+  console.log('CC3 Month: Cleared colors');
 }
 
-function getCellWeekday(cell) {
-  // 0..6 Sun..Sat or null if unknown
-  // 1) aria-label on gridcell
-  const aria = cell.getAttribute('aria-label');
-  if (aria) {
-    const d = parseDateFromAriaLabel(aria);
-    if (d && !Number.isNaN(d.getTime())) return d.getDay();
-  }
-  // 2) time[datetime] descendant (ISO)
-  const t = cell.querySelector('time[datetime]');
-  if (t && t.getAttribute('datetime')) {
-    const d2 = new Date(t.getAttribute('datetime'));
-    if (!Number.isNaN(d2.getTime())) return d2.getDay();
-  }
-  // 3) common data attributes Google sometimes emits
-  // Try milliseconds since epoch if present
-  const msAttr =
-    cell.getAttribute('data-date') || cell.getAttribute('data-time') || cell.getAttribute('data-timestamp');
-  if (msAttr && /^\d{10,13}$/.test(msAttr)) {
-    const ms = msAttr.length === 13 ? Number(msAttr) : Number(msAttr) * 1000;
-    const d3 = new Date(ms);
-    if (!Number.isNaN(d3.getTime())) return d3.getDay();
-  }
-  return null;
-}
+function selectMonthCells() {
+  // Target div.MGaLHf.ChfiMc elements - they have data-datekey!
+  const daySquares = Array.from(document.querySelectorAll('div.MGaLHf.ChfiMc'))
+    .filter(c => c.offsetParent !== null);
 
-// --- NEW: Get the day number from a cell -----------------------------
-function getCellDayNumber(cell) {
-  const DEBUG = true;
-  // Extract the day number (1-31) from the cell content
-  const daySquare = getDaySquare(cell);
-  const text = daySquare.textContent?.trim();
-
-  if (DEBUG) console.log('CC3 Month: getCellDayNumber - raw text:', text);
-
-  // Try to extract a number from the text - be more flexible
-  if (text) {
-    // First try: number at start
-    let match = text.match(/^(\d{1,2})/);
-    if (match) {
-      const dayNum = parseInt(match[1], 10);
-      if (dayNum >= 1 && dayNum <= 31) {
-        if (DEBUG) console.log('CC3 Month: Found day number at start:', dayNum);
-        return dayNum;
-      }
-    }
-
-    // Second try: any number between 1-31 (first match)
-    match = text.match(/\b(\d{1,2})\b/);
-    if (match) {
-      const dayNum = parseInt(match[1], 10);
-      if (dayNum >= 1 && dayNum <= 31) {
-        if (DEBUG) console.log('CC3 Month: Found day number in text:', dayNum);
-        return dayNum;
-      }
-    }
-  }
-
-  // Try to find the day number in a child element with specific class
-  const dayNumberEl = cell.querySelector('[class*="number"], [class*="day-num"], span, div');
-  if (dayNumberEl) {
-    const numText = dayNumberEl.textContent?.trim();
-    if (numText) {
-      const match = numText.match(/^(\d{1,2})$/);
-      if (match) {
-        const dayNum = parseInt(match[1], 10);
-        if (dayNum >= 1 && dayNum <= 31) {
-          if (DEBUG) console.log('CC3 Month: Found day number in child element:', dayNum);
-          return dayNum;
-        }
-      }
-    }
-  }
-
-  // Fallback to data attributes
-  const aria = cell.getAttribute('aria-label');
-  if (aria) {
-    const match = aria.match(/(?:^|\D)(\d{1,2})(?:\D|$)/);
-    if (match) {
-      const dayNum = parseInt(match[1], 10);
-      if (dayNum >= 1 && dayNum <= 31) {
-        if (DEBUG) console.log('CC3 Month: Found day number in aria:', dayNum);
-        return dayNum;
-      }
-    }
-  }
-
-  if (DEBUG) console.log('CC3 Month: Could not extract day number from cell');
-  return null;
+  console.log(`CC3 Month: Found ${daySquares.length} day cells`);
+  return daySquares.length >= 25 ? daySquares : [];
 }
 
 function clusterColumns(cells) {
-  // Use centerX and adaptive tolerance based on median column width
   const points = cells
-    .map((c) => {
-      const r = getDaySquare(c).getBoundingClientRect();
-      return { c, left: r.left, right: r.right, center: (r.left + r.right) / 2 };
+    .map(c => {
+      const r = c.getBoundingClientRect();
+      return { c, center: (r.left + r.right) / 2 };
     })
     .sort((a, b) => a.center - b.center);
 
-  // Estimate typical column width using median
+  // Calculate tolerance based on typical column width
   const widths = [];
   for (let i = 1; i < points.length; i++) {
-    // only same-row neighbors; rough filter using similar top
-    if (
-      Math.abs(
-        getDaySquare(points[i].c).getBoundingClientRect().top -
-          getDaySquare(points[i - 1].c).getBoundingClientRect().top,
-      ) < 4
-    ) {
-      widths.push(points[i].left - points[i - 1].left);
+    const c1 = points[i].c.getBoundingClientRect();
+    const c2 = points[i - 1].c.getBoundingClientRect();
+    if (Math.abs(c1.top - c2.top) < 4) {
+      widths.push(c1.left - c2.left);
     }
   }
-  const median = (arr) => {
-    if (!arr.length) return 100; // sane default
+  const median = arr => {
+    if (!arr.length) return 100;
     const s = [...arr].sort((x, y) => x - y);
     const mid = Math.floor(s.length / 2);
     return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
   };
-  const approxColWidth = Math.max(40, Math.min(400, median(widths) || 100));
-  const tolerance = Math.max(4, Math.round(approxColWidth * 0.25)); // 25% of width
+  const approxColWidth = Math.max(40, median(widths) || 100);
+  const tolerance = Math.max(4, Math.round(approxColWidth * 0.25));
 
   const cols = [];
   for (const p of points) {
-    const hit = cols.find((col) => Math.abs(col.center - p.center) <= tolerance);
+    const hit = cols.find(col => Math.abs(col.center - p.center) <= tolerance);
     if (hit) hit.members.push(p.c);
     else cols.push({ center: p.center, members: [p.c] });
   }
   cols.sort((a, b) => a.center - b.center);
-  // Return all columns found (could be 5 for weekends hidden, or 7 for weekends shown)
   return cols;
 }
 
-// --- NEW: Assign column position based on user's week start setting --------
 function computeColumnPositionMap(cols, startWeekDay) {
-  // Create a mapping from column index to weekday (0-6, Sun-Sat) based on user's week start setting
   const map = new Array(cols.length).fill(0);
 
-  console.log(
-    'CC3 Month Coloring: Computing column position map with startWeekDay:',
-    startWeekDay,
-    'for',
-    cols.length,
-    'columns',
-  );
-
   if (cols.length === 5) {
-    // When weekends are hidden, Google Calendar always shows Monday-Friday (weekdays 1-5)
-    // Map columns 0-4 to weekdays 1-5 (Monday-Friday)
-    for (let colIndex = 0; colIndex < 5; colIndex++) {
-      const weekday = colIndex + 1; // Monday=1, Tuesday=2, Wednesday=3, Thursday=4, Friday=5
-      map[colIndex] = weekday;
-      console.log(
-        `CC3 Month Coloring: Column ${colIndex} -> Weekday ${weekday} (${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][weekday]}) - weekends hidden`,
-      );
+    // Weekends hidden: Monday-Friday
+    for (let i = 0; i < 5; i++) {
+      map[i] = i + 1; // Monday=1, Tuesday=2, etc.
     }
   } else if (cols.length === 7) {
-    // When weekends are shown, use the user's week start setting
-    // startWeekDay: 0=Sunday, 1=Monday, 6=Saturday
-    for (let colIndex = 0; colIndex < 7; colIndex++) {
-      const weekday = (colIndex + startWeekDay) % 7;
-      map[colIndex] = weekday;
-      console.log(
-        `CC3 Month Coloring: Column ${colIndex} -> Weekday ${weekday} (${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][weekday]}) based on user setting`,
-      );
+    // Weekends shown: use user's week start setting
+    for (let i = 0; i < 7; i++) {
+      map[i] = (i + startWeekDay) % 7;
     }
   }
 
-  console.log('CC3 Month Coloring: Final column mapping:', map);
   return map;
 }
 
-// Helper function to convert hex color to rgba with opacity
+// ============================================================================
+// COLOR UTILITIES
+// ============================================================================
+
 function hexToRgba(hex, alpha) {
   if (!hex || hex === '#ffffff') return `rgba(255, 255, 255, ${alpha})`;
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -342,436 +381,69 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// Helper to normalize date to YYYY-MM-DD format
-function normalizeYmdFromDate(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-// Build a map of visual positions to dates by finding elements with date info
-function buildDatePositionMap() {
-  const DEBUG = true;
-  const dateMap = {}; // "row-col" -> "YYYY-MM-DD"
-
-  // Find all elements with data-date attribute in the calendar grid
-  const grid = document.querySelector('div[role="grid"]');
-  if (!grid) {
-    if (DEBUG) console.log('CC3 Month: No grid found for date position map');
-    return dateMap;
-  }
-
-  // Find all gridcells with date info
-  const gridcells = grid.querySelectorAll('[role="gridcell"]');
-  if (DEBUG) console.log('CC3 Month: Found gridcells:', gridcells.length);
-
-  // Get bounding boxes and sort into rows/columns
-  const cellData = [];
-  gridcells.forEach((cell) => {
-    const rect = cell.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-
-    // Try to get date from this gridcell or its descendants
-    let dateStr = cell.getAttribute('data-date');
-    if (!dateStr) {
-      const dateEl = cell.querySelector('[data-date]');
-      if (dateEl) dateStr = dateEl.getAttribute('data-date');
-    }
-    if (!dateStr) {
-      // Try aria-label
-      const aria = cell.getAttribute('aria-label');
-      if (aria) {
-        const d = parseDateFromAriaLabel(aria);
-        if (d && !Number.isNaN(d.getTime())) {
-          dateStr = normalizeYmdFromDate(d);
-        }
-      }
-    }
-
-    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      cellData.push({
-        date: dateStr,
-        left: rect.left,
-        top: rect.top,
-        centerX: (rect.left + rect.right) / 2,
-        centerY: (rect.top + rect.bottom) / 2,
-      });
-    }
-  });
-
-  if (DEBUG) console.log('CC3 Month: Gridcells with dates found:', cellData.length);
-
-  // Also try to find date elements directly
-  const dateElements = grid.querySelectorAll('[data-date]');
-  dateElements.forEach((el) => {
-    const dateStr = el.getAttribute('data-date');
-    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        // Check if we already have this date
-        const exists = cellData.some(c => c.date === dateStr);
-        if (!exists) {
-          cellData.push({
-            date: dateStr,
-            left: rect.left,
-            top: rect.top,
-            centerX: (rect.left + rect.right) / 2,
-            centerY: (rect.top + rect.bottom) / 2,
-          });
-        }
-      }
-    }
-  });
-
-  if (DEBUG) console.log('CC3 Month: Total date entries:', cellData.length);
-  if (cellData.length > 0) {
-    if (DEBUG) console.log('CC3 Month: Sample dates:', cellData.slice(0, 3).map(c => c.date));
-  }
-
-  return cellData;
-}
-
-// Find the date for a cell by matching its position to known date positions
-function findDateByPosition(cell, datePositions) {
-  const DEBUG = true;
-  if (!datePositions.length) return null;
-
-  const rect = cell.getBoundingClientRect();
-  const cellCenterX = (rect.left + rect.right) / 2;
-  const cellCenterY = (rect.top + rect.bottom) / 2;
-
-  // Find the closest date position
-  let closestDate = null;
-  let minDistance = Infinity;
-
-  for (const pos of datePositions) {
-    const dx = pos.centerX - cellCenterX;
-    const dy = pos.centerY - cellCenterY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestDate = pos.date;
-    }
-  }
-
-  // Only accept if reasonably close (within 100px)
-  if (minDistance < 100 && closestDate) {
-    if (DEBUG) console.log(`CC3 Month: Position match found: ${closestDate} (distance: ${minDistance.toFixed(1)}px)`);
-    return closestDate;
-  }
-
-  if (DEBUG) console.log(`CC3 Month: No position match found (closest was ${minDistance.toFixed(1)}px away)`);
-  return null;
-}
-
-// Get ISO date string from a month cell
-function getCellDateString(cell, currentMonthInfo, datePositions) {
-  const DEBUG = true; // Enable debug logging for investigation
-
-  if (DEBUG) console.log('CC3 Month: getCellDateString called for cell:', cell);
-
-  // Try data-date attribute first (most reliable)
-  const dateAttr = cell.getAttribute('data-date');
-  if (DEBUG) console.log('CC3 Month: cell data-date attr:', dateAttr);
-  if (dateAttr && /^\d{4}-\d{2}-\d{2}$/.test(dateAttr)) {
-    return dateAttr;
-  }
-
-  // Try aria-label parsing on the cell itself
-  const aria = cell.getAttribute('aria-label');
-  if (DEBUG) console.log('CC3 Month: cell aria-label:', aria);
-  if (aria) {
-    const d = parseDateFromAriaLabel(aria);
-    if (d && !Number.isNaN(d.getTime())) {
-      const result = normalizeYmdFromDate(d);
-      if (DEBUG) console.log('CC3 Month: Parsed from cell aria-label:', result);
-      return result;
-    }
-  }
-
-  // Try parent gridcell for aria-label (div.MGaLHf.ChfiMc is inside gridcell)
-  const parentGridcell = cell.closest('[role="gridcell"]');
-  if (DEBUG) console.log('CC3 Month: parentGridcell found:', !!parentGridcell, parentGridcell);
-  if (parentGridcell) {
-    const parentAria = parentGridcell.getAttribute('aria-label');
-    if (DEBUG) console.log('CC3 Month: parent aria-label:', parentAria);
-    if (parentAria) {
-      const d = parseDateFromAriaLabel(parentAria);
-      if (DEBUG) console.log('CC3 Month: Parsed date from parent aria:', d, 'isValid:', d && !Number.isNaN(d.getTime()));
-      if (d && !Number.isNaN(d.getTime())) {
-        const result = normalizeYmdFromDate(d);
-        if (DEBUG) console.log('CC3 Month: Successfully parsed from parent aria-label:', result);
-        return result;
-      }
-    }
-    // Also try data-date on parent gridcell
-    const parentDateAttr = parentGridcell.getAttribute('data-date');
-    if (DEBUG) console.log('CC3 Month: parent data-date attr:', parentDateAttr);
-    if (parentDateAttr && /^\d{4}-\d{2}-\d{2}$/.test(parentDateAttr)) {
-      return parentDateAttr;
-    }
-
-    // Try to find ANY element with data-date within the gridcell
-    const dateElInGridcell = parentGridcell.querySelector('[data-date]');
-    if (dateElInGridcell) {
-      const foundDate = dateElInGridcell.getAttribute('data-date');
-      if (DEBUG) console.log('CC3 Month: Found data-date in gridcell child:', foundDate);
-      if (foundDate && /^\d{4}-\d{2}-\d{2}$/.test(foundDate)) {
-        return foundDate;
-      }
-    }
-  }
-
-  // NEW: Try position-based matching using pre-built date map
-  if (datePositions && datePositions.length > 0) {
-    if (DEBUG) console.log('CC3 Month: Trying position-based matching...');
-    const positionMatch = findDateByPosition(cell, datePositions);
-    if (positionMatch) {
-      return positionMatch;
-    }
-  }
-
-  // Try searching up the DOM tree for any element with date info
-  let parent = cell.parentElement;
-  let searchDepth = 0;
-  while (parent && searchDepth < 5) {
-    const ariaLabel = parent.getAttribute('aria-label');
-    if (ariaLabel) {
-      if (DEBUG) console.log(`CC3 Month: Found aria-label at depth ${searchDepth}:`, ariaLabel);
-      const d = parseDateFromAriaLabel(ariaLabel);
-      if (d && !Number.isNaN(d.getTime())) {
-        return normalizeYmdFromDate(d);
-      }
-    }
-    const dateAttr = parent.getAttribute('data-date');
-    if (dateAttr && /^\d{4}-\d{2}-\d{2}$/.test(dateAttr)) {
-      if (DEBUG) console.log(`CC3 Month: Found data-date at depth ${searchDepth}:`, dateAttr);
-      return dateAttr;
-    }
-    parent = parent.parentElement;
-    searchDepth++;
-  }
-
-  // Try to find date in descendant
-  const dateEl = cell.querySelector('[data-date]');
-  if (DEBUG) console.log('CC3 Month: descendant with data-date:', dateEl);
-  if (dateEl) {
-    const childDate = dateEl.getAttribute('data-date');
-    if (childDate && /^\d{4}-\d{2}-\d{2}$/.test(childDate)) {
-      return childDate;
-    }
-  }
-
-  // Try time element
-  const timeEl = cell.querySelector('time[datetime]');
-  if (DEBUG) console.log('CC3 Month: time element:', timeEl);
-  if (timeEl) {
-    const datetime = timeEl.getAttribute('datetime');
-    if (datetime) {
-      const d = new Date(datetime);
-      if (!Number.isNaN(d.getTime())) {
-        return normalizeYmdFromDate(d);
-      }
-    }
-  }
-
-  // Fallback: Calculate date from day number + current month/year
-  if (DEBUG) console.log('CC3 Month: Using calculation fallback. currentMonthInfo:', currentMonthInfo);
-  if (currentMonthInfo) {
-    const dayNumber = getCellDayNumber(cell);
-    if (DEBUG) console.log('CC3 Month: Day number extracted:', dayNumber);
-    if (dayNumber) {
-      const calculatedDate = calculateCellDate(cell, dayNumber, currentMonthInfo);
-      if (DEBUG) console.log('CC3 Month: Calculated date:', calculatedDate);
-      return calculatedDate;
-    }
-  }
-
-  if (DEBUG) console.log('CC3 Month: FAILED to get date string for cell');
-  return null;
-}
-
-// Calculate the full date for a cell based on day number and position in grid
-function calculateCellDate(cell, dayNumber, monthInfo) {
-  const { year, month } = monthInfo;
-
-  // Get the cell's row position to determine if it's from an adjacent month
-  const rect = getDaySquare(cell).getBoundingClientRect();
-  const allCells = selectMonthCells();
-  if (!allCells.length) return null;
-
-  // Sort cells by vertical position to find rows
-  const sortedByY = allCells
-    .map(c => ({ cell: c, top: getDaySquare(c).getBoundingClientRect().top }))
-    .sort((a, b) => a.top - b.top);
-
-  // Find unique row positions (with tolerance)
-  const rowTops = [];
-  for (const item of sortedByY) {
-    if (!rowTops.length || Math.abs(item.top - rowTops[rowTops.length - 1]) > 10) {
-      rowTops.push(item.top);
-    }
-  }
-
-  // Determine which row this cell is in
-  let rowIndex = 0;
-  for (let i = 0; i < rowTops.length; i++) {
-    if (Math.abs(rect.top - rowTops[i]) < 10) {
-      rowIndex = i;
-      break;
-    }
-  }
-
-  const totalRows = rowTops.length;
-  const isFirstRow = rowIndex === 0;
-  const isLastRow = rowIndex === totalRows - 1;
-
-  // Determine the actual month for this cell
-  let actualYear = year;
-  let actualMonth = month;
-
-  if (isFirstRow && dayNumber > 20) {
-    // High day numbers in first row = previous month
-    actualMonth = month - 1;
-    if (actualMonth < 0) {
-      actualMonth = 11;
-      actualYear = year - 1;
-    }
-  } else if (isLastRow && dayNumber < 15) {
-    // Low day numbers in last row = next month
-    actualMonth = month + 1;
-    if (actualMonth > 11) {
-      actualMonth = 0;
-      actualYear = year + 1;
-    }
-  }
-
-  // Create the date string
-  const monthStr = String(actualMonth + 1).padStart(2, '0');
-  const dayStr = String(dayNumber).padStart(2, '0');
-  return `${actualYear}-${monthStr}-${dayStr}`;
-}
-
-// Get current month/year from URL
-function getMonthYearFromURL() {
-  const url = window.location.href;
-  console.log('CC3 Month: getMonthYearFromURL - URL:', url);
-
-  // Try multiple URL patterns that Google Calendar uses
-  // Pattern 1: /r/month/YYYY/M/D or /month/YYYY/M/D
-  let match = url.match(/\/(?:r\/)?month\/(\d{4})\/(\d{1,2})(?:\/\d{1,2})?/);
-  if (match) {
-    console.log('CC3 Month: Pattern 1 matched:', match);
-    return {
-      year: parseInt(match[1]),
-      month: parseInt(match[2]) - 1 // JS months are 0-based
-    };
-  }
-
-  // Pattern 2: ?date=YYYYMMDD
-  match = url.match(/[?&]date=(\d{4})(\d{2})(\d{2})/);
-  if (match) {
-    console.log('CC3 Month: Pattern 2 (date param) matched:', match);
-    return {
-      year: parseInt(match[1]),
-      month: parseInt(match[2]) - 1
-    };
-  }
-
-  // Pattern 3: /u/0/r/month - just month view without date, use current date
-  if (url.includes('/month')) {
-    console.log('CC3 Month: URL contains /month but no date found, using current date');
-    const now = new Date();
-    return {
-      year: now.getFullYear(),
-      month: now.getMonth()
-    };
-  }
-
-  console.log('CC3 Month: No URL pattern matched, returning null');
-  return null;
-}
+// ============================================================================
+// MAIN PAINTING FUNCTION
+// ============================================================================
 
 function applyMonthViewColors(userColors, opts) {
-  const startWeekDay = opts?.assumeWeekStartsOn ?? 0; // 0=Sunday, 1=Monday, 6=Saturday
+  const startWeekDay = opts?.assumeWeekStartsOn ?? 0;
   const userOpacity = opts?.opacity || {};
-  const dateColors = opts?.dateColors || {}; // Date-specific color overrides
+  const dateColors = opts?.dateColors || {};
 
-  console.log('CC3 Month Coloring: applyMonthViewColors called');
-  console.log('CC3 Month Coloring: userColors:', userColors);
-  console.log('CC3 Month Coloring: opts:', opts);
-  console.log('CC3 Month Coloring: dateColors received:', dateColors);
-  console.log('CC3 Month Coloring: dateColors keys:', Object.keys(dateColors));
+  console.log('CC3 Month: applyMonthViewColors called');
+  console.log('CC3 Month: dateColors:', Object.keys(dateColors).length, 'entries');
 
   const paint = () => {
-    console.log('CC3 Month Coloring: paint() executing');
+    console.log('CC3 Month: paint() executing');
     clearMonthColors();
-    const cells = selectMonthCells();
-    console.log('CC3 Month Coloring: Total cells found:', cells.length);
-    if (!cells.length) return;
-    const cols = clusterColumns(cells);
 
-    // Handle both 5-column (weekends hidden) and 7-column (weekends shown) layouts
+    const cells = selectMonthCells();
+    if (!cells.length) return;
+
+    const cols = clusterColumns(cells);
     if (cols.length !== 5 && cols.length !== 7) {
-      console.log(`CC3 Month Coloring: Unexpected column count: ${cols.length}, expected 5 or 7`);
+      console.log(`CC3 Month: Unexpected ${cols.length} columns`);
       return;
     }
 
-    console.log(
-      `CC3 Month Coloring: Found ${cols.length} columns (weekends ${cols.length === 5 ? 'hidden' : 'shown'})`,
-    );
+    // Build the datekey map - this is the key to everything!
+    const dateKeyMap = buildDateKeyMap();
+    console.log('CC3 Month: DateKey map has', dateKeyMap.size, 'entries');
 
-    // Get current month/year for date calculation fallback
-    const currentMonthInfo = getMonthYearFromURL();
-    console.log('CC3 Month Coloring: Current month info:', currentMonthInfo);
-    console.log('CC3 Month Coloring: Date colors to apply:', dateColors);
-    console.log('CC3 Month Coloring: Number of date colors:', Object.keys(dateColors).length);
+    // Log a sample of the map
+    if (dateKeyMap.size > 0) {
+      const sample = Array.from(dateKeyMap.entries()).slice(0, 3);
+      console.log('CC3 Month: Sample mappings:', sample);
+    }
 
-    // Build a position-based date map from gridcells with date info
-    const datePositions = buildDatePositionMap();
-    console.log('CC3 Month Coloring: Built date position map with', datePositions.length, 'entries');
-
-    // Compute column position map based on day numbers
     const colToPosition = computeColumnPositionMap(cols, startWeekDay);
-
     let dateSpecificCount = 0;
-    let cellsProcessed = 0;
 
     cols.forEach((col, cIdx) => {
       const weekday = colToPosition[cIdx];
       const defaultColor = userColors[weekday];
-      const defaultOpacity = userOpacity[weekday] || 30; // Default to 30% if not set
+      const defaultOpacity = userOpacity[weekday] || 30;
 
       for (const cell of col.members) {
-        cellsProcessed++;
-        // Try to get date-specific color first (now with position-based matching)
-        const cellDateStr = getCellDateString(cell, currentMonthInfo, datePositions);
+        // Get date from datekey - simple and reliable!
+        const cellDateStr = getCellDateString(cell, dateKeyMap);
+
         let color = defaultColor;
         let opacity = defaultOpacity;
         let isDateSpecific = false;
 
-        // Log every cell's date detection
-        if (cellsProcessed <= 5 || (cellDateStr && dateColors[cellDateStr])) {
-          console.log(`CC3 Month Coloring: Cell ${cellsProcessed} dateStr:`, cellDateStr,
-            'Has date-specific color:', cellDateStr && !!dateColors[cellDateStr]);
-        }
-
+        // Check for date-specific color
         if (cellDateStr && dateColors[cellDateStr]) {
           color = dateColors[cellDateStr];
-          opacity = 30; // Default opacity for date-specific colors
+          opacity = 30;
           isDateSpecific = true;
           dateSpecificCount++;
-          console.log(`CC3 Month Coloring: ✅ APPLYING date-specific color for ${cellDateStr}:`, color);
+          console.log(`CC3 Month: ✅ Date-specific color for ${cellDateStr}: ${color}`);
         }
 
         if (!color) continue;
 
-        // Convert hex color to rgba with opacity
         const rgba = hexToRgba(color, opacity / 100);
-
-        // Apply color with opacity to the div.MGaLHf.ChfiMc background
         cell.style.setProperty('background-color', rgba, 'important');
         cell.setAttribute('data-gce-month-painted', '1');
         if (isDateSpecific) {
@@ -780,35 +452,27 @@ function applyMonthViewColors(userColors, opts) {
       }
     });
 
-    console.log(`CC3 Month Coloring: Finished. Cells processed: ${cellsProcessed}, Date-specific colors applied: ${dateSpecificCount}`);
+    console.log(`CC3 Month: Applied ${dateSpecificCount} date-specific colors`);
   };
 
-  // Paint now
-  // Double-RAF to avoid painting during GCal's transition frame
+  // Paint with double-RAF to avoid transition frame issues
   requestAnimationFrame(() => requestAnimationFrame(paint));
 
-  // Observe DOM churn inside the month grid (navigation, redraws)
-  const root = isLikelyMonthViewRoot() ?? document.body;
+  // Observe DOM changes
+  const root = document.querySelector('div[role="grid"]') || document.body;
   if (monthMo) monthMo.disconnect();
   monthMo = new MutationObserver(() => {
     cancelAnimationFrame(paint.__raf || 0);
-    paint.__raf = requestAnimationFrame(() => {
-      // settle one more frame after layout
-      requestAnimationFrame(paint);
-    });
+    paint.__raf = requestAnimationFrame(() => requestAnimationFrame(paint));
   });
   monthMo.observe(root, { childList: true, subtree: true, attributes: true });
 
-  // Repaint on resize (column positions shift)
+  // Repaint on resize
   if (!resizeBound) {
-    window.addEventListener(
-      'resize',
-      () => {
-        cancelAnimationFrame(paint.__raf || 0);
-        paint.__raf = requestAnimationFrame(paint);
-      },
-      { passive: true },
-    );
+    window.addEventListener('resize', () => {
+      cancelAnimationFrame(paint.__raf || 0);
+      paint.__raf = requestAnimationFrame(paint);
+    }, { passive: true });
     resizeBound = true;
   }
 }
@@ -821,9 +485,9 @@ function teardownMonthPainter() {
   clearMonthColors();
 }
 
-// Export functions for use in the feature system
+// Export
 window.cc3MonthColoring = {
   applyMonthViewColors,
   teardownMonthPainter,
-  clearMonthColors,
+  clearMonthColors
 };
