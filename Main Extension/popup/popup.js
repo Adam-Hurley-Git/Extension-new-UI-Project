@@ -5967,6 +5967,7 @@ checkAuthAndSubscription();
         if (dateKey) {
           settings = await window.cc3Storage.clearDateColor(dateKey);
           renderDateColors();
+          saveSettings(); // Notify content script to update colors immediately
         }
       });
     });
@@ -6119,6 +6120,7 @@ checkAuthAndSubscription();
         // Save the date color
         settings = await window.cc3Storage.setDateColor(dateKey, color);
         renderDateColors();
+        saveSettings(); // Notify content script to update colors immediately
 
         // Reset date input to tomorrow for convenience
         const nextDate = new Date(dateKey + 'T12:00:00');
