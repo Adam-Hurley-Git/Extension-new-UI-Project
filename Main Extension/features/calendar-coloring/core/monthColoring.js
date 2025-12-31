@@ -19,57 +19,45 @@ let resizeBound = false;
  */
 function buildDateKeyMap() {
   const map = new Map();
-  const DEBUG = true;
-
-  if (DEBUG) console.log('CC3 Month: Building datekey map...');
 
   // Strategy 1: Find h2 elements with month+day text (class avfuie)
-  // These show text like "Dec 1", "Jan 15" - reliable anchor points
   const monthDayHeaders = document.querySelectorAll('h2[data-datekey].avfuie');
 
   for (const h2 of monthDayHeaders) {
     const dateKey = h2.getAttribute('data-datekey');
-    const text = h2.textContent?.trim(); // e.g., "Dec 1", "Jan 15"
+    const text = h2.textContent?.trim();
 
     if (dateKey && text) {
       const parsed = parseMonthDayText(text);
       if (parsed) {
         map.set(dateKey, parsed);
-        if (DEBUG) console.log(`CC3 Month: Anchor found - datekey ${dateKey} = ${parsed} (from "${text}")`);
       }
     }
   }
 
   // Strategy 2: Parse gridcell aria-labels for full dates
-  // These have text like "3 events, Monday, December 1"
   const gridcells = document.querySelectorAll('[role="gridcell"]');
 
   for (const cell of gridcells) {
     const ariaLabel = cell.getAttribute('aria-label');
     if (!ariaLabel) continue;
 
-    // Look for h2 child with data-datekey
     const h2 = cell.querySelector('h2[data-datekey]') || cell.querySelector('[data-datekey]');
     if (!h2) continue;
 
     const dateKey = h2.getAttribute('data-datekey');
     if (!dateKey || map.has(dateKey)) continue;
 
-    // Parse full date from aria-label like "3 events, Monday, December 1"
     const parsed = parseDateFromAriaLabel(ariaLabel);
     if (parsed) {
       map.set(dateKey, parsed);
-      if (DEBUG) console.log(`CC3 Month: From gridcell aria - datekey ${dateKey} = ${parsed}`);
     }
   }
 
   // Strategy 3: Fill gaps using sequential datekeys
-  // If we have at least one anchor, we can calculate the rest
   if (map.size > 0) {
     fillDateKeyGaps(map);
   }
-
-  if (DEBUG) console.log(`CC3 Month: DateKey map built with ${map.size} entries`);
 
   return map;
 }
@@ -301,15 +289,12 @@ function clearMonthColors() {
     el.removeAttribute('data-gce-month-painted');
     el.removeAttribute('data-gce-date-colored');
   });
-  console.log('CC3 Month: Cleared colors');
 }
 
 function selectMonthCells() {
   // Target div.MGaLHf.ChfiMc elements - they have data-datekey!
   const daySquares = Array.from(document.querySelectorAll('div.MGaLHf.ChfiMc'))
     .filter(c => c.offsetParent !== null);
-
-  console.log(`CC3 Month: Found ${daySquares.length} day cells`);
   return daySquares.length >= 25 ? daySquares : [];
 }
 
@@ -390,34 +375,18 @@ function applyMonthViewColors(userColors, opts) {
   const userOpacity = opts?.opacity || {};
   const dateColors = opts?.dateColors || {};
 
-  console.log('CC3 Month: applyMonthViewColors called');
-  console.log('CC3 Month: dateColors:', Object.keys(dateColors).length, 'entries');
-
   const paint = () => {
-    console.log('CC3 Month: paint() executing');
     clearMonthColors();
 
     const cells = selectMonthCells();
     if (!cells.length) return;
 
     const cols = clusterColumns(cells);
-    if (cols.length !== 5 && cols.length !== 7) {
-      console.log(`CC3 Month: Unexpected ${cols.length} columns`);
-      return;
-    }
+    if (cols.length !== 5 && cols.length !== 7) return;
 
     // Build the datekey map - this is the key to everything!
     const dateKeyMap = buildDateKeyMap();
-    console.log('CC3 Month: DateKey map has', dateKeyMap.size, 'entries');
-
-    // Log a sample of the map
-    if (dateKeyMap.size > 0) {
-      const sample = Array.from(dateKeyMap.entries()).slice(0, 3);
-      console.log('CC3 Month: Sample mappings:', sample);
-    }
-
     const colToPosition = computeColumnPositionMap(cols, startWeekDay);
-    let dateSpecificCount = 0;
 
     cols.forEach((col, cIdx) => {
       const weekday = colToPosition[cIdx];
@@ -437,8 +406,6 @@ function applyMonthViewColors(userColors, opts) {
           color = dateColors[cellDateStr];
           opacity = 30;
           isDateSpecific = true;
-          dateSpecificCount++;
-          console.log(`CC3 Month: ✅ Date-specific color for ${cellDateStr}: ${color}`);
         }
 
         if (!color) continue;
@@ -451,8 +418,6 @@ function applyMonthViewColors(userColors, opts) {
         }
       }
     });
-
-    console.log(`CC3 Month: Applied ${dateSpecificCount} date-specific colors`);
   };
 
   // Paint with double-RAF to avoid transition frame issues
