@@ -266,9 +266,59 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// Helper to normalize date to YYYY-MM-DD format
+function normalizeYmdFromDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Get ISO date string from a month cell
+function getCellDateString(cell) {
+  // Try data-date attribute first
+  const dateAttr = cell.getAttribute('data-date');
+  if (dateAttr && /^\d{4}-\d{2}-\d{2}$/.test(dateAttr)) {
+    return dateAttr;
+  }
+
+  // Try aria-label parsing
+  const aria = cell.getAttribute('aria-label');
+  if (aria) {
+    const d = parseDateFromAriaLabel(aria);
+    if (d && !Number.isNaN(d.getTime())) {
+      return normalizeYmdFromDate(d);
+    }
+  }
+
+  // Try to find date in descendant
+  const dateEl = cell.querySelector('[data-date]');
+  if (dateEl) {
+    const childDate = dateEl.getAttribute('data-date');
+    if (childDate && /^\d{4}-\d{2}-\d{2}$/.test(childDate)) {
+      return childDate;
+    }
+  }
+
+  // Try time element
+  const timeEl = cell.querySelector('time[datetime]');
+  if (timeEl) {
+    const datetime = timeEl.getAttribute('datetime');
+    if (datetime) {
+      const d = new Date(datetime);
+      if (!Number.isNaN(d.getTime())) {
+        return normalizeYmdFromDate(d);
+      }
+    }
+  }
+
+  return null;
+}
+
 function applyMonthViewColors(userColors, opts) {
   const startWeekDay = opts?.assumeWeekStartsOn ?? 0; // 0=Sunday, 1=Monday, 6=Saturday
   const userOpacity = opts?.opacity || {};
+  const dateColors = opts?.dateColors || {}; // Date-specific color overrides
 
   const paint = () => {
     clearMonthColors();
@@ -291,23 +341,34 @@ function applyMonthViewColors(userColors, opts) {
 
     cols.forEach((col, cIdx) => {
       const weekday = colToPosition[cIdx];
-      const color = userColors[weekday];
-      const opacity = userOpacity[weekday] || 30; // Default to 30% if not set
-      console.log(
-        `CC3 Month Coloring: Column ${cIdx} (weekday ${weekday} - ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][weekday]}) -> color:`,
-        color,
-        'opacity:',
-        opacity,
-      );
-      if (!color) return;
-
-      // Convert hex color to rgba with opacity
-      const rgba = hexToRgba(color, opacity / 100);
+      const defaultColor = userColors[weekday];
+      const defaultOpacity = userOpacity[weekday] || 30; // Default to 30% if not set
 
       for (const cell of col.members) {
+        // Try to get date-specific color first
+        const cellDateStr = getCellDateString(cell);
+        let color = defaultColor;
+        let opacity = defaultOpacity;
+        let isDateSpecific = false;
+
+        if (cellDateStr && dateColors[cellDateStr]) {
+          color = dateColors[cellDateStr];
+          opacity = 30; // Default opacity for date-specific colors
+          isDateSpecific = true;
+          console.log(`CC3 Month Coloring: Date-specific color for ${cellDateStr}:`, color);
+        }
+
+        if (!color) continue;
+
+        // Convert hex color to rgba with opacity
+        const rgba = hexToRgba(color, opacity / 100);
+
         // Apply color with opacity to the div.MGaLHf.ChfiMc background
         cell.style.setProperty('background-color', rgba, 'important');
         cell.setAttribute('data-gce-month-painted', '1');
+        if (isDateSpecific) {
+          cell.setAttribute('data-gce-date-colored', cellDateStr);
+        }
       }
     });
   };

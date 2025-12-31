@@ -197,6 +197,90 @@
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
+  // Helper function to get color for a specific date
+  // Checks dateColors first (specific date override), then falls back to weekdayColors
+  function getColorForDate(settings, dateStr, weekday) {
+    // Check for date-specific color first
+    if (settings.dateColors && settings.dateColors[dateStr]) {
+      return {
+        color: settings.dateColors[dateStr],
+        opacity: 30, // Default opacity for date-specific colors
+        isDateSpecific: true
+      };
+    }
+
+    // Fall back to weekday color
+    const color = settings.weekdayColors?.[String(weekday)];
+    const opacity = settings.weekdayOpacity?.[String(weekday)] || 30;
+    return {
+      color: color,
+      opacity: opacity,
+      isDateSpecific: false
+    };
+  }
+
+  // Get the dates displayed in each column of the week view
+  // Returns an object mapping column index to date string (YYYY-MM-DD)
+  function getWeekViewColumnDates() {
+    const columnDates = {}; // columnIndex -> 'YYYY-MM-DD'
+
+    // Method 1: Find dates from data-date attributes in the grid
+    const grids = document.querySelectorAll('[role="grid"] > [data-start-date-key]');
+    for (const grid of grids) {
+      const dateElements = grid.querySelectorAll('[data-date]');
+      for (const dateEl of dateElements) {
+        const dateStr = dateEl.getAttribute('data-date');
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          // Find column position
+          const cell = dateEl.closest('[role="gridcell"]') || dateEl.closest('td');
+          if (cell) {
+            const row = cell.closest('[role="row"]') || cell.closest('tr');
+            if (row) {
+              const cells = row.querySelectorAll('[role="gridcell"], td');
+              let cellIndex = Array.from(cells).indexOf(cell);
+
+              // Adjust for time column
+              if (cells.length > 7 && cellIndex > 0) cellIndex--;
+
+              if (cellIndex >= 0 && cellIndex < 7) {
+                columnDates[cellIndex] = dateStr;
+              }
+            }
+          }
+        }
+      }
+      if (Object.keys(columnDates).length > 0) break;
+    }
+
+    // Method 2: Fallback - calculate dates from URL if available
+    if (Object.keys(columnDates).length === 0) {
+      const url = window.location.href;
+      // Week view URL pattern: /week/YYYY/M/D
+      const weekMatch = url.match(/\/week\/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+      if (weekMatch) {
+        const [, year, month, day] = weekMatch;
+        const startDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        const startWeek = detectStartWeek();
+
+        // Calculate the start of the displayed week
+        const currentDayOfWeek = startDate.getDay();
+        const daysToSubtract = (currentDayOfWeek - startWeek + 7) % 7;
+        const weekStart = new Date(startDate);
+        weekStart.setDate(weekStart.getDate() - daysToSubtract);
+
+        // Generate dates for each column
+        for (let col = 0; col < 7; col++) {
+          const columnDate = new Date(weekStart);
+          columnDate.setDate(weekStart.getDate() + col);
+          columnDates[col] = normalizeYmdFromDate(columnDate);
+        }
+      }
+    }
+
+    console.log('Week view column dates:', columnDates);
+    return columnDates;
+  }
+
   // === LOCKED STYLING FUNCTIONS ===
   function ensureStyleElement() {
     let style = document.getElementById(STYLE_ID);
@@ -272,14 +356,16 @@
       const currentDate = getCurrentDateInDayView();
       if (currentDate) {
         const dayOfWeek = currentDate.getDay();
-        const color = settings.weekdayColors?.[String(dayOfWeek)];
+        const currentDateStr = normalizeYmdFromDate(currentDate);
+
+        // Use helper to check date-specific color first, then weekday color
+        const colorInfo = getColorForDate(settings, currentDateStr, dayOfWeek);
+        const color = colorInfo.color;
 
         if (color) {
-          // Use opacity from settings instead of hardcoded theme-based alpha
-          const opacity = settings.weekdayOpacity?.[String(dayOfWeek)] || 30; // Default to 30% if not set
-          const alpha = opacity / 100; // Convert percentage to decimal
+          const alpha = colorInfo.opacity / 100; // Convert percentage to decimal
           const rgba = hexToRgba(color, alpha);
-          console.log(`Day view: applying color ${rgba} for day ${dayOfWeek}`);
+          console.log(`Day view: applying color ${rgba} for ${colorInfo.isDateSpecific ? 'date ' + currentDateStr : 'day ' + dayOfWeek}`);
 
           // Day view - PRECISE targeting using ONLY QIYAPb elements (like old implementation)
           css += `/* Day View Coloring - Only QIYAPb elements, avoid feMFof.A3o4Oe */\n`;
@@ -322,6 +408,10 @@
 
     // Week/Day view - target grids with data-start-date-key
     const base = "[role='grid'] > [data-start-date-key]";
+
+    // Get actual dates for each column to support date-specific colors
+    const columnDates = getWeekViewColumnDates();
+
     for (let col = 0; col < 7; col++) {
       const weekday = columnMapping[col];
       if (weekday === undefined) {
@@ -329,17 +419,19 @@
         continue;
       }
 
-      const color = settings.weekdayColors?.[String(weekday)];
+      // Get the date for this column and check for date-specific color
+      const dateStr = columnDates[col];
+      const colorInfo = getColorForDate(settings, dateStr, weekday);
+      const color = colorInfo.color;
+
       if (!color) {
-        console.log(`No color for weekday ${weekday} (column ${col})`);
+        console.log(`No color for column ${col} (weekday ${weekday}, date ${dateStr})`);
         continue;
       }
 
-      // Use opacity from settings instead of hardcoded theme-based alpha
-      const opacity = settings.weekdayOpacity?.[String(weekday)] || 30; // Default to 30% if not set
-      const alpha = opacity / 100; // Convert percentage to decimal
+      const alpha = colorInfo.opacity / 100; // Convert percentage to decimal
       const rgba = hexToRgba(color, alpha);
-      console.log(`Applying color ${color} (${rgba}) to column ${col} for weekday ${weekday}`);
+      console.log(`Applying color ${color} (${rgba}) to column ${col} for ${colorInfo.isDateSpecific ? 'date ' + dateStr : 'weekday ' + weekday}`);
 
       // Column headers - more precise targeting to avoid bleeding
       css += `${base} > [role='presentation'] > [role='columnheader']:nth-child(${col + 1}):nth-last-child(${7 - col}) { background-color: ${rgba} !important; }\n`;
@@ -548,12 +640,14 @@
     if (!currentDate) return;
 
     const dayOfWeek = currentDate.getDay();
-    const color = settings.weekdayColors?.[String(dayOfWeek)];
+    const currentDateStr = normalizeYmdFromDate(currentDate);
+
+    // Use helper to check date-specific color first, then weekday color
+    const colorInfo = getColorForDate(settings, currentDateStr, dayOfWeek);
+    const color = colorInfo.color;
     if (!color || color === '#ffffff') return;
 
-    // Use opacity from settings instead of hardcoded value
-    const opacity = settings.weekdayOpacity?.[String(dayOfWeek)] || 30; // Default to 30% if not set
-    const alpha = opacity / 100; // Convert percentage to decimal
+    const alpha = colorInfo.opacity / 100; // Convert percentage to decimal
     const rgba = hexToRgba(color, alpha);
 
     console.log('Applying ultra-precise direct DOM styling for event column only:', rgba);
@@ -628,9 +722,11 @@
         // Apply month view colors using user's week start setting
         const userWeekStart = settings.weekStart !== undefined ? settings.weekStart : 0; // Default to Sunday if not set
         console.log('CC3 Month View: Using user week start setting:', userWeekStart);
+        console.log('CC3 Month View: Date-specific colors:', settings.dateColors);
         window.cc3MonthColoring.applyMonthViewColors(userColors, {
           assumeWeekStartsOn: userWeekStart,
           opacity: userOpacity,
+          dateColors: settings.dateColors || {}, // Pass date-specific colors
         });
         console.log('CC3 Month View Coloring Applied via New Month Painter - ONLY div.MGaLHf.ChfiMc (NOT gridcells)');
       }
@@ -902,7 +998,8 @@
         currentSettings &&
         currentSettings.enabled === settings?.enabled &&
         JSON.stringify(currentSettings.weekdayColors) === JSON.stringify(settings?.weekdayColors) &&
-        JSON.stringify(currentSettings.weekdayOpacity) === JSON.stringify(settings?.weekdayOpacity)
+        JSON.stringify(currentSettings.weekdayOpacity) === JSON.stringify(settings?.weekdayOpacity) &&
+        JSON.stringify(currentSettings.dateColors) === JSON.stringify(settings?.dateColors)
       ) {
         console.log('Settings unchanged, skipping update');
         return;

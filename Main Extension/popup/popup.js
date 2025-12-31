@@ -5874,6 +5874,102 @@ checkAuthAndSubscription();
 
     // Reorganize day color row based on week start
     reorganizeWeekdaysDisplay();
+
+    // Render date-specific colors
+    renderDateColors();
+  }
+
+  // Render the date-specific colors list
+  function renderDateColors() {
+    const listContainer = qs('dateColorsList');
+    const countBadge = qs('dateColorsCount');
+    if (!listContainer) return;
+
+    const dateColors = settings.dateColors || {};
+    const entries = Object.entries(dateColors).sort(([a], [b]) => a.localeCompare(b));
+
+    // Update count badge
+    if (countBadge) {
+      countBadge.textContent = entries.length;
+    }
+
+    // Clear existing list
+    listContainer.innerHTML = '';
+
+    if (entries.length === 0) {
+      listContainer.innerHTML = `
+        <div style="text-align: center; padding: 12px; color: #80868b; font-size: 11px;">
+          No specific dates set. Use the form above to add date overrides.
+        </div>
+      `;
+      return;
+    }
+
+    // Render each date color
+    entries.forEach(([dateKey, color]) => {
+      const item = document.createElement('div');
+      item.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        background: white;
+        border: 1px solid #e8eaed;
+        border-radius: 4px;
+        margin-bottom: 4px;
+      `;
+
+      // Format the date for display
+      const date = new Date(dateKey + 'T12:00:00');
+      const formattedDate = date.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+
+      item.innerHTML = `
+        <div style="
+          width: 20px;
+          height: 20px;
+          border-radius: 4px;
+          background: ${color};
+          border: 1px solid #dadce0;
+          flex-shrink: 0;
+        "></div>
+        <div style="flex: 1; font-size: 11px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          ${formattedDate}
+        </div>
+        <button
+          class="remove-date-color-btn"
+          data-date="${dateKey}"
+          style="
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: 1;
+          "
+          title="Remove this date color"
+        >×</button>
+      `;
+
+      listContainer.appendChild(item);
+    });
+
+    // Add event listeners for remove buttons
+    listContainer.querySelectorAll('.remove-date-color-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const dateKey = e.target.getAttribute('data-date');
+        if (dateKey) {
+          settings = await window.cc3Storage.clearDateColor(dateKey);
+          renderDateColors();
+        }
+      });
+    });
   }
 
   // Reorganize the weekdays display based on week start setting
@@ -5997,6 +6093,37 @@ checkAuthAndSubscription();
       dayColoringVideoTutorialBtn.onclick = (e) => {
         e.preventDefault();
         chrome.tabs.create({ url: 'https://www.calendarextension.com/help#day-coloring' });
+      };
+    }
+
+    // Date-specific color add button
+    const addDateColorBtn = qs('addDateColorBtn');
+    const dateColorDateInput = qs('dateColorDateInput');
+    const dateColorColorInput = qs('dateColorColorInput');
+
+    if (addDateColorBtn && dateColorDateInput && dateColorColorInput) {
+      // Set default date to today
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      dateColorDateInput.value = todayStr;
+
+      addDateColorBtn.onclick = async () => {
+        const dateKey = dateColorDateInput.value;
+        const color = dateColorColorInput.value;
+
+        if (!dateKey) {
+          alert('Please select a date');
+          return;
+        }
+
+        // Save the date color
+        settings = await window.cc3Storage.setDateColor(dateKey, color);
+        renderDateColors();
+
+        // Reset date input to tomorrow for convenience
+        const nextDate = new Date(dateKey + 'T12:00:00');
+        nextDate.setDate(nextDate.getDate() + 1);
+        dateColorDateInput.value = nextDate.toISOString().split('T')[0];
       };
     }
 
