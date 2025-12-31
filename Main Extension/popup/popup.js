@@ -5973,10 +5973,12 @@ checkAuthAndSubscription();
     });
   }
 
-  // Initialize the date color picker dropdown with palette tabs
+  // Initialize the date color picker modal with palette tabs
   function initDateColorPicker() {
     const swatch = qs('dateColorSwatch');
     const dropdown = qs('dateColorPickerDropdown');
+    const backdrop = qs('dateColorPickerBackdrop');
+    const closeBtn = qs('dateColorPickerClose');
     const colorInput = qs('dateColorColorInput');
     const nativeInput = qs('dateColorNativeInput');
     const hexInput = qs('dateColorHexInput');
@@ -5989,9 +5991,9 @@ checkAuthAndSubscription();
     function createDateColorSwatch(color, panel) {
       const swatchEl = document.createElement('div');
       swatchEl.style.cssText = `
-        width: 28px;
-        height: 28px;
-        border-radius: 4px;
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
         background: ${color};
         cursor: pointer;
         border: 2px solid transparent;
@@ -6050,45 +6052,31 @@ checkAuthAndSubscription();
       swatch.style.backgroundColor = color;
       if (nativeInput) nativeInput.value = color;
       if (hexInput) hexInput.value = color.toUpperCase();
-      closeDropdown();
+      closeModal();
     }
 
-    // Toggle dropdown
-    function toggleDropdown() {
+    // Toggle modal
+    function toggleModal() {
       if (isOpen) {
-        closeDropdown();
+        closeModal();
       } else {
-        openDropdown();
+        openModal();
       }
     }
 
-    // Open dropdown
-    function openDropdown() {
+    // Open modal
+    function openModal() {
       populatePalettes();
+      if (backdrop) backdrop.style.display = 'block';
       dropdown.style.display = 'block';
-
-      // Position the dropdown
-      const rect = swatch.getBoundingClientRect();
-      const dropdownRect = dropdown.getBoundingClientRect();
-      const popupWidth = document.body.clientWidth;
-
-      // Position below the swatch
-      dropdown.style.position = 'fixed';
-      dropdown.style.top = `${rect.bottom + 4}px`;
-
-      // Center horizontally but keep within bounds
-      let left = rect.left + (rect.width / 2) - (280 / 2);
-      if (left < 8) left = 8;
-      if (left + 280 > popupWidth - 8) left = popupWidth - 280 - 8;
-      dropdown.style.left = `${left}px`;
-
       isOpen = true;
       swatch.style.borderColor = '#8b5cf6';
     }
 
-    // Close dropdown
-    function closeDropdown() {
+    // Close modal
+    function closeModal() {
       dropdown.style.display = 'none';
+      if (backdrop) backdrop.style.display = 'none';
       isOpen = false;
       swatch.style.borderColor = '#dadce0';
     }
@@ -6096,8 +6084,23 @@ checkAuthAndSubscription();
     // Swatch click handler
     swatch.addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleDropdown();
+      toggleModal();
     });
+
+    // Close button handler
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeModal();
+      });
+    }
+
+    // Backdrop click handler
+    if (backdrop) {
+      backdrop.addEventListener('click', () => {
+        closeModal();
+      });
+    }
 
     // Tab switching
     document.querySelectorAll('.date-color-tab').forEach(tab => {
@@ -6158,14 +6161,7 @@ checkAuthAndSubscription();
       });
     }
 
-    // Close on outside click
-    document.addEventListener('click', (e) => {
-      if (isOpen && !dropdown.contains(e.target) && e.target !== swatch) {
-        closeDropdown();
-      }
-    });
-
-    // Prevent dropdown clicks from closing
+    // Prevent modal clicks from closing (except close button)
     dropdown.addEventListener('click', (e) => {
       e.stopPropagation();
     });

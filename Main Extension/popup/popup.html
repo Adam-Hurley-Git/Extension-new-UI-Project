@@ -4143,21 +4143,45 @@
                     </button>
                   </div>
 
-                  <!-- Date Color Picker Dropdown -->
+                  <!-- Date Color Picker Modal Backdrop -->
+                  <div id="dateColorPickerBackdrop" style="
+                    display: none;
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.4);
+                    z-index: 2147483646;
+                  "></div>
+
+                  <!-- Date Color Picker Modal (Centered) -->
                   <div id="dateColorPickerDropdown" style="
                     display: none;
-                    position: absolute;
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
                     z-index: 2147483647;
                     background: white;
-                    border: 1px solid #dadce0;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-                    padding: 12px;
-                    width: 280px;
-                    max-height: 320px;
-                    overflow-y: auto;
+                    border-radius: 12px;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.24);
+                    padding: 16px;
+                    width: 300px;
                   ">
-                    <div class="color-picker-tabs" style="display: flex; gap: 4px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                      <span style="font-size: 14px; font-weight: 600; color: #333;">Choose Color</span>
+                      <button id="dateColorPickerClose" style="
+                        background: none;
+                        border: none;
+                        font-size: 20px;
+                        color: #666;
+                        cursor: pointer;
+                        padding: 0;
+                        line-height: 1;
+                      ">×</button>
+                    </div>
+                    <div class="color-picker-tabs" style="display: flex; gap: 4px; margin-bottom: 12px;">
                       <button class="date-color-tab active" data-tab="vibrant" style="
                         flex: 1;
                         padding: 6px 8px;
