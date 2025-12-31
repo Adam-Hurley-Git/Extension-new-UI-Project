@@ -378,7 +378,6 @@
           css += `body[data-viewkey="day"] div.QIYAPb > *:not(.feMFof.A3o4Oe) { background-color: var(--cc3-day-color) !important; }\n`;
 
           // Mini calendar in day view - target the current day cell
-          const currentDateStr = normalizeYmdFromDate(currentDate);
           css += `/* Mini Calendar Day View Coloring */\n`;
           css += `body[data-viewkey="day"] #drawerMiniMonthNavigator [data-date="${currentDateStr}"] { background-color: var(--cc3-day-color) !important; }\n`;
           css += `body[data-viewkey="day"] #drawerMiniMonthNavigator [data-date="${currentDateStr}"] > * { background-color: var(--cc3-day-color) !important; }\n`;
