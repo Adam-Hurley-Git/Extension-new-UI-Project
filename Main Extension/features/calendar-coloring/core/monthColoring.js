@@ -282,12 +282,29 @@ function getCellDateString(cell) {
     return dateAttr;
   }
 
-  // Try aria-label parsing
+  // Try aria-label parsing on the cell itself
   const aria = cell.getAttribute('aria-label');
   if (aria) {
     const d = parseDateFromAriaLabel(aria);
     if (d && !Number.isNaN(d.getTime())) {
       return normalizeYmdFromDate(d);
+    }
+  }
+
+  // Try parent gridcell for aria-label (div.MGaLHf.ChfiMc is inside gridcell)
+  const parentGridcell = cell.closest('[role="gridcell"]');
+  if (parentGridcell) {
+    const parentAria = parentGridcell.getAttribute('aria-label');
+    if (parentAria) {
+      const d = parseDateFromAriaLabel(parentAria);
+      if (d && !Number.isNaN(d.getTime())) {
+        return normalizeYmdFromDate(d);
+      }
+    }
+    // Also try data-date on parent gridcell
+    const parentDateAttr = parentGridcell.getAttribute('data-date');
+    if (parentDateAttr && /^\d{4}-\d{2}-\d{2}$/.test(parentDateAttr)) {
+      return parentDateAttr;
     }
   }
 
