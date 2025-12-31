@@ -79,6 +79,7 @@
       'calendarColors', // Calendar colors need hard replace for deletions
       'categories', // Event color categories need hard replace for deletions
       'templates', // Event color templates need hard replace for deletions
+      'dateColors', // Date-specific day colors need hard replace for deletions
     ]);
 
     // If either side isn't a plain object, prefer partial directly
@@ -168,17 +169,17 @@
   }
   async function setDateColor(dateKey, color) {
     if (!dateKey) return;
-    const patch = { dateColors: {} };
+    // Always get current dateColors and merge, since dateColors is in REPLACE_KEYS
+    const current = await getSettings();
+    const next = { ...(current.dateColors || {}) };
+
     if (color) {
-      patch.dateColors[dateKey] = color;
+      next[dateKey] = color;
     } else {
-      // remove
-      const current = await getSettings();
-      const next = { ...current.dateColors };
       delete next[dateKey];
-      return setSettings({ dateColors: next });
     }
-    return setSettings(patch);
+
+    return setSettings({ dateColors: next });
   }
   async function clearDateColor(dateKey) {
     return setDateColor(dateKey, null);
