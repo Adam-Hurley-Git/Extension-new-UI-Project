@@ -275,8 +275,8 @@ function normalizeYmdFromDate(date) {
 }
 
 // Get ISO date string from a month cell
-function getCellDateString(cell) {
-  // Try data-date attribute first
+function getCellDateString(cell, currentMonthInfo) {
+  // Try data-date attribute first (most reliable)
   const dateAttr = cell.getAttribute('data-date');
   if (dateAttr && /^\d{4}-\d{2}-\d{2}$/.test(dateAttr)) {
     return dateAttr;
@@ -329,6 +329,88 @@ function getCellDateString(cell) {
     }
   }
 
+  // Fallback: Calculate date from day number + current month/year
+  if (currentMonthInfo) {
+    const dayNumber = getCellDayNumber(cell);
+    if (dayNumber) {
+      return calculateCellDate(cell, dayNumber, currentMonthInfo);
+    }
+  }
+
+  return null;
+}
+
+// Calculate the full date for a cell based on day number and position in grid
+function calculateCellDate(cell, dayNumber, monthInfo) {
+  const { year, month } = monthInfo;
+
+  // Get the cell's row position to determine if it's from an adjacent month
+  const rect = getDaySquare(cell).getBoundingClientRect();
+  const allCells = selectMonthCells();
+  if (!allCells.length) return null;
+
+  // Sort cells by vertical position to find rows
+  const sortedByY = allCells
+    .map(c => ({ cell: c, top: getDaySquare(c).getBoundingClientRect().top }))
+    .sort((a, b) => a.top - b.top);
+
+  // Find unique row positions (with tolerance)
+  const rowTops = [];
+  for (const item of sortedByY) {
+    if (!rowTops.length || Math.abs(item.top - rowTops[rowTops.length - 1]) > 10) {
+      rowTops.push(item.top);
+    }
+  }
+
+  // Determine which row this cell is in
+  let rowIndex = 0;
+  for (let i = 0; i < rowTops.length; i++) {
+    if (Math.abs(rect.top - rowTops[i]) < 10) {
+      rowIndex = i;
+      break;
+    }
+  }
+
+  const totalRows = rowTops.length;
+  const isFirstRow = rowIndex === 0;
+  const isLastRow = rowIndex === totalRows - 1;
+
+  // Determine the actual month for this cell
+  let actualYear = year;
+  let actualMonth = month;
+
+  if (isFirstRow && dayNumber > 20) {
+    // High day numbers in first row = previous month
+    actualMonth = month - 1;
+    if (actualMonth < 0) {
+      actualMonth = 11;
+      actualYear = year - 1;
+    }
+  } else if (isLastRow && dayNumber < 15) {
+    // Low day numbers in last row = next month
+    actualMonth = month + 1;
+    if (actualMonth > 11) {
+      actualMonth = 0;
+      actualYear = year + 1;
+    }
+  }
+
+  // Create the date string
+  const monthStr = String(actualMonth + 1).padStart(2, '0');
+  const dayStr = String(dayNumber).padStart(2, '0');
+  return `${actualYear}-${monthStr}-${dayStr}`;
+}
+
+// Get current month/year from URL
+function getMonthYearFromURL() {
+  const url = window.location.href;
+  const match = url.match(/\/(?:r\/)?month\/(\d{4})\/(\d{1,2})(?:\/\d{1,2})?/);
+  if (match) {
+    return {
+      year: parseInt(match[1]),
+      month: parseInt(match[2]) - 1 // JS months are 0-based
+    };
+  }
   return null;
 }
 
@@ -353,6 +435,11 @@ function applyMonthViewColors(userColors, opts) {
       `CC3 Month Coloring: Found ${cols.length} columns (weekends ${cols.length === 5 ? 'hidden' : 'shown'})`,
     );
 
+    // Get current month/year for date calculation fallback
+    const currentMonthInfo = getMonthYearFromURL();
+    console.log('CC3 Month Coloring: Current month info:', currentMonthInfo);
+    console.log('CC3 Month Coloring: Date colors to apply:', dateColors);
+
     // Compute column position map based on day numbers
     const colToPosition = computeColumnPositionMap(cols, startWeekDay);
 
@@ -363,7 +450,7 @@ function applyMonthViewColors(userColors, opts) {
 
       for (const cell of col.members) {
         // Try to get date-specific color first
-        const cellDateStr = getCellDateString(cell);
+        const cellDateStr = getCellDateString(cell, currentMonthInfo);
         let color = defaultColor;
         let opacity = defaultOpacity;
         let isDateSpecific = false;
