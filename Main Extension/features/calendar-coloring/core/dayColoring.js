@@ -725,6 +725,7 @@
           assumeWeekStartsOn: userWeekStart,
           opacity: userOpacity,
           dateColors: settings.dateColors || {}, // Pass date-specific colors
+          dateOpacity: settings.dateOpacity || {}, // Pass date-specific opacity
         });
         console.log('CC3 Month View Coloring Applied via New Month Painter - ONLY div.MGaLHf.ChfiMc (NOT gridcells)');
       }

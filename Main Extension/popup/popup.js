@@ -5966,6 +5966,8 @@ checkAuthAndSubscription();
         const dateKey = e.target.getAttribute('data-date');
         if (dateKey) {
           settings = await window.cc3Storage.clearDateColor(dateKey);
+          // Also clear the opacity for this date
+          settings = await window.cc3Storage.setDateOpacity(dateKey, null);
           renderDateColors();
           saveSettings(); // Notify content script to update colors immediately
         }
@@ -5982,10 +5984,47 @@ checkAuthAndSubscription();
     const colorInput = qs('dateColorColorInput');
     const nativeInput = qs('dateColorNativeInput');
     const hexInput = qs('dateColorHexInput');
+    const opacitySlider = qs('dateColorOpacitySlider');
+    const opacityValue = qs('dateColorOpacityValue');
+    const sliderFill = qs('dateColorSliderFill');
 
     if (!swatch || !dropdown) return;
 
     let isOpen = false;
+    let currentOpacity = 30; // Default opacity
+
+    // Update opacity UI
+    function updateOpacityUI(opacity) {
+      currentOpacity = opacity;
+      if (opacityValue) opacityValue.textContent = `${opacity}%`;
+      if (opacitySlider) opacitySlider.value = opacity;
+      if (sliderFill) sliderFill.style.width = `${opacity}%`;
+
+      // Update preset button active state
+      document.querySelectorAll('.date-color-opacity-preset').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.opacity) === opacity);
+      });
+
+      // Update swatch preview with opacity
+      updateSwatchPreview();
+    }
+
+    // Update swatch preview with current color and opacity
+    function updateSwatchPreview() {
+      const color = colorInput?.value || '#ff6b6b';
+      const rgba = hexToRgbaPreview(color, currentOpacity / 100);
+      swatch.style.backgroundColor = rgba;
+    }
+
+    // Convert hex to rgba for preview
+    function hexToRgbaPreview(hex, alpha) {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (!result) return hex;
+      const r = parseInt(result[1], 16);
+      const g = parseInt(result[2], 16);
+      const b = parseInt(result[3], 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
 
     // Create swatch for each color
     function createDateColorSwatch(color, panel) {
@@ -6165,6 +6204,26 @@ checkAuthAndSubscription();
     dropdown.addEventListener('click', (e) => {
       e.stopPropagation();
     });
+
+    // Opacity slider event handler
+    if (opacitySlider) {
+      opacitySlider.addEventListener('input', (e) => {
+        const opacity = parseInt(e.target.value, 10);
+        updateOpacityUI(opacity);
+      });
+    }
+
+    // Opacity preset button handlers
+    document.querySelectorAll('.date-color-opacity-preset').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const opacity = parseInt(btn.dataset.opacity, 10);
+        updateOpacityUI(opacity);
+      });
+    });
+
+    // Initialize default opacity UI
+    updateOpacityUI(currentOpacity);
   }
 
   // Reorganize the weekdays display based on week start setting
@@ -6305,14 +6364,18 @@ checkAuthAndSubscription();
       addDateColorBtn.onclick = async () => {
         const dateKey = dateColorDateInput.value;
         const color = dateColorColorInput.value;
+        // Get opacity from slider (default to 30 if not found)
+        const opacitySlider = qs('dateColorOpacitySlider');
+        const opacity = opacitySlider ? parseInt(opacitySlider.value, 10) : 30;
 
         if (!dateKey) {
           alert('Please select a date');
           return;
         }
 
-        // Save the date color
+        // Save the date color and opacity
         settings = await window.cc3Storage.setDateColor(dateKey, color);
+        settings = await window.cc3Storage.setDateOpacity(dateKey, opacity);
         renderDateColors();
         saveSettings(); // Notify content script to update colors immediately
 

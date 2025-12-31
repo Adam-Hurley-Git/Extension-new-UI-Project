@@ -4251,6 +4251,26 @@
                     <div id="dateColorPastelPanel" class="date-color-panel" style="display: none; grid-template-columns: repeat(7, 1fr); gap: 4px;"></div>
                     <div id="dateColorDarkPanel" class="date-color-panel" style="display: none; grid-template-columns: repeat(7, 1fr); gap: 4px;"></div>
                     <div id="dateColorCustomPanel" class="date-color-panel" style="display: none; grid-template-columns: repeat(7, 1fr); gap: 4px;"></div>
+
+                    <!-- Opacity Control -->
+                    <div class="enhanced-opacity-control" style="margin-top: 12px;">
+                      <div class="opacity-header">
+                        <div class="opacity-label">🎚️ Opacity</div>
+                        <div class="opacity-value-display" id="dateColorOpacityValue">30%</div>
+                      </div>
+                      <div class="opacity-presets">
+                        <button class="opacity-preset-btn date-color-opacity-preset" data-opacity="10">10%</button>
+                        <button class="opacity-preset-btn date-color-opacity-preset" data-opacity="20">20%</button>
+                        <button class="opacity-preset-btn date-color-opacity-preset active" data-opacity="30">30%</button>
+                        <button class="opacity-preset-btn date-color-opacity-preset" data-opacity="40">40%</button>
+                        <button class="opacity-preset-btn date-color-opacity-preset" data-opacity="50">50%</button>
+                        <button class="opacity-preset-btn date-color-opacity-preset" data-opacity="100">100%</button>
+                      </div>
+                      <div class="opacity-slider-container">
+                        <div class="slider-track-fill" id="dateColorSliderFill" style="width: 30%"></div>
+                        <input type="range" id="dateColorOpacitySlider" min="0" max="100" value="30" />
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Date Colors List -->

@@ -38,6 +38,7 @@
     weekdayColors: DEFAULT_WEEKDAY_COLORS,
     weekdayOpacity: DEFAULT_WEEKDAY_OPACITY,
     dateColors: {}, // 'YYYY-MM-DD' -> hex color
+    dateOpacity: {}, // 'YYYY-MM-DD' -> opacity (0-100)
     presetColors: DEFAULT_PRESET_COLORS,
     weekStart: 0, // 0=Sunday, 1=Monday, 6=Saturday
     weekStartConfigured: false, // Whether user has explicitly set week start
@@ -183,6 +184,20 @@
   }
   async function clearDateColor(dateKey) {
     return setDateColor(dateKey, null);
+  }
+  async function setDateOpacity(dateKey, opacity) {
+    if (!dateKey) return;
+    // Always get current dateOpacity and merge, since dateOpacity is in REPLACE_KEYS
+    const current = await getSettings();
+    const next = { ...(current.dateOpacity || {}) };
+
+    if (opacity !== null && opacity !== undefined) {
+      next[dateKey] = opacity;
+    } else {
+      delete next[dateKey];
+    }
+
+    return setSettings({ dateOpacity: next });
   }
   async function addPresetColor(color) {
     const current = await getSettings();
@@ -1352,6 +1367,7 @@
     setWeekdayOpacity,
     setDateColor,
     clearDateColor,
+    setDateOpacity,
     addPresetColor,
     setWeekStart,
     setWeekStartConfigured,
