@@ -350,8 +350,124 @@ function normalizeYmdFromDate(date) {
   return `${y}-${m}-${d}`;
 }
 
+// Build a map of visual positions to dates by finding elements with date info
+function buildDatePositionMap() {
+  const DEBUG = true;
+  const dateMap = {}; // "row-col" -> "YYYY-MM-DD"
+
+  // Find all elements with data-date attribute in the calendar grid
+  const grid = document.querySelector('div[role="grid"]');
+  if (!grid) {
+    if (DEBUG) console.log('CC3 Month: No grid found for date position map');
+    return dateMap;
+  }
+
+  // Find all gridcells with date info
+  const gridcells = grid.querySelectorAll('[role="gridcell"]');
+  if (DEBUG) console.log('CC3 Month: Found gridcells:', gridcells.length);
+
+  // Get bounding boxes and sort into rows/columns
+  const cellData = [];
+  gridcells.forEach((cell) => {
+    const rect = cell.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    // Try to get date from this gridcell or its descendants
+    let dateStr = cell.getAttribute('data-date');
+    if (!dateStr) {
+      const dateEl = cell.querySelector('[data-date]');
+      if (dateEl) dateStr = dateEl.getAttribute('data-date');
+    }
+    if (!dateStr) {
+      // Try aria-label
+      const aria = cell.getAttribute('aria-label');
+      if (aria) {
+        const d = parseDateFromAriaLabel(aria);
+        if (d && !Number.isNaN(d.getTime())) {
+          dateStr = normalizeYmdFromDate(d);
+        }
+      }
+    }
+
+    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      cellData.push({
+        date: dateStr,
+        left: rect.left,
+        top: rect.top,
+        centerX: (rect.left + rect.right) / 2,
+        centerY: (rect.top + rect.bottom) / 2,
+      });
+    }
+  });
+
+  if (DEBUG) console.log('CC3 Month: Gridcells with dates found:', cellData.length);
+
+  // Also try to find date elements directly
+  const dateElements = grid.querySelectorAll('[data-date]');
+  dateElements.forEach((el) => {
+    const dateStr = el.getAttribute('data-date');
+    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        // Check if we already have this date
+        const exists = cellData.some(c => c.date === dateStr);
+        if (!exists) {
+          cellData.push({
+            date: dateStr,
+            left: rect.left,
+            top: rect.top,
+            centerX: (rect.left + rect.right) / 2,
+            centerY: (rect.top + rect.bottom) / 2,
+          });
+        }
+      }
+    }
+  });
+
+  if (DEBUG) console.log('CC3 Month: Total date entries:', cellData.length);
+  if (cellData.length > 0) {
+    if (DEBUG) console.log('CC3 Month: Sample dates:', cellData.slice(0, 3).map(c => c.date));
+  }
+
+  return cellData;
+}
+
+// Find the date for a cell by matching its position to known date positions
+function findDateByPosition(cell, datePositions) {
+  const DEBUG = true;
+  if (!datePositions.length) return null;
+
+  const rect = cell.getBoundingClientRect();
+  const cellCenterX = (rect.left + rect.right) / 2;
+  const cellCenterY = (rect.top + rect.bottom) / 2;
+
+  // Find the closest date position
+  let closestDate = null;
+  let minDistance = Infinity;
+
+  for (const pos of datePositions) {
+    const dx = pos.centerX - cellCenterX;
+    const dy = pos.centerY - cellCenterY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestDate = pos.date;
+    }
+  }
+
+  // Only accept if reasonably close (within 100px)
+  if (minDistance < 100 && closestDate) {
+    if (DEBUG) console.log(`CC3 Month: Position match found: ${closestDate} (distance: ${minDistance.toFixed(1)}px)`);
+    return closestDate;
+  }
+
+  if (DEBUG) console.log(`CC3 Month: No position match found (closest was ${minDistance.toFixed(1)}px away)`);
+  return null;
+}
+
 // Get ISO date string from a month cell
-function getCellDateString(cell, currentMonthInfo) {
+function getCellDateString(cell, currentMonthInfo, datePositions) {
   const DEBUG = true; // Enable debug logging for investigation
 
   if (DEBUG) console.log('CC3 Month: getCellDateString called for cell:', cell);
@@ -405,6 +521,15 @@ function getCellDateString(cell, currentMonthInfo) {
       if (foundDate && /^\d{4}-\d{2}-\d{2}$/.test(foundDate)) {
         return foundDate;
       }
+    }
+  }
+
+  // NEW: Try position-based matching using pre-built date map
+  if (datePositions && datePositions.length > 0) {
+    if (DEBUG) console.log('CC3 Month: Trying position-based matching...');
+    const positionMatch = findDateByPosition(cell, datePositions);
+    if (positionMatch) {
+      return positionMatch;
     }
   }
 
@@ -604,6 +729,10 @@ function applyMonthViewColors(userColors, opts) {
     console.log('CC3 Month Coloring: Date colors to apply:', dateColors);
     console.log('CC3 Month Coloring: Number of date colors:', Object.keys(dateColors).length);
 
+    // Build a position-based date map from gridcells with date info
+    const datePositions = buildDatePositionMap();
+    console.log('CC3 Month Coloring: Built date position map with', datePositions.length, 'entries');
+
     // Compute column position map based on day numbers
     const colToPosition = computeColumnPositionMap(cols, startWeekDay);
 
@@ -617,8 +746,8 @@ function applyMonthViewColors(userColors, opts) {
 
       for (const cell of col.members) {
         cellsProcessed++;
-        // Try to get date-specific color first
-        const cellDateStr = getCellDateString(cell, currentMonthInfo);
+        // Try to get date-specific color first (now with position-based matching)
+        const cellDateStr = getCellDateString(cell, currentMonthInfo, datePositions);
         let color = defaultColor;
         let opacity = defaultOpacity;
         let isDateSpecific = false;
