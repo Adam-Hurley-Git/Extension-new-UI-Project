@@ -5973,6 +5973,204 @@ checkAuthAndSubscription();
     });
   }
 
+  // Initialize the date color picker dropdown with palette tabs
+  function initDateColorPicker() {
+    const swatch = qs('dateColorSwatch');
+    const dropdown = qs('dateColorPickerDropdown');
+    const colorInput = qs('dateColorColorInput');
+    const nativeInput = qs('dateColorNativeInput');
+    const hexInput = qs('dateColorHexInput');
+
+    if (!swatch || !dropdown) return;
+
+    let isOpen = false;
+
+    // Create swatch for each color
+    function createDateColorSwatch(color, panel) {
+      const swatchEl = document.createElement('div');
+      swatchEl.style.cssText = `
+        width: 28px;
+        height: 28px;
+        border-radius: 4px;
+        background: ${color};
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: border-color 0.2s, transform 0.1s;
+      `;
+      swatchEl.title = color.toUpperCase();
+      swatchEl.dataset.color = color;
+
+      swatchEl.addEventListener('mouseenter', () => {
+        swatchEl.style.transform = 'scale(1.1)';
+        swatchEl.style.borderColor = '#8b5cf6';
+      });
+      swatchEl.addEventListener('mouseleave', () => {
+        swatchEl.style.transform = 'scale(1)';
+        swatchEl.style.borderColor = 'transparent';
+      });
+      swatchEl.addEventListener('click', () => {
+        selectColor(color);
+      });
+
+      panel.appendChild(swatchEl);
+    }
+
+    // Populate palettes
+    function populatePalettes() {
+      const vibrantPanel = qs('dateColorVibrantPanel');
+      const pastelPanel = qs('dateColorPastelPanel');
+      const darkPanel = qs('dateColorDarkPanel');
+      const customPanel = qs('dateColorCustomPanel');
+
+      if (vibrantPanel) {
+        vibrantPanel.innerHTML = '';
+        colorPickerPalette.forEach(c => createDateColorSwatch(c, vibrantPanel));
+      }
+      if (pastelPanel) {
+        pastelPanel.innerHTML = '';
+        pastelPalette.forEach(c => createDateColorSwatch(c, pastelPanel));
+      }
+      if (darkPanel) {
+        darkPanel.innerHTML = '';
+        darkPalette.forEach(c => createDateColorSwatch(c, darkPanel));
+      }
+      if (customPanel) {
+        customPanel.innerHTML = '';
+        if (customColors.length === 0) {
+          customPanel.innerHTML = '<div style="grid-column: 1/-1; padding: 16px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors. Add colors in Preferences → Color Lab.</div>';
+        } else {
+          customColors.forEach(c => createDateColorSwatch(c, customPanel));
+        }
+      }
+    }
+
+    // Select a color
+    function selectColor(color) {
+      colorInput.value = color;
+      swatch.style.backgroundColor = color;
+      if (nativeInput) nativeInput.value = color;
+      if (hexInput) hexInput.value = color.toUpperCase();
+      closeDropdown();
+    }
+
+    // Toggle dropdown
+    function toggleDropdown() {
+      if (isOpen) {
+        closeDropdown();
+      } else {
+        openDropdown();
+      }
+    }
+
+    // Open dropdown
+    function openDropdown() {
+      populatePalettes();
+      dropdown.style.display = 'block';
+
+      // Position the dropdown
+      const rect = swatch.getBoundingClientRect();
+      const dropdownRect = dropdown.getBoundingClientRect();
+      const popupWidth = document.body.clientWidth;
+
+      // Position below the swatch
+      dropdown.style.position = 'fixed';
+      dropdown.style.top = `${rect.bottom + 4}px`;
+
+      // Center horizontally but keep within bounds
+      let left = rect.left + (rect.width / 2) - (280 / 2);
+      if (left < 8) left = 8;
+      if (left + 280 > popupWidth - 8) left = popupWidth - 280 - 8;
+      dropdown.style.left = `${left}px`;
+
+      isOpen = true;
+      swatch.style.borderColor = '#8b5cf6';
+    }
+
+    // Close dropdown
+    function closeDropdown() {
+      dropdown.style.display = 'none';
+      isOpen = false;
+      swatch.style.borderColor = '#dadce0';
+    }
+
+    // Swatch click handler
+    swatch.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDropdown();
+    });
+
+    // Tab switching
+    document.querySelectorAll('.date-color-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tabName = tab.dataset.tab;
+
+        // Update tab styles
+        document.querySelectorAll('.date-color-tab').forEach(t => {
+          if (t.dataset.tab === tabName) {
+            t.style.background = '#8b5cf6';
+            t.style.color = 'white';
+          } else {
+            t.style.background = '#f1f3f4';
+            t.style.color = '#333';
+          }
+        });
+
+        // Show/hide panels
+        document.querySelectorAll('.date-color-panel').forEach(panel => {
+          panel.style.display = 'none';
+        });
+        const activePanel = qs(`dateColor${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Panel`);
+        if (activePanel) {
+          activePanel.style.display = 'grid';
+        }
+      });
+    });
+
+    // Native color input change
+    if (nativeInput) {
+      nativeInput.addEventListener('input', () => {
+        hexInput.value = nativeInput.value.toUpperCase();
+      });
+      nativeInput.addEventListener('change', () => {
+        selectColor(nativeInput.value);
+      });
+    }
+
+    // Hex input change
+    if (hexInput) {
+      hexInput.addEventListener('input', () => {
+        let hex = hexInput.value.trim();
+        if (!hex.startsWith('#')) hex = '#' + hex;
+        if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+          nativeInput.value = hex;
+          hexInput.style.borderColor = '#8b5cf6';
+        } else {
+          hexInput.style.borderColor = '#dc2626';
+        }
+      });
+      hexInput.addEventListener('change', () => {
+        let hex = hexInput.value.trim();
+        if (!hex.startsWith('#')) hex = '#' + hex;
+        if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+          selectColor(hex);
+        }
+      });
+    }
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (isOpen && !dropdown.contains(e.target) && e.target !== swatch) {
+        closeDropdown();
+      }
+    });
+
+    // Prevent dropdown clicks from closing
+    dropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
+
   // Reorganize the weekdays display based on week start setting
   function reorganizeWeekdaysDisplay() {
     const weekStart = settings.weekStart !== undefined ? settings.weekStart : 0; // 0=Sunday, 1=Monday, 6=Saturday
@@ -6128,6 +6326,9 @@ checkAuthAndSubscription();
         dateColorDateInput.value = nextDate.toISOString().split('T')[0];
       };
     }
+
+    // Initialize date color picker dropdown
+    initDateColorPicker();
 
     // Time Blocking info card toggle
     const timeBlockingInfoToggle = qs('timeBlockingInfoToggle');
