@@ -202,9 +202,11 @@
   function getColorForDate(settings, dateStr, weekday) {
     // Check for date-specific color first
     if (settings.dateColors && settings.dateColors[dateStr]) {
+      // Use stored date opacity, or default to 100 if not set
+      const dateOpacity = settings.dateOpacity?.[dateStr] !== undefined ? settings.dateOpacity[dateStr] : 100;
       return {
         color: settings.dateColors[dateStr],
-        opacity: 30, // Default opacity for date-specific colors
+        opacity: dateOpacity,
         isDateSpecific: true
       };
     }
