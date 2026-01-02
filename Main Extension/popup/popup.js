@@ -6321,8 +6321,8 @@ checkAuthAndSubscription();
       height: 36px;
       border-radius: 6px;
       overflow: hidden;
-      border: 2px solid #dadce0;
-      background: rgba(139, 92, 246, 0.3);
+      border: 2px solid #8b5cf6;
+      background: #8b5cf6;
       cursor: pointer;
       transition: all 0.2s ease;
     `;
@@ -6480,7 +6480,7 @@ checkAuthAndSubscription();
 
     const opacityValueDisplay = document.createElement('div');
     opacityValueDisplay.className = 'cc3-opacity-value';
-    opacityValueDisplay.textContent = '30%';
+    opacityValueDisplay.textContent = '100%';
     opacityValueDisplay.style.cssText = `
       font-size: 12px;
       font-weight: 600;
@@ -6507,13 +6507,13 @@ checkAuthAndSubscription();
         flex: 1;
         padding: 6px 4px;
         font-size: 11px;
-        border: 1px solid ${value === 30 ? '#8b5cf6' : '#dadce0'};
+        border: 1px solid ${value === 100 ? '#8b5cf6' : '#dadce0'};
         border-radius: 4px;
-        background: ${value === 30 ? '#f3e8ff' : '#f8f9fa'};
-        color: ${value === 30 ? '#8b5cf6' : '#5f6368'};
+        background: ${value === 100 ? '#f3e8ff' : '#f8f9fa'};
+        color: ${value === 100 ? '#8b5cf6' : '#5f6368'};
         cursor: pointer;
         transition: all 0.2s ease;
-        font-weight: ${value === 30 ? '600' : '400'};
+        font-weight: ${value === 100 ? '600' : '400'};
       `;
       opacityPresets.appendChild(btn);
     });
@@ -6535,7 +6535,7 @@ checkAuthAndSubscription();
       top: 0;
       left: 0;
       height: 100%;
-      width: 30%;
+      width: 100%;
       background: linear-gradient(90deg, #8b5cf6, #7c3aed);
       border-radius: 4px;
       transition: width 0.1s ease;
@@ -6546,7 +6546,7 @@ checkAuthAndSubscription();
     opacitySlider.className = 'cc3-opacity-slider';
     opacitySlider.min = 0;
     opacitySlider.max = 100;
-    opacitySlider.value = 30;
+    opacitySlider.value = 100;
     opacitySlider.style.cssText = `
       position: absolute;
       top: 0;
@@ -6667,7 +6667,7 @@ checkAuthAndSubscription();
     const opacityValueDisplay = modal.querySelector('.cc3-opacity-value');
     const opacityPresetBtns = modal.querySelectorAll('.cc3-opacity-preset');
 
-    let currentOpacity = 30;
+    let currentOpacity = 100;
 
     // Helper: convert hex to rgba
     const hexToRgba = (hex, alpha) => {
@@ -6889,7 +6889,7 @@ checkAuthAndSubscription();
     };
 
     // Initialize
-    updateOpacityUI(30);
+    updateOpacityUI(100);
     selectColor('#8b5cf6');
   }
 
