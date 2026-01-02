@@ -5886,6 +5886,8 @@ checkAuthAndSubscription();
     if (!listContainer) return;
 
     const dateColors = settings.dateColors || {};
+    const dateColorLabels = settings.dateColorLabels || {};
+    const dateOpacity = settings.dateOpacity || {};
     const entries = Object.entries(dateColors).sort(([a], [b]) => a.localeCompare(b));
 
     // Update count badge
@@ -5899,24 +5901,39 @@ checkAuthAndSubscription();
     if (entries.length === 0) {
       listContainer.innerHTML = `
         <div style="text-align: center; padding: 12px; color: #80868b; font-size: 11px;">
-          No specific dates set. Use the form above to add date overrides.
+          No specific dates set. Click "Add Date Color" to add date overrides.
         </div>
       `;
       return;
     }
 
+    // Helper to convert hex to rgba
+    const hexToRgba = (hex, alpha) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (!result) return hex;
+      const r = parseInt(result[1], 16);
+      const g = parseInt(result[2], 16);
+      const b = parseInt(result[3], 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
     // Render each date color
     entries.forEach(([dateKey, color]) => {
+      const label = dateColorLabels[dateKey] || '';
+      const opacity = dateOpacity[dateKey] !== undefined ? dateOpacity[dateKey] : 30;
+      const previewColor = hexToRgba(color, opacity / 100);
+
       const item = document.createElement('div');
       item.style.cssText = `
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 6px 8px;
+        padding: 8px 10px;
         background: white;
         border: 1px solid #e8eaed;
-        border-radius: 4px;
-        margin-bottom: 4px;
+        border-radius: 6px;
+        margin-bottom: 6px;
+        transition: all 0.2s ease;
       `;
 
       // Format the date for display
@@ -5928,17 +5945,35 @@ checkAuthAndSubscription();
         year: 'numeric'
       });
 
+      // Build label HTML if present
+      const labelHtml = label ? `
+        <div style="
+          font-size: 10px;
+          color: #8b5cf6;
+          background: #f3e8ff;
+          padding: 2px 6px;
+          border-radius: 4px;
+          white-space: nowrap;
+          max-width: 80px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        " title="${label}">${label}</div>
+      ` : '';
+
       item.innerHTML = `
         <div style="
-          width: 20px;
-          height: 20px;
-          border-radius: 4px;
-          background: ${color};
-          border: 1px solid #dadce0;
+          width: 24px;
+          height: 24px;
+          border-radius: 6px;
+          background: ${previewColor};
+          border: 2px solid ${color};
           flex-shrink: 0;
-        "></div>
-        <div style="flex: 1; font-size: 11px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          ${formattedDate}
+        " title="${color} at ${opacity}% opacity"></div>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 11px; font-weight: 500; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${formattedDate}
+          </div>
+          ${labelHtml}
         </div>
         <button
           class="remove-date-color-btn"
@@ -5948,14 +5983,25 @@ checkAuthAndSubscription();
             border: none;
             color: #dc3545;
             cursor: pointer;
-            font-size: 14px;
-            padding: 2px 6px;
+            font-size: 16px;
+            padding: 4px 8px;
             border-radius: 4px;
             line-height: 1;
+            transition: background-color 0.2s ease;
           "
           title="Remove this date color"
         >×</button>
       `;
+
+      // Add hover effects
+      item.addEventListener('mouseenter', () => {
+        item.style.borderColor = '#8b5cf6';
+        item.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.1)';
+      });
+      item.addEventListener('mouseleave', () => {
+        item.style.borderColor = '#e8eaed';
+        item.style.boxShadow = 'none';
+      });
 
       listContainer.appendChild(item);
     });
@@ -5966,264 +6012,812 @@ checkAuthAndSubscription();
         const dateKey = e.target.getAttribute('data-date');
         if (dateKey) {
           settings = await window.cc3Storage.clearDateColor(dateKey);
-          // Also clear the opacity for this date
+          // Also clear the opacity and label for this date
           settings = await window.cc3Storage.setDateOpacity(dateKey, null);
+          settings = await window.cc3Storage.setDateColorLabel(dateKey, null);
           renderDateColors();
           saveSettings(); // Notify content script to update colors immediately
         }
       });
+
+      // Hover effect for remove button
+      btn.addEventListener('mouseenter', () => {
+        btn.style.backgroundColor = '#fee2e2';
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.backgroundColor = 'transparent';
+      });
     });
   }
 
-  // Initialize the date color picker modal with palette tabs
-  function initDateColorPicker() {
-    const swatch = qs('dateColorSwatch');
-    const dropdown = qs('dateColorPickerDropdown');
-    const backdrop = qs('dateColorPickerBackdrop');
-    const closeBtn = qs('dateColorPickerClose');
-    const colorInput = qs('dateColorColorInput');
-    const nativeInput = qs('dateColorNativeInput');
-    const hexInput = qs('dateColorHexInput');
-    const opacitySlider = qs('dateColorOpacitySlider');
-    const opacityValue = qs('dateColorOpacityValue');
-    const sliderFill = qs('dateColorSliderFill');
+  // Open the date color modal
+  function openDateColorModal() {
+    const modal = createDateColorModal();
+    document.body.appendChild(modal);
+    modal.focus();
 
-    if (!swatch || !dropdown) return;
+    return new Promise((resolve) => {
+      const cleanup = () => {
+        if (modal.parentNode) {
+          document.body.removeChild(modal);
+        }
+        resolve(null);
+      };
 
-    let isOpen = false;
-    let currentOpacity = 30; // Default opacity
+      const handleSave = async (dateKey, color, opacity, label) => {
+        if (dateKey && color) {
+          settings = await window.cc3Storage.setDateColor(dateKey, color);
+          settings = await window.cc3Storage.setDateOpacity(dateKey, opacity);
+          if (label) {
+            settings = await window.cc3Storage.setDateColorLabel(dateKey, label);
+          }
+          renderDateColors();
+          saveSettings();
+        }
+        cleanup();
+        resolve({ dateKey, color, opacity, label });
+      };
 
-    // Update opacity UI
-    function updateOpacityUI(opacity) {
-      currentOpacity = opacity;
-      if (opacityValue) opacityValue.textContent = `${opacity}%`;
-      if (opacitySlider) opacitySlider.value = opacity;
-      if (sliderFill) sliderFill.style.width = `${opacity}%`;
+      setupDateColorModalEvents(modal, handleSave, cleanup);
+    });
+  }
 
-      // Update preset button active state
-      document.querySelectorAll('.date-color-opacity-preset').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.opacity) === opacity);
-      });
+  // Create the date color modal
+  function createDateColorModal() {
+    const modal = document.createElement('div');
+    modal.className = 'cc3-date-color-modal';
+    modal.tabIndex = -1;
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      backdrop-filter: blur(2px);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    `;
 
-      // Update swatch preview with opacity
-      updateSwatchPreview();
-    }
+    const picker = document.createElement('div');
+    picker.className = 'cc3-date-color-picker';
+    picker.style.cssText = `
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      padding: 24px;
+      min-width: 340px;
+      max-width: 400px;
+      max-height: 90vh;
+      overflow-y: auto;
+      transform: translateY(20px);
+      transition: transform 0.2s ease;
+    `;
 
-    // Update swatch preview with current color and opacity
-    function updateSwatchPreview() {
-      const color = colorInput?.value || '#ff6b6b';
-      const rgba = hexToRgbaPreview(color, currentOpacity / 100);
-      swatch.style.backgroundColor = rgba;
-    }
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #e8eaed;
+    `;
 
-    // Convert hex to rgba for preview
-    function hexToRgbaPreview(hex, alpha) {
+    const title = document.createElement('h3');
+    title.textContent = 'Add Date Color';
+    title.style.cssText = `
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #202124;
+    `;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '×';
+    closeBtn.className = 'cc3-close-btn';
+    closeBtn.style.cssText = `
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: #5f6368;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s ease;
+    `;
+    closeBtn.onmouseover = () => (closeBtn.style.backgroundColor = '#f1f3f4');
+    closeBtn.onmouseout = () => (closeBtn.style.backgroundColor = 'transparent');
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    // Quick date presets
+    const presets = document.createElement('div');
+    presets.style.cssText = `margin-bottom: 20px;`;
+
+    const presetsTitle = document.createElement('div');
+    presetsTitle.textContent = 'Quick Select:';
+    presetsTitle.style.cssText = `
+      font-size: 12px;
+      font-weight: 600;
+      color: #5f6368;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    `;
+
+    const presetsContainer = document.createElement('div');
+    presetsContainer.style.cssText = `display: flex; gap: 8px; flex-wrap: wrap;`;
+
+    const today = new Date();
+    const presetOptions = [
+      { label: 'Today', date: new Date() },
+      { label: 'Tomorrow', date: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
+      { label: 'Next Week', date: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000) },
+    ];
+
+    presetOptions.forEach((preset) => {
+      const btn = document.createElement('button');
+      btn.textContent = preset.label;
+      btn.className = 'cc3-preset-btn';
+      btn.dataset.date = formatDateForInput(preset.date);
+      btn.style.cssText = `
+        background: #f8f9fa;
+        border: 1px solid #dadce0;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: #202124;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      `;
+      btn.onmouseover = () => {
+        btn.style.backgroundColor = '#e8f0fe';
+        btn.style.borderColor = '#8b5cf6';
+        btn.style.color = '#8b5cf6';
+      };
+      btn.onmouseout = () => {
+        btn.style.backgroundColor = '#f8f9fa';
+        btn.style.borderColor = '#dadce0';
+        btn.style.color = '#202124';
+      };
+      presetsContainer.appendChild(btn);
+    });
+
+    presets.appendChild(presetsTitle);
+    presets.appendChild(presetsContainer);
+
+    // Date input section
+    const dateSection = document.createElement('div');
+    dateSection.style.cssText = `margin-bottom: 20px;`;
+
+    const dateTitle = document.createElement('div');
+    dateTitle.textContent = 'Or choose a specific date:';
+    dateTitle.style.cssText = `
+      font-size: 12px;
+      font-weight: 600;
+      color: #5f6368;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    `;
+
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.className = 'cc3-date-input';
+    dateInput.value = formatDateForInput(today);
+    dateInput.style.cssText = `
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #dadce0;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #202124;
+      transition: border-color 0.2s ease;
+      box-sizing: border-box;
+    `;
+    dateInput.onfocus = () => (dateInput.style.borderColor = '#8b5cf6');
+    dateInput.onblur = () => (dateInput.style.borderColor = '#dadce0');
+
+    dateSection.appendChild(dateTitle);
+    dateSection.appendChild(dateInput);
+
+    // Label section
+    const labelSection = document.createElement('div');
+    labelSection.style.cssText = `margin-bottom: 20px;`;
+
+    const labelTitle = document.createElement('div');
+    labelTitle.textContent = 'Label (optional):';
+    labelTitle.style.cssText = `
+      font-size: 12px;
+      font-weight: 600;
+      color: #5f6368;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    `;
+
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.className = 'cc3-label-input';
+    labelInput.placeholder = 'e.g., Holiday, Birthday, Deadline';
+    labelInput.style.cssText = `
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #dadce0;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #202124;
+      transition: border-color 0.2s ease;
+      box-sizing: border-box;
+    `;
+    labelInput.onfocus = () => (labelInput.style.borderColor = '#8b5cf6');
+    labelInput.onblur = () => (labelInput.style.borderColor = '#dadce0');
+
+    labelSection.appendChild(labelTitle);
+    labelSection.appendChild(labelInput);
+
+    // Color section with preview
+    const colorSection = document.createElement('div');
+    colorSection.style.cssText = `margin-bottom: 20px;`;
+
+    const colorHeader = document.createElement('div');
+    colorHeader.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    `;
+
+    const colorTitle = document.createElement('div');
+    colorTitle.textContent = 'Color:';
+    colorTitle.style.cssText = `
+      font-size: 12px;
+      font-weight: 600;
+      color: #5f6368;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    `;
+
+    // Color preview swatch
+    const colorPreview = document.createElement('div');
+    colorPreview.className = 'cc3-color-preview';
+    colorPreview.style.cssText = `
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: rgba(139, 92, 246, 0.3);
+      border: 2px solid #dadce0;
+      transition: all 0.2s ease;
+    `;
+
+    colorHeader.appendChild(colorTitle);
+    colorHeader.appendChild(colorPreview);
+
+    // Color picker tabs
+    const colorTabs = document.createElement('div');
+    colorTabs.style.cssText = `display: flex; gap: 4px; margin-bottom: 12px;`;
+
+    const tabNames = ['Vibrant', 'Pastel', 'Dark', 'Custom'];
+    tabNames.forEach((name, index) => {
+      const tab = document.createElement('button');
+      tab.textContent = name;
+      tab.className = 'cc3-color-tab';
+      tab.dataset.tab = name.toLowerCase();
+      tab.style.cssText = `
+        flex: 1;
+        padding: 8px;
+        font-size: 11px;
+        border: none;
+        border-radius: 6px;
+        background: ${index === 0 ? '#8b5cf6' : '#f1f3f4'};
+        color: ${index === 0 ? 'white' : '#333'};
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: 500;
+      `;
+      colorTabs.appendChild(tab);
+    });
+
+    // Color picker row (native input + hex input)
+    const colorInputRow = document.createElement('div');
+    colorInputRow.style.cssText = `display: flex; gap: 8px; margin-bottom: 12px;`;
+
+    const nativeColorWrapper = document.createElement('div');
+    nativeColorWrapper.style.cssText = `
+      position: relative;
+      width: 50%;
+      height: 36px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #dadce0;
+    `;
+
+    const nativeColorInput = document.createElement('input');
+    nativeColorInput.type = 'color';
+    nativeColorInput.className = 'cc3-native-color';
+    nativeColorInput.value = '#8b5cf6';
+    nativeColorInput.style.cssText = `
+      width: 100%;
+      height: 100%;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    `;
+
+    nativeColorWrapper.appendChild(nativeColorInput);
+
+    const hexInput = document.createElement('input');
+    hexInput.type = 'text';
+    hexInput.className = 'cc3-hex-input';
+    hexInput.value = '#8B5CF6';
+    hexInput.placeholder = '#FF0000';
+    hexInput.maxLength = 7;
+    hexInput.style.cssText = `
+      width: 50%;
+      height: 36px;
+      padding: 4px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      box-sizing: border-box;
+    `;
+
+    colorInputRow.appendChild(nativeColorWrapper);
+    colorInputRow.appendChild(hexInput);
+
+    // Hidden color value input
+    const colorValue = document.createElement('input');
+    colorValue.type = 'hidden';
+    colorValue.className = 'cc3-color-value';
+    colorValue.value = '#8b5cf6';
+
+    // Color palettes container
+    const palettesContainer = document.createElement('div');
+    palettesContainer.className = 'cc3-palettes-container';
+
+    // Create palette panels
+    const createPalettePanel = (name, colors, isActive = false) => {
+      const panel = document.createElement('div');
+      panel.className = 'cc3-palette-panel';
+      panel.dataset.palette = name.toLowerCase();
+      panel.style.cssText = `
+        display: ${isActive ? 'grid' : 'none'};
+        grid-template-columns: repeat(7, 1fr);
+        gap: 6px;
+        margin-bottom: 16px;
+      `;
+
+      if (colors.length === 0) {
+        panel.style.display = isActive ? 'block' : 'none';
+        panel.innerHTML = '<div style="grid-column: 1/-1; padding: 16px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors. Add colors in Preferences → Color Lab.</div>';
+      } else {
+        colors.forEach(color => {
+          const swatch = document.createElement('div');
+          swatch.className = 'cc3-swatch';
+          swatch.dataset.color = color;
+          swatch.style.cssText = `
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 6px;
+            background: ${color};
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.15s ease;
+          `;
+          swatch.title = color.toUpperCase();
+          panel.appendChild(swatch);
+        });
+      }
+
+      return panel;
+    };
+
+    palettesContainer.appendChild(createPalettePanel('vibrant', colorPickerPalette, true));
+    palettesContainer.appendChild(createPalettePanel('pastel', pastelPalette));
+    palettesContainer.appendChild(createPalettePanel('dark', darkPalette));
+    palettesContainer.appendChild(createPalettePanel('custom', customColors));
+
+    // Opacity control
+    const opacitySection = document.createElement('div');
+    opacitySection.style.cssText = `margin-bottom: 24px;`;
+
+    const opacityHeader = document.createElement('div');
+    opacityHeader.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    `;
+
+    const opacityLabel = document.createElement('div');
+    opacityLabel.textContent = 'Opacity:';
+    opacityLabel.style.cssText = `
+      font-size: 12px;
+      font-weight: 600;
+      color: #5f6368;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    `;
+
+    const opacityValueDisplay = document.createElement('div');
+    opacityValueDisplay.className = 'cc3-opacity-value';
+    opacityValueDisplay.textContent = '30%';
+    opacityValueDisplay.style.cssText = `
+      font-size: 12px;
+      font-weight: 600;
+      color: #8b5cf6;
+    `;
+
+    opacityHeader.appendChild(opacityLabel);
+    opacityHeader.appendChild(opacityValueDisplay);
+
+    // Opacity presets
+    const opacityPresets = document.createElement('div');
+    opacityPresets.style.cssText = `
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    `;
+
+    [10, 20, 30, 40, 50, 100].forEach(value => {
+      const btn = document.createElement('button');
+      btn.textContent = `${value}%`;
+      btn.className = 'cc3-opacity-preset';
+      btn.dataset.opacity = value;
+      btn.style.cssText = `
+        flex: 1;
+        padding: 6px 4px;
+        font-size: 11px;
+        border: 1px solid ${value === 30 ? '#8b5cf6' : '#dadce0'};
+        border-radius: 4px;
+        background: ${value === 30 ? '#f3e8ff' : '#f8f9fa'};
+        color: ${value === 30 ? '#8b5cf6' : '#5f6368'};
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: ${value === 30 ? '600' : '400'};
+      `;
+      opacityPresets.appendChild(btn);
+    });
+
+    // Opacity slider
+    const opacitySliderContainer = document.createElement('div');
+    opacitySliderContainer.style.cssText = `
+      position: relative;
+      height: 8px;
+      background: #e8eaed;
+      border-radius: 4px;
+      overflow: hidden;
+    `;
+
+    const opacitySliderFill = document.createElement('div');
+    opacitySliderFill.className = 'cc3-opacity-fill';
+    opacitySliderFill.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 30%;
+      background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+      border-radius: 4px;
+      transition: width 0.1s ease;
+    `;
+
+    const opacitySlider = document.createElement('input');
+    opacitySlider.type = 'range';
+    opacitySlider.className = 'cc3-opacity-slider';
+    opacitySlider.min = 0;
+    opacitySlider.max = 100;
+    opacitySlider.value = 30;
+    opacitySlider.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+      margin: 0;
+    `;
+
+    opacitySliderContainer.appendChild(opacitySliderFill);
+    opacitySliderContainer.appendChild(opacitySlider);
+
+    opacitySection.appendChild(opacityHeader);
+    opacitySection.appendChild(opacityPresets);
+    opacitySection.appendChild(opacitySliderContainer);
+
+    colorSection.appendChild(colorHeader);
+    colorSection.appendChild(colorTabs);
+    colorSection.appendChild(colorInputRow);
+    colorSection.appendChild(colorValue);
+    colorSection.appendChild(palettesContainer);
+    colorSection.appendChild(opacitySection);
+
+    // Action buttons
+    const actions = document.createElement('div');
+    actions.style.cssText = `
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    `;
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'cc3-cancel-btn';
+    cancelBtn.style.cssText = `
+      background: none;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 14px;
+      color: #5f6368;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    cancelBtn.onmouseover = () => {
+      cancelBtn.style.backgroundColor = '#f8f9fa';
+      cancelBtn.style.borderColor = '#5f6368';
+    };
+    cancelBtn.onmouseout = () => {
+      cancelBtn.style.backgroundColor = 'transparent';
+      cancelBtn.style.borderColor = '#dadce0';
+    };
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = 'Add Date Color';
+    confirmBtn.className = 'cc3-confirm-btn';
+    confirmBtn.style.cssText = `
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      border: none;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 14px;
+      color: white;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
+    `;
+    confirmBtn.onmouseover = () => {
+      confirmBtn.style.transform = 'translateY(-1px)';
+      confirmBtn.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
+    };
+    confirmBtn.onmouseout = () => {
+      confirmBtn.style.transform = 'translateY(0)';
+      confirmBtn.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
+    };
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(confirmBtn);
+
+    // Assemble the picker
+    picker.appendChild(header);
+    picker.appendChild(presets);
+    picker.appendChild(dateSection);
+    picker.appendChild(labelSection);
+    picker.appendChild(colorSection);
+    picker.appendChild(actions);
+    modal.appendChild(picker);
+
+    // Trigger entrance animation
+    requestAnimationFrame(() => {
+      modal.style.opacity = '1';
+      picker.style.transform = 'translateY(0)';
+    });
+
+    return modal;
+  }
+
+  // Setup date color modal events
+  function setupDateColorModalEvents(modal, onSave, onCancel) {
+    const closeBtn = modal.querySelector('.cc3-close-btn');
+    const cancelBtn = modal.querySelector('.cc3-cancel-btn');
+    const confirmBtn = modal.querySelector('.cc3-confirm-btn');
+    const dateInput = modal.querySelector('.cc3-date-input');
+    const labelInput = modal.querySelector('.cc3-label-input');
+    const presetBtns = modal.querySelectorAll('.cc3-preset-btn');
+    const colorTabs = modal.querySelectorAll('.cc3-color-tab');
+    const palettePanels = modal.querySelectorAll('.cc3-palette-panel');
+    const swatches = modal.querySelectorAll('.cc3-swatch');
+    const nativeColorInput = modal.querySelector('.cc3-native-color');
+    const hexInput = modal.querySelector('.cc3-hex-input');
+    const colorValue = modal.querySelector('.cc3-color-value');
+    const colorPreview = modal.querySelector('.cc3-color-preview');
+    const opacitySlider = modal.querySelector('.cc3-opacity-slider');
+    const opacityFill = modal.querySelector('.cc3-opacity-fill');
+    const opacityValueDisplay = modal.querySelector('.cc3-opacity-value');
+    const opacityPresetBtns = modal.querySelectorAll('.cc3-opacity-preset');
+
+    let currentOpacity = 30;
+
+    // Helper: convert hex to rgba
+    const hexToRgba = (hex, alpha) => {
       const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
       if (!result) return hex;
       const r = parseInt(result[1], 16);
       const g = parseInt(result[2], 16);
       const b = parseInt(result[3], 16);
       return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    }
+    };
 
-    // Create swatch for each color
-    function createDateColorSwatch(color, panel) {
-      const swatchEl = document.createElement('div');
-      swatchEl.style.cssText = `
-        width: 32px;
-        height: 32px;
-        border-radius: 6px;
-        background: ${color};
-        cursor: pointer;
-        border: 2px solid transparent;
-        transition: border-color 0.2s, transform 0.1s;
-      `;
-      swatchEl.title = color.toUpperCase();
-      swatchEl.dataset.color = color;
+    // Update color preview with current color and opacity
+    const updateColorPreview = () => {
+      const color = colorValue?.value || '#8b5cf6';
+      colorPreview.style.background = hexToRgba(color, currentOpacity / 100);
+    };
 
-      swatchEl.addEventListener('mouseenter', () => {
-        swatchEl.style.transform = 'scale(1.1)';
-        swatchEl.style.borderColor = '#8b5cf6';
-      });
-      swatchEl.addEventListener('mouseleave', () => {
-        swatchEl.style.transform = 'scale(1)';
-        swatchEl.style.borderColor = 'transparent';
-      });
-      swatchEl.addEventListener('click', () => {
-        selectColor(color);
+    // Update opacity UI
+    const updateOpacityUI = (opacity) => {
+      currentOpacity = opacity;
+      opacityValueDisplay.textContent = `${opacity}%`;
+      opacitySlider.value = opacity;
+      opacityFill.style.width = `${opacity}%`;
+
+      // Update preset buttons
+      opacityPresetBtns.forEach(btn => {
+        const isActive = parseInt(btn.dataset.opacity) === opacity;
+        btn.style.borderColor = isActive ? '#8b5cf6' : '#dadce0';
+        btn.style.background = isActive ? '#f3e8ff' : '#f8f9fa';
+        btn.style.color = isActive ? '#8b5cf6' : '#5f6368';
+        btn.style.fontWeight = isActive ? '600' : '400';
       });
 
-      panel.appendChild(swatchEl);
-    }
-
-    // Populate palettes
-    function populatePalettes() {
-      const vibrantPanel = qs('dateColorVibrantPanel');
-      const pastelPanel = qs('dateColorPastelPanel');
-      const darkPanel = qs('dateColorDarkPanel');
-      const customPanel = qs('dateColorCustomPanel');
-
-      if (vibrantPanel) {
-        vibrantPanel.innerHTML = '';
-        colorPickerPalette.forEach(c => createDateColorSwatch(c, vibrantPanel));
-      }
-      if (pastelPanel) {
-        pastelPanel.innerHTML = '';
-        pastelPalette.forEach(c => createDateColorSwatch(c, pastelPanel));
-      }
-      if (darkPanel) {
-        darkPanel.innerHTML = '';
-        darkPalette.forEach(c => createDateColorSwatch(c, darkPanel));
-      }
-      if (customPanel) {
-        customPanel.innerHTML = '';
-        if (customColors.length === 0) {
-          customPanel.innerHTML = '<div style="grid-column: 1/-1; padding: 16px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors. Add colors in Preferences → Color Lab.</div>';
-        } else {
-          customColors.forEach(c => createDateColorSwatch(c, customPanel));
-        }
-      }
-    }
+      updateColorPreview();
+    };
 
     // Select a color
-    function selectColor(color) {
-      colorInput.value = color;
-      swatch.style.backgroundColor = color;
-      if (nativeInput) nativeInput.value = color;
-      if (hexInput) hexInput.value = color.toUpperCase();
-      closeModal();
-    }
+    const selectColor = (color) => {
+      colorValue.value = color;
+      nativeColorInput.value = color;
+      hexInput.value = color.toUpperCase();
+      hexInput.style.borderColor = '#dadce0';
 
-    // Toggle modal
-    function toggleModal() {
-      if (isOpen) {
-        closeModal();
-      } else {
-        openModal();
-      }
-    }
+      // Update swatch selection
+      swatches.forEach(s => {
+        if (s.dataset.color === color) {
+          s.style.borderColor = '#8b5cf6';
+          s.style.transform = 'scale(1.1)';
+        } else {
+          s.style.borderColor = 'transparent';
+          s.style.transform = 'scale(1)';
+        }
+      });
 
-    // Open modal
-    function openModal() {
-      populatePalettes();
-      if (backdrop) backdrop.style.display = 'block';
-      dropdown.style.display = 'block';
-      isOpen = true;
-      swatch.style.borderColor = '#8b5cf6';
-    }
+      updateColorPreview();
+    };
 
-    // Close modal
-    function closeModal() {
-      dropdown.style.display = 'none';
-      if (backdrop) backdrop.style.display = 'none';
-      isOpen = false;
-      swatch.style.borderColor = '#dadce0';
-    }
-
-    // Swatch click handler
-    swatch.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleModal();
+    // Preset date buttons
+    presetBtns.forEach(btn => {
+      btn.onclick = () => {
+        dateInput.value = btn.dataset.date;
+      };
     });
 
-    // Close button handler
-    if (closeBtn) {
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeModal();
-      });
-    }
-
-    // Backdrop click handler
-    if (backdrop) {
-      backdrop.addEventListener('click', () => {
-        closeModal();
-      });
-    }
-
-    // Tab switching
-    document.querySelectorAll('.date-color-tab').forEach(tab => {
-      tab.addEventListener('click', (e) => {
-        e.stopPropagation();
+    // Color tab switching
+    colorTabs.forEach(tab => {
+      tab.onclick = () => {
         const tabName = tab.dataset.tab;
 
-        // Update tab styles
-        document.querySelectorAll('.date-color-tab').forEach(t => {
-          if (t.dataset.tab === tabName) {
-            t.style.background = '#8b5cf6';
-            t.style.color = 'white';
-          } else {
-            t.style.background = '#f1f3f4';
-            t.style.color = '#333';
-          }
+        colorTabs.forEach(t => {
+          const isActive = t.dataset.tab === tabName;
+          t.style.background = isActive ? '#8b5cf6' : '#f1f3f4';
+          t.style.color = isActive ? 'white' : '#333';
         });
 
-        // Show/hide panels
-        document.querySelectorAll('.date-color-panel').forEach(panel => {
-          panel.style.display = 'none';
+        palettePanels.forEach(panel => {
+          panel.style.display = panel.dataset.palette === tabName ? 'grid' : 'none';
         });
-        const activePanel = qs(`dateColor${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Panel`);
-        if (activePanel) {
-          activePanel.style.display = 'grid';
+      };
+    });
+
+    // Swatch click handlers
+    swatches.forEach(swatch => {
+      swatch.addEventListener('mouseenter', () => {
+        swatch.style.transform = 'scale(1.1)';
+        swatch.style.borderColor = '#8b5cf6';
+      });
+      swatch.addEventListener('mouseleave', () => {
+        if (swatch.dataset.color !== colorValue.value) {
+          swatch.style.transform = 'scale(1)';
+          swatch.style.borderColor = 'transparent';
         }
+      });
+      swatch.addEventListener('click', () => {
+        selectColor(swatch.dataset.color);
       });
     });
 
-    // Native color input change
-    if (nativeInput) {
-      nativeInput.addEventListener('input', () => {
-        hexInput.value = nativeInput.value.toUpperCase();
-      });
-      nativeInput.addEventListener('change', () => {
-        selectColor(nativeInput.value);
-      });
-    }
-
-    // Hex input change
-    if (hexInput) {
-      hexInput.addEventListener('input', () => {
-        let hex = hexInput.value.trim();
-        if (!hex.startsWith('#')) hex = '#' + hex;
-        if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-          nativeInput.value = hex;
-          hexInput.style.borderColor = '#8b5cf6';
-        } else {
-          hexInput.style.borderColor = '#dc2626';
-        }
-      });
-      hexInput.addEventListener('change', () => {
-        let hex = hexInput.value.trim();
-        if (!hex.startsWith('#')) hex = '#' + hex;
-        if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-          selectColor(hex);
-        }
-      });
-    }
-
-    // Prevent modal clicks from closing (except close button)
-    dropdown.addEventListener('click', (e) => {
-      e.stopPropagation();
+    // Native color input
+    nativeColorInput.addEventListener('input', () => {
+      hexInput.value = nativeColorInput.value.toUpperCase();
+      colorValue.value = nativeColorInput.value;
+      updateColorPreview();
+    });
+    nativeColorInput.addEventListener('change', () => {
+      selectColor(nativeColorInput.value);
     });
 
-    // Opacity slider event handler
-    if (opacitySlider) {
-      opacitySlider.addEventListener('input', (e) => {
-        const opacity = parseInt(e.target.value, 10);
-        updateOpacityUI(opacity);
-      });
-    }
+    // Hex input
+    hexInput.addEventListener('input', () => {
+      let hex = hexInput.value.trim();
+      if (!hex.startsWith('#')) hex = '#' + hex;
+      if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+        nativeColorInput.value = hex;
+        colorValue.value = hex;
+        hexInput.style.borderColor = '#8b5cf6';
+        updateColorPreview();
+      } else {
+        hexInput.style.borderColor = '#dc2626';
+      }
+    });
+    hexInput.addEventListener('change', () => {
+      let hex = hexInput.value.trim();
+      if (!hex.startsWith('#')) hex = '#' + hex;
+      if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+        selectColor(hex);
+      }
+    });
 
-    // Opacity preset button handlers
-    document.querySelectorAll('.date-color-opacity-preset').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const opacity = parseInt(btn.dataset.opacity, 10);
-        updateOpacityUI(opacity);
+    // Opacity slider
+    opacitySlider.addEventListener('input', (e) => {
+      updateOpacityUI(parseInt(e.target.value, 10));
+    });
+
+    // Opacity preset buttons
+    opacityPresetBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        updateOpacityUI(parseInt(btn.dataset.opacity, 10));
       });
     });
 
-    // Initialize default opacity UI
-    updateOpacityUI(currentOpacity);
+    // Close handlers
+    const handleClose = () => onCancel();
+    closeBtn.onclick = handleClose;
+    cancelBtn.onclick = handleClose;
+
+    // Click outside to close
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        handleClose();
+      }
+    };
+
+    // Keyboard handler
+    modal.onkeydown = (e) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+
+    // Confirm button
+    confirmBtn.onclick = () => {
+      const dateKey = dateInput.value;
+      if (!dateKey) {
+        dateInput.style.borderColor = '#dc2626';
+        dateInput.focus();
+        return;
+      }
+      const color = colorValue.value;
+      const label = labelInput.value.trim();
+      onSave(dateKey, color, currentOpacity, label);
+    };
+
+    // Initialize
+    updateOpacityUI(30);
+    selectColor('#8b5cf6');
   }
 
   // Reorganize the weekdays display based on week start setting
@@ -6350,44 +6944,22 @@ checkAuthAndSubscription();
       };
     }
 
-    // Date-specific color add button
+    // Date-specific color add button - opens modal
     const addDateColorBtn = qs('addDateColorBtn');
-    const dateColorDateInput = qs('dateColorDateInput');
-    const dateColorColorInput = qs('dateColorColorInput');
-
-    if (addDateColorBtn && dateColorDateInput && dateColorColorInput) {
-      // Set default date to today
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
-      dateColorDateInput.value = todayStr;
-
-      addDateColorBtn.onclick = async () => {
-        const dateKey = dateColorDateInput.value;
-        const color = dateColorColorInput.value;
-        // Get opacity from slider (default to 30 if not found)
-        const opacitySlider = qs('dateColorOpacitySlider');
-        const opacity = opacitySlider ? parseInt(opacitySlider.value, 10) : 30;
-
-        if (!dateKey) {
-          alert('Please select a date');
-          return;
-        }
-
-        // Save the date color and opacity
-        settings = await window.cc3Storage.setDateColor(dateKey, color);
-        settings = await window.cc3Storage.setDateOpacity(dateKey, opacity);
-        renderDateColors();
-        saveSettings(); // Notify content script to update colors immediately
-
-        // Reset date input to tomorrow for convenience
-        const nextDate = new Date(dateKey + 'T12:00:00');
-        nextDate.setDate(nextDate.getDate() + 1);
-        dateColorDateInput.value = nextDate.toISOString().split('T')[0];
+    if (addDateColorBtn) {
+      addDateColorBtn.onclick = () => {
+        openDateColorModal();
       };
+      // Add hover effect
+      addDateColorBtn.addEventListener('mouseenter', () => {
+        addDateColorBtn.style.transform = 'translateY(-1px)';
+        addDateColorBtn.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
+      });
+      addDateColorBtn.addEventListener('mouseleave', () => {
+        addDateColorBtn.style.transform = 'translateY(0)';
+        addDateColorBtn.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
+      });
     }
-
-    // Initialize date color picker dropdown
-    initDateColorPicker();
 
     // Time Blocking info card toggle
     const timeBlockingInfoToggle = qs('timeBlockingInfoToggle');
