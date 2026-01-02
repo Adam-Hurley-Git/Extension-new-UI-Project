@@ -199,6 +199,20 @@
 
     return setSettings({ dateOpacity: next });
   }
+  async function setDateColorLabel(dateKey, label) {
+    if (!dateKey) return;
+    // Always get current dateColorLabels and merge
+    const current = await getSettings();
+    const next = { ...(current.dateColorLabels || {}) };
+
+    if (label !== null && label !== undefined && label.trim() !== '') {
+      next[dateKey] = label.trim();
+    } else {
+      delete next[dateKey];
+    }
+
+    return setSettings({ dateColorLabels: next });
+  }
   async function addPresetColor(color) {
     const current = await getSettings();
     const set = new Set([...(current.presetColors || []), color]);
@@ -1368,6 +1382,7 @@
     setDateColor,
     clearDateColor,
     setDateOpacity,
+    setDateColorLabel,
     addPresetColor,
     setWeekStart,
     setWeekStartConfigured,
