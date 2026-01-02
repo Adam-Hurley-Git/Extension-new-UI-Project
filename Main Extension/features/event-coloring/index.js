@@ -32,6 +32,8 @@
   let lastClickedEventId = null;
   let lastClickedIsTask = false; // Track if last clicked element was a task
   let isInjecting = false;
+  let eventClickCaptureSetup = false; // Prevent duplicate listener registration
+  let colorChangeListenerSetup = false; // Prevent duplicate window listener
 
   // ========================================
   // GOOGLE COLOR SCHEME MAPPING
@@ -674,11 +676,14 @@
     // Capture event clicks
     setupEventClickCapture();
 
-    // Listen for color change events
-    window.addEventListener('cf-event-color-changed', () => {
-      console.log('[EventColoring] Color changed event received');
-      refreshColors();
-    });
+    // Listen for color change events (only setup once)
+    if (!colorChangeListenerSetup) {
+      colorChangeListenerSetup = true;
+      window.addEventListener('cf-event-color-changed', () => {
+        console.log('[EventColoring] Color changed event received');
+        refreshColors();
+      });
+    }
 
     console.log('[EventColoring] Initialized successfully (enhanced)');
   }
@@ -1366,7 +1371,12 @@
   let activeColorModal = null;
 
   function openCustomColorModal(eventId) {
-    // Close any existing modal
+    // Clean up any orphaned backdrop/modal elements from previous instances
+    // This prevents the UI from becoming unclickable due to stale backdrops
+    document.querySelectorAll('.ecm-backdrop, .csm-backdrop').forEach(el => el.remove());
+    document.querySelectorAll('.ecm-modal, .csm-modal').forEach(el => el.remove());
+
+    // Close any existing modal instance
     if (activeColorModal) {
       activeColorModal.close();
       activeColorModal = null;
@@ -2491,6 +2501,13 @@
   }
 
   function setupEventClickCapture() {
+    // Prevent duplicate listener registration when init() is called multiple times
+    if (eventClickCaptureSetup) {
+      console.log('[EventColoring] Event click capture already setup, skipping');
+      return;
+    }
+    eventClickCaptureSetup = true;
+
     // Capture both left-click and right-click (contextmenu) events
     const captureEventId = (e) => {
       const eventElement = e.target.closest('[data-eventid]');
