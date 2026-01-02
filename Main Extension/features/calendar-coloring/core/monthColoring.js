@@ -374,6 +374,7 @@ function applyMonthViewColors(userColors, opts) {
   const startWeekDay = opts?.assumeWeekStartsOn ?? 0;
   const userOpacity = opts?.opacity || {};
   const dateColors = opts?.dateColors || {};
+  const dateOpacity = opts?.dateOpacity || {};
 
   const paint = () => {
     clearMonthColors();
@@ -404,7 +405,8 @@ function applyMonthViewColors(userColors, opts) {
         // Check for date-specific color
         if (cellDateStr && dateColors[cellDateStr]) {
           color = dateColors[cellDateStr];
-          opacity = 30;
+          // Use stored date opacity, or default to 30 if not set
+          opacity = dateOpacity[cellDateStr] !== undefined ? dateOpacity[cellDateStr] : 30;
           isDateSpecific = true;
         }
 
