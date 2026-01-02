@@ -6268,17 +6268,9 @@ checkAuthAndSubscription();
     labelSection.appendChild(labelTitle);
     labelSection.appendChild(labelInput);
 
-    // Color section with preview
+    // Color section
     const colorSection = document.createElement('div');
     colorSection.style.cssText = `margin-bottom: 20px;`;
-
-    const colorHeader = document.createElement('div');
-    colorHeader.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    `;
 
     const colorTitle = document.createElement('div');
     colorTitle.textContent = 'Color:';
@@ -6288,22 +6280,8 @@ checkAuthAndSubscription();
       color: #5f6368;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      margin-bottom: 12px;
     `;
-
-    // Color preview swatch
-    const colorPreview = document.createElement('div');
-    colorPreview.className = 'cc3-color-preview';
-    colorPreview.style.cssText = `
-      width: 40px;
-      height: 40px;
-      border-radius: 8px;
-      background: rgba(139, 92, 246, 0.3);
-      border: 2px solid #dadce0;
-      transition: all 0.2s ease;
-    `;
-
-    colorHeader.appendChild(colorTitle);
-    colorHeader.appendChild(colorPreview);
 
     // Color picker tabs
     const colorTabs = document.createElement('div');
@@ -6330,18 +6308,23 @@ checkAuthAndSubscription();
       colorTabs.appendChild(tab);
     });
 
-    // Color picker row (native input + hex input)
+    // Color picker row (preview + hex input)
     const colorInputRow = document.createElement('div');
-    colorInputRow.style.cssText = `display: flex; gap: 8px; margin-bottom: 12px;`;
+    colorInputRow.style.cssText = `display: flex; gap: 8px; margin-bottom: 12px; align-items: center;`;
 
+    // Color preview wrapper - shows color with opacity applied
     const nativeColorWrapper = document.createElement('div');
+    nativeColorWrapper.className = 'cc3-color-preview-wrapper';
     nativeColorWrapper.style.cssText = `
       position: relative;
       width: 50%;
       height: 36px;
       border-radius: 6px;
       overflow: hidden;
-      border: 1px solid #dadce0;
+      border: 2px solid #dadce0;
+      background: rgba(139, 92, 246, 0.3);
+      cursor: pointer;
+      transition: all 0.2s ease;
     `;
 
     const nativeColorInput = document.createElement('input');
@@ -6349,10 +6332,14 @@ checkAuthAndSubscription();
     nativeColorInput.className = 'cc3-native-color';
     nativeColorInput.value = '#8b5cf6';
     nativeColorInput.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      border: none;
+      opacity: 0;
       cursor: pointer;
+      border: none;
       padding: 0;
     `;
 
@@ -6395,14 +6382,14 @@ checkAuthAndSubscription();
       panel.dataset.palette = name.toLowerCase();
       panel.style.cssText = `
         display: ${isActive ? 'grid' : 'none'};
-        grid-template-columns: repeat(7, 1fr);
-        gap: 6px;
-        margin-bottom: 16px;
+        grid-template-columns: repeat(9, 1fr);
+        gap: 4px;
+        margin-bottom: 12px;
       `;
 
       if (colors.length === 0) {
         panel.style.display = isActive ? 'block' : 'none';
-        panel.innerHTML = '<div style="grid-column: 1/-1; padding: 16px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors. Add colors in Preferences → Color Lab.</div>';
+        panel.innerHTML = '<div style="grid-column: 1/-1; padding: 12px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors. Add colors in Preferences → Color Lab.</div>';
       } else {
         colors.forEach(color => {
           const swatch = document.createElement('div');
@@ -6411,7 +6398,7 @@ checkAuthAndSubscription();
           swatch.style.cssText = `
             width: 100%;
             aspect-ratio: 1;
-            border-radius: 6px;
+            border-radius: 4px;
             background: ${color};
             cursor: pointer;
             border: 2px solid transparent;
@@ -6539,7 +6526,7 @@ checkAuthAndSubscription();
     opacitySection.appendChild(opacityPresets);
     opacitySection.appendChild(opacitySliderContainer);
 
-    colorSection.appendChild(colorHeader);
+    colorSection.appendChild(colorTitle);
     colorSection.appendChild(colorTabs);
     colorSection.appendChild(colorInputRow);
     colorSection.appendChild(colorValue);
@@ -6635,7 +6622,7 @@ checkAuthAndSubscription();
     const nativeColorInput = modal.querySelector('.cc3-native-color');
     const hexInput = modal.querySelector('.cc3-hex-input');
     const colorValue = modal.querySelector('.cc3-color-value');
-    const colorPreview = modal.querySelector('.cc3-color-preview');
+    const colorPreviewWrapper = modal.querySelector('.cc3-color-preview-wrapper');
     const opacitySlider = modal.querySelector('.cc3-opacity-slider');
     const opacityFill = modal.querySelector('.cc3-opacity-fill');
     const opacityValueDisplay = modal.querySelector('.cc3-opacity-value');
@@ -6656,7 +6643,8 @@ checkAuthAndSubscription();
     // Update color preview with current color and opacity
     const updateColorPreview = () => {
       const color = colorValue?.value || '#8b5cf6';
-      colorPreview.style.background = hexToRgba(color, currentOpacity / 100);
+      colorPreviewWrapper.style.background = hexToRgba(color, currentOpacity / 100);
+      colorPreviewWrapper.style.borderColor = color;
     };
 
     // Update opacity UI
