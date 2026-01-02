@@ -325,7 +325,12 @@ export class ColorPickerInjector {
    * @param {string} eventId - The event ID to apply color to
    */
   async openCustomColorModal(eventId) {
-    // Close any existing modal
+    // Clean up any orphaned backdrop/modal elements from previous instances
+    // This prevents the UI from becoming unclickable due to stale backdrops
+    document.querySelectorAll('.ecm-backdrop, .csm-backdrop').forEach(el => el.remove());
+    document.querySelectorAll('.ecm-modal, .csm-modal').forEach(el => el.remove());
+
+    // Close any existing modal instance
     if (this.activeModal) {
       this.activeModal.close();
       this.activeModal = null;

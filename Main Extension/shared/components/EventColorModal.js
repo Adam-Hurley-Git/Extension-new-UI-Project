@@ -119,6 +119,7 @@ class EventColorModal {
 
     this.element = null;
     this.backdrop = null;
+    this.isClosing = false; // Guard against race conditions during close
   }
 
   /**
@@ -633,24 +634,40 @@ class EventColorModal {
    * Close the modal
    */
   close() {
-    if (this.element) {
-      this.element.classList.remove('open');
+    // Guard against multiple close calls (race condition prevention)
+    if (this.isClosing) {
+      return;
     }
-    if (this.backdrop) {
-      this.backdrop.classList.remove('active');
+    this.isClosing = true;
+
+    // Store references before nulling to ensure cleanup even if called multiple times
+    const elementToRemove = this.element;
+    const backdropToRemove = this.backdrop;
+    const onCloseCallback = this.onClose;
+
+    // Clear references immediately to prevent duplicate operations
+    this.element = null;
+    this.backdrop = null;
+    this.onClose = null;
+
+    // Start close animation
+    if (elementToRemove) {
+      elementToRemove.classList.remove('open');
+    }
+    if (backdropToRemove) {
+      backdropToRemove.classList.remove('active');
     }
 
+    // Remove from DOM after animation
     setTimeout(() => {
-      if (this.element) {
-        this.element.remove();
-        this.element = null;
+      if (elementToRemove && elementToRemove.parentNode) {
+        elementToRemove.remove();
       }
-      if (this.backdrop) {
-        this.backdrop.remove();
-        this.backdrop = null;
+      if (backdropToRemove && backdropToRemove.parentNode) {
+        backdropToRemove.remove();
       }
-      if (this.onClose) {
-        this.onClose();
+      if (onCloseCallback) {
+        onCloseCallback();
       }
     }, 200);
   }
