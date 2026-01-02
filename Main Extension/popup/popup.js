@@ -6380,19 +6380,55 @@ checkAuthAndSubscription();
       const panel = document.createElement('div');
       panel.className = 'cc3-palette-panel';
       panel.dataset.palette = name.toLowerCase();
-      panel.style.cssText = `
-        display: ${isActive ? 'grid' : 'none'};
-        grid-template-columns: repeat(auto-fill, 26px);
-        gap: 6px;
-        justify-content: center;
-        margin-bottom: 12px;
-        padding: 4px 0;
-      `;
 
       if (colors.length === 0) {
-        panel.style.display = isActive ? 'block' : 'none';
-        panel.innerHTML = '<div style="padding: 12px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors. Add colors in Preferences → Color Lab.</div>';
+        // Empty state for custom colors
+        panel.style.cssText = `
+          display: ${isActive ? 'flex' : 'none'};
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 16px 12px;
+          margin-bottom: 12px;
+          text-align: center;
+        `;
+
+        const emptyContent = document.createElement('div');
+        emptyContent.innerHTML = `
+          <div style="font-weight: 600; margin-bottom: 6px; color: #202124; font-size: 13px;">No custom colors yet</div>
+          <div style="font-size: 11px; color: #5f6368; margin-bottom: 12px; line-height: 1.5;">
+            Set up custom colors in the Color Lab to see them here
+          </div>
+        `;
+
+        const goToLabBtn = document.createElement('button');
+        goToLabBtn.textContent = 'Go to Color Lab';
+        goToLabBtn.className = 'cc3-go-to-lab-btn';
+        goToLabBtn.style.cssText = `
+          padding: 8px 20px;
+          background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+          color: #ffffff;
+          border: none;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 4px rgba(251, 146, 60, 0.3);
+        `;
+
+        emptyContent.appendChild(goToLabBtn);
+        panel.appendChild(emptyContent);
       } else {
+        panel.style.cssText = `
+          display: ${isActive ? 'grid' : 'none'};
+          grid-template-columns: repeat(auto-fill, 26px);
+          gap: 6px;
+          justify-content: center;
+          margin-bottom: 12px;
+          padding: 4px 0;
+        `;
+
         colors.forEach(color => {
           const swatch = document.createElement('div');
           swatch.className = 'cc3-swatch';
@@ -6730,6 +6766,52 @@ checkAuthAndSubscription();
         selectColor(swatch.dataset.color);
       });
     });
+
+    // "Go to Color Lab" button handler
+    const goToLabBtn = modal.querySelector('.cc3-go-to-lab-btn');
+    if (goToLabBtn) {
+      goToLabBtn.addEventListener('mouseover', () => {
+        goToLabBtn.style.transform = 'translateY(-1px)';
+        goToLabBtn.style.boxShadow = '0 4px 8px rgba(251, 146, 60, 0.4)';
+      });
+      goToLabBtn.addEventListener('mouseout', () => {
+        goToLabBtn.style.transform = 'translateY(0)';
+        goToLabBtn.style.boxShadow = '0 2px 4px rgba(251, 146, 60, 0.3)';
+      });
+      goToLabBtn.addEventListener('click', () => {
+        // Close the modal first
+        onCancel();
+
+        // Switch to Preferences tab
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabButtons.forEach((btn) => btn.classList.remove('active'));
+        tabContents.forEach((content) => content.classList.remove('active'));
+
+        const preferencesButton = document.querySelector('[data-tab="preferences"]');
+        const preferencesContent = document.getElementById('preferencesContent');
+
+        if (preferencesButton) preferencesButton.classList.add('active');
+        if (preferencesContent) preferencesContent.classList.add('active');
+
+        // Expand Color Lab section
+        setTimeout(() => {
+          const colorLabHeader = document.getElementById('colorLabHeader');
+          if (colorLabHeader && !colorLabHeader.classList.contains('expanded')) {
+            colorLabHeader.classList.add('expanded');
+          }
+
+          // Scroll to Color Lab section
+          setTimeout(() => {
+            const colorLabSection = document.querySelector('.section.color-lab');
+            if (colorLabSection) {
+              colorLabSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }, 100);
+        }, 100);
+      });
+    }
 
     // Native color input
     nativeColorInput.addEventListener('input', () => {
