@@ -6030,6 +6030,153 @@ checkAuthAndSubscription();
     });
   }
 
+  // Show a confirmation dialog for overriding existing date colors
+  function showConfirmDialog(title, message, oldColor, newColor) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10001;
+        backdrop-filter: blur(2px);
+      `;
+
+      const dialog = document.createElement('div');
+      dialog.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        padding: 24px;
+        max-width: 340px;
+        text-align: center;
+      `;
+
+      // Color comparison preview
+      const colorPreview = document.createElement('div');
+      colorPreview.style.cssText = `
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      `;
+      colorPreview.innerHTML = `
+        <div style="text-align: center;">
+          <div style="width: 40px; height: 40px; border-radius: 8px; background: ${oldColor}; border: 2px solid #e5e7eb; margin: 0 auto;"></div>
+          <div style="font-size: 10px; color: #6b7280; margin-top: 4px;">Current</div>
+        </div>
+        <div style="color: #9ca3af; font-size: 18px;">→</div>
+        <div style="text-align: center;">
+          <div style="width: 40px; height: 40px; border-radius: 8px; background: ${newColor}; border: 2px solid #8b5cf6; margin: 0 auto;"></div>
+          <div style="font-size: 10px; color: #8b5cf6; margin-top: 4px;">New</div>
+        </div>
+      `;
+
+      const titleEl = document.createElement('div');
+      titleEl.textContent = title;
+      titleEl.style.cssText = `
+        font-size: 16px;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 12px;
+      `;
+
+      const messageEl = document.createElement('div');
+      messageEl.textContent = message;
+      messageEl.style.cssText = `
+        font-size: 13px;
+        color: #6b7280;
+        line-height: 1.5;
+        margin-bottom: 20px;
+        white-space: pre-line;
+      `;
+
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      `;
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = `
+        padding: 10px 24px;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        background: white;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      `;
+      cancelBtn.onmouseover = () => {
+        cancelBtn.style.background = '#f9fafb';
+        cancelBtn.style.borderColor = '#d1d5db';
+      };
+      cancelBtn.onmouseout = () => {
+        cancelBtn.style.background = 'white';
+        cancelBtn.style.borderColor = '#e5e7eb';
+      };
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = 'Override';
+      confirmBtn.style.cssText = `
+        padding: 10px 24px;
+        border-radius: 8px;
+        border: none;
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      `;
+      confirmBtn.onmouseover = () => {
+        confirmBtn.style.transform = 'translateY(-1px)';
+        confirmBtn.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.4)';
+      };
+      confirmBtn.onmouseout = () => {
+        confirmBtn.style.transform = 'translateY(0)';
+        confirmBtn.style.boxShadow = 'none';
+      };
+
+      buttonContainer.appendChild(cancelBtn);
+      buttonContainer.appendChild(confirmBtn);
+
+      dialog.appendChild(colorPreview);
+      dialog.appendChild(titleEl);
+      dialog.appendChild(messageEl);
+      dialog.appendChild(buttonContainer);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      const cleanup = (result) => {
+        if (overlay.parentNode) {
+          document.body.removeChild(overlay);
+        }
+        resolve(result);
+      };
+
+      cancelBtn.onclick = () => cleanup(false);
+      confirmBtn.onclick = () => cleanup(true);
+      overlay.onclick = (e) => {
+        if (e.target === overlay) cleanup(false);
+      };
+
+      // Focus the confirm button for keyboard navigation
+      confirmBtn.focus();
+    });
+  }
+
   // Open the date color modal
   function openDateColorModal() {
     const modal = createDateColorModal();
@@ -6048,6 +6195,9 @@ checkAuthAndSubscription();
         if (dateKey && color) {
           settings = await window.cc3Storage.setDateColor(dateKey, color);
           settings = await window.cc3Storage.setDateOpacity(dateKey, opacity);
+          // Always clear old label first, then set new one if provided
+          // This prevents old labels from persisting when overriding a date color
+          await window.cc3Storage.setDateColorLabel(dateKey, null);
           if (label) {
             settings = await window.cc3Storage.setDateColorLabel(dateKey, label);
           }
@@ -6876,7 +7026,7 @@ checkAuthAndSubscription();
     };
 
     // Confirm button
-    confirmBtn.onclick = () => {
+    confirmBtn.onclick = async () => {
       const dateKey = dateInput.value;
       if (!dateKey) {
         dateInput.style.borderColor = '#dc2626';
@@ -6885,6 +7035,41 @@ checkAuthAndSubscription();
       }
       const color = colorValue.value;
       const label = labelInput.value.trim();
+
+      // Check if this date already has a color assigned
+      if (settings.dateColors && settings.dateColors[dateKey]) {
+        const existingLabel = settings.dateColorLabels?.[dateKey];
+        const existingColor = settings.dateColors[dateKey];
+
+        // Format date for display
+        const dateObj = new Date(dateKey + 'T00:00:00');
+        const formattedDate = dateObj.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+
+        // Build the message
+        let message = `"${formattedDate}" already has a color assigned`;
+        if (existingLabel) {
+          message += ` with label "${existingLabel}"`;
+        }
+        message += '.\n\nDo you want to override it with the new color?';
+
+        // Show confirmation dialog
+        const confirmed = await showConfirmDialog(
+          'Override Existing Color?',
+          message,
+          existingColor,
+          color
+        );
+
+        if (!confirmed) {
+          return;
+        }
+      }
+
       onSave(dateKey, color, currentOpacity, label);
     };
 
