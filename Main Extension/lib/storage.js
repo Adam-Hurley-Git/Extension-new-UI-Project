@@ -81,6 +81,8 @@
       'categories', // Event color categories need hard replace for deletions
       'templates', // Event color templates need hard replace for deletions
       'dateColors', // Date-specific day colors need hard replace for deletions
+      'dateOpacity', // Date-specific opacity needs hard replace for deletions
+      'dateColorLabels', // Date-specific labels need hard replace for deletions
     ]);
 
     // If either side isn't a plain object, prefer partial directly
