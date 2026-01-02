@@ -6382,27 +6382,30 @@ checkAuthAndSubscription();
       panel.dataset.palette = name.toLowerCase();
       panel.style.cssText = `
         display: ${isActive ? 'grid' : 'none'};
-        grid-template-columns: repeat(9, 1fr);
-        gap: 4px;
+        grid-template-columns: repeat(auto-fill, 26px);
+        gap: 6px;
+        justify-content: center;
         margin-bottom: 12px;
+        padding: 4px 0;
       `;
 
       if (colors.length === 0) {
         panel.style.display = isActive ? 'block' : 'none';
-        panel.innerHTML = '<div style="grid-column: 1/-1; padding: 12px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors. Add colors in Preferences → Color Lab.</div>';
+        panel.innerHTML = '<div style="padding: 12px; text-align: center; color: #9aa0a6; font-size: 11px;">No custom colors. Add colors in Preferences → Color Lab.</div>';
       } else {
         colors.forEach(color => {
           const swatch = document.createElement('div');
           swatch.className = 'cc3-swatch';
           swatch.dataset.color = color;
           swatch.style.cssText = `
-            width: 100%;
-            aspect-ratio: 1;
+            width: 26px;
+            height: 26px;
             border-radius: 4px;
             background: ${color};
             cursor: pointer;
             border: 2px solid transparent;
             transition: all 0.15s ease;
+            box-sizing: border-box;
           `;
           swatch.title = color.toUpperCase();
           panel.appendChild(swatch);
