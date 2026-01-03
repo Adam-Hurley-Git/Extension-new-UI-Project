@@ -270,6 +270,36 @@
     return false;
   }
 
+  /**
+   * Open the upgrade page in a new tab
+   * Routes to the correct URL based on user's subscription history:
+   * - New users: /signup (full onboarding flow)
+   * - Lapsed subscribers: /checkout/pri_01k8m1wyqcebmvsvsc7pwvy69j (direct checkout, skip onboarding)
+   *
+   * Uses chrome.runtime.sendMessage to properly integrate with the background script's
+   * OPEN_WEB_APP handler, which opens the correct portal URL.
+   */
+  async function openUpgradePage() {
+    try {
+      const { subscriptionStatus } = await chrome.storage.local.get('subscriptionStatus');
+      const wasPreviouslySubscribed = subscriptionStatus?.wasPreviouslySubscribed || false;
+
+      // Route based on user history
+      const path = wasPreviouslySubscribed
+        ? '/checkout/pri_01k8m1wyqcebmvsvsc7pwvy69j' // Lapsed subscriber - direct to checkout
+        : '/signup'; // New user - full onboarding flow
+
+      console.log('[FeatureAccess] Opening upgrade page:', path, 'wasPreviouslySubscribed:', wasPreviouslySubscribed);
+
+      // Send message to background script to open the portal URL
+      chrome.runtime.sendMessage({ type: 'OPEN_WEB_APP', path });
+    } catch (error) {
+      console.error('[FeatureAccess] Error opening upgrade page:', error);
+      // Fallback: try to open signup page
+      chrome.runtime.sendMessage({ type: 'OPEN_WEB_APP', path: '/signup' });
+    }
+  }
+
   // Expose to global scope for use in content scripts and popup
   window.cc3FeatureAccess = {
     isPremium,
@@ -282,6 +312,7 @@
     trackPremiumAttempt,
     getPremiumAttemptStats,
     getUpgradeUrl,
+    openUpgradePage,
     getAllPremiumFeatures,
     getPremiumFeaturesByCategory,
     usesPremiumEventColorFeatures,
