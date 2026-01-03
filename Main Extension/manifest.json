@@ -35,10 +35,12 @@
       "css": ["content/content.css"],
       "js": [
         "lib/storage.js",
+        "lib/featureAccess.js",
         "content/featureRegistry.js",
         "features/shared/utils.js",
         "shared/components/ColorSwatchModal.js",
         "shared/components/EventColorModal.js",
+        "shared/components/PremiumComponents.js",
         "features/calendar-coloring/utils/dateUtils.js",
         "features/calendar-coloring/core/monthColoring.js",
         "features/calendar-coloring/core/dayColoring.js",

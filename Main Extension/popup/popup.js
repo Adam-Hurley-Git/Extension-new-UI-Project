@@ -37,10 +37,12 @@ async function checkAuthAndSubscription() {
 
   debugLog('Validation result from storage:', result);
 
-  if (!result.isActive) {
-    showAuthOverlay(result.reason, result.message, result.wasPreviouslySubscribed);
-  } else {
-    hideAuthOverlay();
+  // FREEMIUM MODEL: Always hide auth overlay - users get free tier access
+  // Premium features are gated individually when users try to use them
+  hideAuthOverlay();
+
+  if (result.isActive) {
+    // Premium user - full access
     isAuthenticated = true;
     hasActiveSubscription = true;
 
@@ -53,6 +55,11 @@ async function checkAuthAndSubscription() {
     if (result.scheduledCancellation && result.cancellationDate) {
       showCancellationBanner(result.cancellationDate);
     }
+  } else {
+    // Free tier user - basic features only
+    isAuthenticated = false;
+    hasActiveSubscription = false;
+    debugLog('Free tier user - premium features will be gated');
   }
 }
 
@@ -4346,6 +4353,30 @@ checkAuthAndSubscription();
             label: label || '',
             style: style || settings.timeBlocking?.shadingStyle || 'solid',
           };
+
+          // FREEMIUM: Check premium access before saving date-specific time blocks
+          if (window.cc3FeatureAccess && !hasActiveSubscription) {
+            const access = await window.cc3FeatureAccess.canAccess('timeBlocking.specificDates');
+            if (!access.allowed) {
+              // Store pending action for completion after upgrade
+              await window.cc3FeatureAccess.storePendingAction({
+                type: 'timeBlocking.specificDate',
+                data: { dateKey: selectedDate, block: newBlock },
+              });
+              await window.cc3FeatureAccess.trackPremiumAttempt('timeBlocking.specificDates', 'save');
+              // Show upgrade modal
+              if (window.cc3PremiumComponents) {
+                window.cc3PremiumComponents.showUpgradeModal({
+                  feature: 'Date-Specific Time Blocks',
+                  description: 'Create one-time time blocks for specific dates - perfect for holidays, deadlines, or schedule exceptions. Upgrade to Pro to unlock this feature.',
+                });
+              }
+              cleanup();
+              resolve(null);
+              return;
+            }
+          }
+
           await window.cc3Storage.addDateSpecificTimeBlock(selectedDate, newBlock);
           settings = await window.cc3Storage.getSettings();
           updateDateSpecificSchedule();
@@ -6193,6 +6224,29 @@ checkAuthAndSubscription();
 
       const handleSave = async (dateKey, color, opacity, label) => {
         if (dateKey && color) {
+          // FREEMIUM: Check premium access before saving date-specific colors
+          if (window.cc3FeatureAccess && !hasActiveSubscription) {
+            const access = await window.cc3FeatureAccess.canAccess('dayColoring.specificDates');
+            if (!access.allowed) {
+              // Store pending action for completion after upgrade
+              await window.cc3FeatureAccess.storePendingAction({
+                type: 'dayColoring.specificDate',
+                data: { dateKey, color, opacity, label },
+              });
+              await window.cc3FeatureAccess.trackPremiumAttempt('dayColoring.specificDates', 'save');
+              // Show upgrade modal
+              if (window.cc3PremiumComponents) {
+                window.cc3PremiumComponents.showUpgradeModal({
+                  feature: 'Date-Specific Colors',
+                  description: 'Color specific dates like holidays, deadlines, or important events. Upgrade to Pro to unlock this feature.',
+                });
+              }
+              cleanup();
+              resolve(null);
+              return;
+            }
+          }
+
           settings = await window.cc3Storage.setDateColor(dateKey, color);
           settings = await window.cc3Storage.setDateOpacity(dateKey, opacity);
           // Always clear old label first, then set new one if provided
@@ -10052,6 +10106,41 @@ Would you like to refresh all Google Calendar tabs?`;
         return;
       }
 
+      // FREEMIUM: Check premium access before saving templates
+      if (window.cc3FeatureAccess && !hasActiveSubscription) {
+        const access = await window.cc3FeatureAccess.canAccess('eventColoring.templates');
+        if (!access.allowed) {
+          const allTemplates = await window.cc3Storage.getEventColorTemplates();
+          const pendingTemplate = {
+            id: templateState.id || `tmpl_${Date.now()}`,
+            name,
+            background: templateState.background,
+            text: templateState.text,
+            border: templateState.border,
+            borderWidth: templateState.borderWidth,
+            categoryId: categorySelect.value || null,
+            order: templateState.order ?? Object.keys(allTemplates).length,
+            createdAt: templateState.createdAt,
+            updatedAt: Date.now()
+          };
+          // Store pending action for completion after upgrade
+          await window.cc3FeatureAccess.storePendingAction({
+            type: 'eventColoring.template',
+            data: { template: pendingTemplate },
+          });
+          await window.cc3FeatureAccess.trackPremiumAttempt('eventColoring.templates', 'save');
+          closeModal();
+          // Show upgrade modal
+          if (window.cc3PremiumComponents) {
+            window.cc3PremiumComponents.showUpgradeModal({
+              feature: 'Color Templates',
+              description: 'Save and reuse complete color combinations for quick event styling. Upgrade to Pro to unlock this feature.',
+            });
+          }
+          return;
+        }
+      }
+
       const allTemplates = await window.cc3Storage.getEventColorTemplates();
       const newTemplate = {
         id: templateState.id || `tmpl_${Date.now()}`,
@@ -10499,6 +10588,27 @@ Would you like to refresh all Google Calendar tabs?`;
   // Set event calendar color - update UI without rebuilding
   async function setEventCalendarColor(calendarId, type, color) {
     debugLog('Setting event calendar color:', calendarId, type, color);
+
+    // FREEMIUM: Check premium access before saving calendar colors
+    if (window.cc3FeatureAccess && !hasActiveSubscription) {
+      const access = await window.cc3FeatureAccess.canAccess('eventColoring.calendarColors');
+      if (!access.allowed) {
+        // Store pending action for completion after upgrade
+        await window.cc3FeatureAccess.storePendingAction({
+          type: 'eventColoring.calendarColor',
+          data: { calendarId, colorType: type, color },
+        });
+        await window.cc3FeatureAccess.trackPremiumAttempt('eventColoring.calendarColors', 'save');
+        // Show upgrade modal
+        if (window.cc3PremiumComponents) {
+          window.cc3PremiumComponents.showUpgradeModal({
+            feature: 'Calendar Default Colors',
+            description: 'Set automatic colors for all events from specific calendars. Upgrade to Pro to unlock this feature.',
+          });
+        }
+        return;
+      }
+    }
 
     switch (type) {
       case 'background':

@@ -105,6 +105,8 @@ class EventColorModal {
     };
     // Event title for preview
     this.eventTitle = options.eventTitle || 'Sample Event';
+    // Event ID for pending action storage (freemium gating)
+    this.eventId = options.eventId || null;
     // Working copy for live preview
     this.workingColors = { ...this.currentColors };
 
@@ -140,10 +142,12 @@ class EventColorModal {
         <button type="button" class="ecm-property-tab" data-property="text">
           <span class="ecm-property-indicator" id="${this.id}-text-indicator"></span>
           Text
+          <span class="cc3-pro-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin-left: 4px;">Pro</span>
         </button>
         <button type="button" class="ecm-property-tab" data-property="border">
           <span class="ecm-property-indicator" id="${this.id}-border-indicator"></span>
           Border
+          <span class="cc3-pro-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin-left: 4px;">Pro</span>
         </button>
       </div>
 
@@ -563,9 +567,50 @@ class EventColorModal {
     }
 
     if (applyBtn) {
-      applyBtn.addEventListener('click', () => {
+      applyBtn.addEventListener('click', async () => {
         console.log('[EventColorModal] Apply clicked, workingColors:', JSON.stringify(this.workingColors));
         console.log('[EventColorModal] borderWidth value:', this.workingColors.borderWidth, 'type:', typeof this.workingColors.borderWidth);
+
+        // FREEMIUM: Check if using premium features (text, border, borderWidth)
+        const usesPremiumFeatures = window.cc3FeatureAccess?.usesPremiumEventColorFeatures?.(this.workingColors);
+
+        if (usesPremiumFeatures && window.cc3FeatureAccess) {
+          const isPremium = await window.cc3FeatureAccess.isPremium();
+          if (!isPremium) {
+            // Determine which premium feature is being used for the message
+            let featureName = 'Advanced Event Styling';
+            let description = 'Customize text color, borders, and border thickness for your events.';
+
+            if (this.workingColors.text) {
+              featureName = 'Text Color';
+              description = 'Customize the text color of your calendar events for better readability.';
+            } else if (this.workingColors.border) {
+              featureName = 'Border Color';
+              description = 'Add custom borders to your events to make them stand out.';
+            } else if (this.workingColors.borderWidth > 0) {
+              featureName = 'Border Thickness';
+              description = 'Control the thickness of event borders (1-6px).';
+            }
+
+            // Store pending action for completion after upgrade
+            await window.cc3FeatureAccess.storePendingAction({
+              type: 'eventColoring.advancedColors',
+              data: { eventId: this.eventId, colors: this.workingColors },
+            });
+            await window.cc3FeatureAccess.trackPremiumAttempt('eventColoring.textColor', 'save');
+
+            // Show upgrade modal
+            if (window.cc3PremiumComponents) {
+              window.cc3PremiumComponents.showUpgradeModal({
+                feature: featureName,
+                description: description + ' Upgrade to Pro to unlock this feature.',
+              });
+            }
+            this.close();
+            return;
+          }
+        }
+
         if (this.onApply) {
           this.onApply(this.workingColors);
         }

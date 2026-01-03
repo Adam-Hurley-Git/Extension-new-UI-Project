@@ -288,8 +288,21 @@ async function handleWebAppMessage(message) {
         subscriptionTimestamp: Date.now(),
       });
 
+      // FREEMIUM: Complete any pending premium action after successful payment
+      try {
+        const { pendingPremiumAction } = await chrome.storage.local.get('pendingPremiumAction');
+        if (pendingPremiumAction) {
+          debugLog('Found pending premium action, completing...', pendingPremiumAction.type);
+          await completePendingPremiumAction(pendingPremiumAction);
+          await chrome.storage.local.remove('pendingPremiumAction');
+          debugLog('Pending premium action completed and cleared');
+        }
+      } catch (error) {
+        console.error('Error completing pending premium action:', error);
+      }
+
       // Notify popup
-      notifyPopup({ type: 'SUBSCRIPTION_UPDATED' });
+      notifyPopup({ type: 'SUBSCRIPTION_UPDATED', pendingActionCompleted: !!pendingPremiumAction });
 
       // Broadcast to all calendar tabs to re-enable features
       await broadcastToCalendarTabs({ type: 'SUBSCRIPTION_UPDATED' });
@@ -432,6 +445,130 @@ function notifyPopup(message) {
     // Popup might not be open, that's okay
     debugLog('Popup not open to receive message');
   });
+}
+
+// FREEMIUM: Complete a pending premium action after successful payment
+// This function is called when a user upgrades and had a pending action waiting
+async function completePendingPremiumAction(action) {
+  if (!action || !action.type || !action.data) {
+    debugLog('Invalid pending action, skipping');
+    return;
+  }
+
+  debugLog('Completing pending action:', action.type);
+
+  // Get current settings from sync storage
+  const { settings = {} } = await chrome.storage.sync.get('settings');
+
+  switch (action.type) {
+    case 'dayColoring.specificDate': {
+      // Complete date-specific color save
+      const { dateKey, color, opacity, label } = action.data;
+      if (dateKey && color) {
+        const dateColors = settings.dateColors || {};
+        const dateOpacity = settings.dateOpacity || {};
+        const dateColorLabels = settings.dateColorLabels || {};
+
+        dateColors[dateKey] = color;
+        if (opacity !== undefined) dateOpacity[dateKey] = opacity;
+        if (label) dateColorLabels[dateKey] = label;
+
+        await chrome.storage.sync.set({
+          settings: { ...settings, dateColors, dateOpacity, dateColorLabels },
+        });
+        debugLog('Completed: Date-specific color saved for', dateKey);
+      }
+      break;
+    }
+
+    case 'timeBlocking.specificDate': {
+      // Complete date-specific time block save
+      const { dateKey, block } = action.data;
+      if (dateKey && block) {
+        const timeBlocking = settings.timeBlocking || {};
+        const dateSpecificSchedule = timeBlocking.dateSpecificSchedule || {};
+        const existingBlocks = dateSpecificSchedule[dateKey] || [];
+
+        dateSpecificSchedule[dateKey] = [...existingBlocks, block];
+
+        await chrome.storage.sync.set({
+          settings: {
+            ...settings,
+            timeBlocking: { ...timeBlocking, dateSpecificSchedule },
+          },
+        });
+        debugLog('Completed: Date-specific time block saved for', dateKey);
+      }
+      break;
+    }
+
+    case 'eventColoring.calendarColor': {
+      // Complete calendar default color save
+      const { calendarId, colorType, color } = action.data;
+      if (calendarId && colorType && color) {
+        const eventColoring = settings.eventColoring || {};
+        const calendarColors = eventColoring.calendarColors || {};
+        const calendarEntry = calendarColors[calendarId] || {};
+
+        calendarEntry[colorType] = color;
+        calendarColors[calendarId] = calendarEntry;
+
+        await chrome.storage.sync.set({
+          settings: {
+            ...settings,
+            eventColoring: { ...eventColoring, calendarColors },
+          },
+        });
+        debugLog('Completed: Calendar color saved for', calendarId, colorType);
+      }
+      break;
+    }
+
+    case 'eventColoring.template': {
+      // Complete template save
+      const { template } = action.data;
+      if (template && template.id) {
+        const eventColoring = settings.eventColoring || {};
+        const templates = eventColoring.templates || {};
+
+        templates[template.id] = template;
+
+        await chrome.storage.sync.set({
+          settings: {
+            ...settings,
+            eventColoring: { ...eventColoring, templates },
+          },
+        });
+        debugLog('Completed: Template saved', template.id);
+      }
+      break;
+    }
+
+    case 'eventColoring.advancedColors': {
+      // Complete advanced event color save (text/border/borderWidth)
+      // This needs to be saved to local storage (cf.eventColors)
+      const { eventId, colors } = action.data;
+      if (eventId && colors) {
+        const { 'cf.eventColors': eventColors = {} } = await chrome.storage.local.get('cf.eventColors');
+
+        eventColors[eventId] = {
+          ...eventColors[eventId],
+          ...colors,
+          appliedAt: Date.now(),
+        };
+
+        await chrome.storage.local.set({ 'cf.eventColors': eventColors });
+        debugLog('Completed: Advanced event colors saved for', eventId);
+      }
+      break;
+    }
+
+    default:
+      debugLog('Unknown pending action type:', action.type);
+  }
+
+  // Broadcast to calendar tabs to refresh
+  await broadcastToCalendarTabs({ type: 'PENDING_ACTION_COMPLETED', actionType: action.type });
 }
 
 // Global flag to prevent concurrent push subscription attempts
