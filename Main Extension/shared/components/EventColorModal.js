@@ -140,11 +140,13 @@ class EventColorModal {
           Background
         </button>
         <button type="button" class="ecm-property-tab" data-property="text">
+          <span class="ecm-badge-spacer" aria-hidden="true"></span>
           <span class="ecm-property-indicator" id="${this.id}-text-indicator"></span>
           Text
           <span class="cc3-pro-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin-left: 4px;">Pro</span>
         </button>
         <button type="button" class="ecm-property-tab" data-property="border">
+          <span class="ecm-badge-spacer" aria-hidden="true"></span>
           <span class="ecm-property-indicator" id="${this.id}-border-indicator"></span>
           Border
           <span class="cc3-pro-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin-left: 4px;">Pro</span>
@@ -800,6 +802,10 @@ class EventColorModal {
         background: #e8f0fe;
         color: #1a73e8;
         font-weight: 600;
+      }
+      .ecm-badge-spacer {
+        width: 26px;
+        flex-shrink: 0;
       }
       .ecm-property-indicator {
         width: 15px;
