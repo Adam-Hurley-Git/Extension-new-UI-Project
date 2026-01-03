@@ -105,6 +105,8 @@ class EventColorModal {
     };
     // Event title for preview
     this.eventTitle = options.eventTitle || 'Sample Event';
+    // Event ID for pending action storage (freemium gating)
+    this.eventId = options.eventId || null;
     // Working copy for live preview
     this.workingColors = { ...this.currentColors };
 
@@ -135,15 +137,17 @@ class EventColorModal {
       <div class="ecm-property-tabs">
         <button type="button" class="ecm-property-tab active" data-property="background">
           <span class="ecm-property-indicator" id="${this.id}-bg-indicator"></span>
-          Background
+          <span class="ecm-tab-label">Background</span>
         </button>
-        <button type="button" class="ecm-property-tab" data-property="text">
+        <button type="button" class="ecm-property-tab ecm-has-badge" data-property="text">
           <span class="ecm-property-indicator" id="${this.id}-text-indicator"></span>
-          Text
+          <span class="ecm-tab-label">Text</span>
+          <span class="ecm-pro-badge">Pro</span>
         </button>
-        <button type="button" class="ecm-property-tab" data-property="border">
+        <button type="button" class="ecm-property-tab ecm-has-badge" data-property="border">
           <span class="ecm-property-indicator" id="${this.id}-border-indicator"></span>
-          Border
+          <span class="ecm-tab-label">Border</span>
+          <span class="ecm-pro-badge">Pro</span>
         </button>
       </div>
 
@@ -563,9 +567,50 @@ class EventColorModal {
     }
 
     if (applyBtn) {
-      applyBtn.addEventListener('click', () => {
+      applyBtn.addEventListener('click', async () => {
         console.log('[EventColorModal] Apply clicked, workingColors:', JSON.stringify(this.workingColors));
         console.log('[EventColorModal] borderWidth value:', this.workingColors.borderWidth, 'type:', typeof this.workingColors.borderWidth);
+
+        // FREEMIUM: Check if using premium features (text, border, borderWidth)
+        const usesPremiumFeatures = window.cc3FeatureAccess?.usesPremiumEventColorFeatures?.(this.workingColors);
+
+        if (usesPremiumFeatures && window.cc3FeatureAccess) {
+          const isPremium = await window.cc3FeatureAccess.isPremium();
+          if (!isPremium) {
+            // Determine which premium feature is being used for the message
+            let featureName = 'Advanced Event Styling';
+            let description = 'Customize text color, borders, and border thickness for your events.';
+
+            if (this.workingColors.text) {
+              featureName = 'Text Color';
+              description = 'Customize the text color of your calendar events for better readability.';
+            } else if (this.workingColors.border) {
+              featureName = 'Border Color';
+              description = 'Add custom borders to your events to make them stand out.';
+            } else if (this.workingColors.borderWidth > 0) {
+              featureName = 'Border Thickness';
+              description = 'Control the thickness of event borders (1-6px).';
+            }
+
+            // Store pending action for completion after upgrade
+            await window.cc3FeatureAccess.storePendingAction({
+              type: 'eventColoring.advancedColors',
+              data: { eventId: this.eventId, colors: this.workingColors },
+            });
+            await window.cc3FeatureAccess.trackPremiumAttempt('eventColoring.textColor', 'save');
+
+            // Show upgrade modal
+            if (window.cc3PremiumComponents) {
+              window.cc3PremiumComponents.showUpgradeModal({
+                feature: featureName,
+                description: description + ' Upgrade to Pro to unlock this feature.',
+              });
+            }
+            this.close();
+            return;
+          }
+        }
+
         if (this.onApply) {
           this.onApply(this.workingColors);
         }
@@ -708,7 +753,7 @@ class EventColorModal {
         border-radius: 12px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
         z-index: 100000;
-        width: 380px;
+        width: 400px;
         max-width: 95vw;
         max-height: 90vh;
         overflow: hidden;
@@ -724,17 +769,18 @@ class EventColorModal {
       .ecm-property-tabs {
         display: flex;
         gap: 8px;
-        padding: 16px 16px 12px;
+        padding: 12px 16px 10px;
         background: #f8f9fa;
         border-bottom: 1px solid #e8eaed;
       }
       .ecm-property-tab {
         flex: 1;
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 6px;
-        padding: 8px 10px;
+        padding: 10px 8px;
         border: 2px solid #dadce0;
         background: #ffffff;
         color: #5f6368;
@@ -754,9 +800,26 @@ class EventColorModal {
         color: #1a73e8;
         font-weight: 600;
       }
+      .ecm-tab-label {
+        white-space: nowrap;
+      }
+      .ecm-pro-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        padding: 2px 5px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      }
       .ecm-property-indicator {
-        width: 16px;
-        height: 16px;
+        width: 15px;
+        height: 15px;
         border-radius: 50%;
         border: 2px solid rgba(0, 0, 0, 0.1);
         flex-shrink: 0;

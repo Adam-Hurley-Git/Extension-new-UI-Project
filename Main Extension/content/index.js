@@ -3,8 +3,8 @@
   let hasActiveSubscription = false;
   let featuresEnabled = false;
 
-  // Validate subscription before initializing features
-  async function validateSubscriptionBeforeInit() {
+  // Check subscription status (used for premium feature gating)
+  async function checkSubscriptionStatus() {
     try {
       // OPTIMIZED: Read directly from storage instead of messaging background
       // Storage is kept fresh by push notifications and 3-day alarm
@@ -12,16 +12,20 @@
 
       if (stored.subscriptionActive) {
         hasActiveSubscription = true;
-        return true;
+        console.log('[ColorKit] Premium subscription active - all features enabled');
       } else {
-        console.log('[ColorKit] No active subscription - features disabled');
         hasActiveSubscription = false;
-        return false;
+        console.log('[ColorKit] Free tier - basic features enabled, premium features gated');
       }
+
+      // FREEMIUM: Expose premium status globally for feature-level gating
+      window.cc3IsPremium = hasActiveSubscription;
+      return hasActiveSubscription;
     } catch (error) {
-      console.error('[ColorKit] Subscription validation error:', error);
-      // Fail closed - don't enable features if validation fails
+      console.error('[ColorKit] Subscription check error:', error);
+      // Fail-open for basic features - premium features will be gated individually
       hasActiveSubscription = false;
+      window.cc3IsPremium = false;
       return false;
     }
   }
@@ -72,12 +76,9 @@
       return;
     }
 
-    // VALIDATE SUBSCRIPTION BEFORE INITIALIZING
-    const isValid = await validateSubscriptionBeforeInit();
-    if (!isValid) {
-      console.log('[ColorKit] Subscription validation failed - not initializing features');
-      return; // Don't initialize features
-    }
+    // FREEMIUM: Check subscription status for premium feature gating
+    // Features always boot - premium gating happens at the feature level
+    await checkSubscriptionStatus();
 
     featuresEnabled = true;
 
@@ -175,22 +176,25 @@
         window.cc3Features.updateFeature(message.feature, message.settings);
       }
     } else if (message.type === 'SUBSCRIPTION_CANCELLED') {
-      // Subscription was cancelled - disable all features immediately
-      console.log('[ColorKit] Received SUBSCRIPTION_CANCELLED - disabling features');
-      disableAllFeatures();
+      // FREEMIUM: Subscription was cancelled - update premium status
+      // Basic features continue to work, premium features will be gated
+      console.log('[ColorKit] Received SUBSCRIPTION_CANCELLED - downgrading to free tier');
+      hasActiveSubscription = false;
+      window.cc3IsPremium = false;
     } else if (message.type === 'SUBSCRIPTION_UPDATED') {
-      // Subscription status changed - revalidate and potentially re-enable
-      console.log('[ColorKit] Received SUBSCRIPTION_UPDATED - revalidating');
-      validateSubscriptionBeforeInit().then((isValid) => {
-        if (isValid && !featuresEnabled) {
-          // Subscription is now active - reload page to reinitialize
-          console.log('[ColorKit] Subscription now active - reloading page');
-          location.reload();
-        } else if (!isValid && featuresEnabled) {
-          // Subscription became inactive - disable features
-          disableAllFeatures();
+      // Subscription status changed - update premium status
+      console.log('[ColorKit] Received SUBSCRIPTION_UPDATED - checking status');
+      checkSubscriptionStatus().then((isPremium) => {
+        if (isPremium) {
+          console.log('[ColorKit] Upgraded to premium - all features now available');
+        } else {
+          console.log('[ColorKit] Free tier - premium features gated');
         }
       });
+    } else if (message.type === 'PENDING_ACTION_COMPLETED') {
+      // Pending premium action was completed after upgrade - reload to apply changes
+      console.log('[ColorKit] Pending action completed - reloading to apply changes');
+      location.reload();
     } else if (message.type === 'SETTINGS_RESET') {
       // Complete reset detected - clean up and reload page
       console.log('[ColorKit] Settings reset detected - cleaning up and reloading page...');
