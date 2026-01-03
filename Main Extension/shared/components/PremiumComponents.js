@@ -334,17 +334,20 @@
       backdrop.classList.add('active');
     });
 
-    // Get the actual upgrade URL
-    const actualUpgradeUrl = upgradeUrl || (window.cc3FeatureAccess ? window.cc3FeatureAccess.getUpgradeUrl() : 'https://portal.calendarextension.com/upgrade');
-
     // Handle upgrade click
     const upgradeBtn = modal.querySelector('#cc3-upgrade-btn');
     upgradeBtn.addEventListener('click', () => {
       if (onUpgrade) {
         onUpgrade();
       }
-      // Open upgrade URL in new tab
-      window.open(actualUpgradeUrl, '_blank');
+      // Open upgrade page using the proper message passing flow
+      // This routes new users to /signup and lapsed subscribers to /checkout
+      if (window.cc3FeatureAccess && window.cc3FeatureAccess.openUpgradePage) {
+        window.cc3FeatureAccess.openUpgradePage();
+      } else {
+        // Fallback: send message directly to background script
+        chrome.runtime.sendMessage({ type: 'OPEN_WEB_APP', path: '/signup' });
+      }
       closeModal();
     });
 
