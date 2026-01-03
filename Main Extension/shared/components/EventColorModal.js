@@ -137,19 +137,17 @@ class EventColorModal {
       <div class="ecm-property-tabs">
         <button type="button" class="ecm-property-tab active" data-property="background">
           <span class="ecm-property-indicator" id="${this.id}-bg-indicator"></span>
-          Background
+          <span class="ecm-tab-label">Background</span>
         </button>
-        <button type="button" class="ecm-property-tab" data-property="text">
-          <span class="ecm-badge-spacer" aria-hidden="true"></span>
+        <button type="button" class="ecm-property-tab ecm-has-badge" data-property="text">
           <span class="ecm-property-indicator" id="${this.id}-text-indicator"></span>
-          Text
-          <span class="cc3-pro-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin-left: 4px;">Pro</span>
+          <span class="ecm-tab-label">Text</span>
+          <span class="ecm-pro-badge">Pro</span>
         </button>
-        <button type="button" class="ecm-property-tab" data-property="border">
-          <span class="ecm-badge-spacer" aria-hidden="true"></span>
+        <button type="button" class="ecm-property-tab ecm-has-badge" data-property="border">
           <span class="ecm-property-indicator" id="${this.id}-border-indicator"></span>
-          Border
-          <span class="cc3-pro-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin-left: 4px;">Pro</span>
+          <span class="ecm-tab-label">Border</span>
+          <span class="ecm-pro-badge">Pro</span>
         </button>
       </div>
 
@@ -770,28 +768,27 @@ class EventColorModal {
       /* Property Tabs (Background/Text/Border) */
       .ecm-property-tabs {
         display: flex;
-        gap: 6px;
-        padding: 12px 14px 10px;
+        gap: 8px;
+        padding: 12px 16px 10px;
         background: #f8f9fa;
         border-bottom: 1px solid #e8eaed;
       }
       .ecm-property-tab {
         flex: 1;
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 5px;
-        padding: 8px 6px;
+        gap: 6px;
+        padding: 10px 8px;
         border: 2px solid #dadce0;
         background: #ffffff;
         color: #5f6368;
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 500;
         cursor: pointer;
         border-radius: 8px;
         transition: all 0.15s ease;
-        white-space: nowrap;
-        min-width: 0;
       }
       .ecm-property-tab:hover {
         border-color: #1a73e8;
@@ -803,9 +800,22 @@ class EventColorModal {
         color: #1a73e8;
         font-weight: 600;
       }
-      .ecm-badge-spacer {
-        width: 26px;
-        flex-shrink: 0;
+      .ecm-tab-label {
+        white-space: nowrap;
+      }
+      .ecm-pro-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        padding: 2px 5px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
       }
       .ecm-property-indicator {
         width: 15px;
