@@ -257,14 +257,15 @@
   function usesPremiumEventColorFeatures(colors) {
     if (!colors) return false;
 
-    // Text color is premium
+    // Text color is premium (only if explicitly set, not null/undefined)
     if (colors.text && colors.text !== null) return true;
 
-    // Border color is premium
+    // Border color is premium (only if explicitly set)
     if (colors.border && colors.border !== null) return true;
 
-    // Border width > 0 is premium (when explicitly set)
-    if (colors.borderWidth !== undefined && colors.borderWidth !== null && colors.borderWidth > 0) return true;
+    // Note: borderWidth alone is NOT premium - it only matters if border color is also set
+    // The default borderWidth of 2 should not trigger premium gate
+    // borderWidth is only meaningful when there's a border color to apply it to
 
     return false;
   }

@@ -768,8 +768,8 @@ class EventColorModal {
       /* Property Tabs (Background/Text/Border) */
       .ecm-property-tabs {
         display: flex;
-        gap: 8px;
-        padding: 16px 16px 12px;
+        gap: 4px;
+        padding: 12px 12px 10px;
         background: #f8f9fa;
         border-bottom: 1px solid #e8eaed;
       }
@@ -778,16 +778,18 @@ class EventColorModal {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 6px;
-        padding: 8px 10px;
+        gap: 4px;
+        padding: 6px 6px;
         border: 2px solid #dadce0;
         background: #ffffff;
         color: #5f6368;
-        font-size: 13px;
+        font-size: 11px;
         font-weight: 500;
         cursor: pointer;
         border-radius: 8px;
         transition: all 0.15s ease;
+        white-space: nowrap;
+        min-width: 0;
       }
       .ecm-property-tab:hover {
         border-color: #1a73e8;
@@ -800,8 +802,8 @@ class EventColorModal {
         font-weight: 600;
       }
       .ecm-property-indicator {
-        width: 16px;
-        height: 16px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
         border: 2px solid rgba(0, 0, 0, 0.1);
         flex-shrink: 0;
