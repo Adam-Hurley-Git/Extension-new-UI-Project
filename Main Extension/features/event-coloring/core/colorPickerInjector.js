@@ -774,8 +774,8 @@ export class ColorPickerInjector {
               }
               this.closeMenus();
 
-              // Trigger DOM update without page reload
-              this.triggerColorUpdate();
+              // Force page refresh to show cleared state
+              window.location.reload();
             },
             onClose: () => {
               console.log('[CF] Recurring clear dialog closed');
@@ -792,8 +792,8 @@ export class ColorPickerInjector {
           }
           this.closeMenus();
 
-          // Trigger DOM update without page reload
-          this.triggerColorUpdate();
+          // Force page refresh to show cleared state
+          window.location.reload();
         }
         return;
       }
