@@ -8969,6 +8969,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
     await window.cc3Storage.setEventColorCategory(newCategory);
     await loadEventColoringSettings();
+    notifyContentScriptSettingsChanged();
 
     debugLog('New category added:', categoryId);
   }
@@ -8980,6 +8981,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
     categories[categoryId].name = newName;
     await window.cc3Storage.setEventColorCategory(categories[categoryId]);
+    notifyContentScriptSettingsChanged();
 
     debugLog('Category name updated:', categoryId, newName);
   }
@@ -8988,6 +8990,7 @@ Would you like to refresh all Google Calendar tabs?`;
   async function deleteCategory(categoryId) {
     await window.cc3Storage.deleteEventColorCategory(categoryId);
     await loadEventColoringSettings();
+    notifyContentScriptSettingsChanged();
 
     debugLog('Category deleted:', categoryId);
   }
@@ -9232,6 +9235,7 @@ Would you like to refresh all Google Calendar tabs?`;
     categories[categoryId].colors.push({ hex: colorHex, label });
     await window.cc3Storage.setEventColorCategory(categories[categoryId]);
     await loadEventColoringSettings();
+    notifyContentScriptSettingsChanged();
 
     debugLog('Color added to category:', categoryId, colorHex);
   }
@@ -9246,6 +9250,7 @@ Would you like to refresh all Google Calendar tabs?`;
     );
     await window.cc3Storage.setEventColorCategory(categories[categoryId]);
     await loadEventColoringSettings();
+    notifyContentScriptSettingsChanged();
 
     debugLog('Color removed from category:', categoryId, colorHex);
   }
