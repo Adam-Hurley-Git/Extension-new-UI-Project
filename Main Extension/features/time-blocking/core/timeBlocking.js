@@ -511,7 +511,7 @@
             // Remove old tooltip listeners and add new ones with updated color
             const newBlockEl = blockEl.cloneNode(true);
             blockEl.parentNode.replaceChild(newBlockEl, blockEl);
-            this.addTooltip(newBlockEl, block.label, adjustedColor);
+            this.addTooltip(newBlockEl, block.label, finalColor);
           }
         }
       });
