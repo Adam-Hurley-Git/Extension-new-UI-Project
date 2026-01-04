@@ -1509,8 +1509,8 @@
             }
             closeColorPicker();
 
-            // Force page refresh to show cleared state
-            window.location.reload();
+            // Trigger DOM update without page reload
+            window.dispatchEvent(new CustomEvent('cf-event-color-changed'));
           },
           onClose: () => {
             console.log('[EventColoring] Recurring clear dialog closed');
@@ -1529,8 +1529,8 @@
 
         closeColorPicker();
 
-        // Force page refresh to show cleared state
-        window.location.reload();
+        // Trigger DOM update without page reload
+        window.dispatchEvent(new CustomEvent('cf-event-color-changed'));
       }
       return;
     }

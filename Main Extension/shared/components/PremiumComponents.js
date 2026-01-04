@@ -427,10 +427,16 @@
    * @returns {Promise<boolean>}
    */
   async function checkAndPromptUpgrade(featureKey, modalOptions = {}) {
-    // If featureAccess isn't loaded, assume premium (fail-open)
+    // If featureAccess isn't loaded, deny access (fail-closed for security)
     if (!window.cc3FeatureAccess) {
-      console.warn('[PremiumComponents] cc3FeatureAccess not loaded, allowing access');
-      return true;
+      console.error('[PremiumComponents] cc3FeatureAccess not loaded, denying access');
+      showUpgradeModal({
+        feature: modalOptions.feature || featureKey,
+        description: modalOptions.description || 'This feature requires a Pro subscription. Please try again or contact support if this persists.',
+        onUpgrade: modalOptions.onUpgrade,
+        onCancel: modalOptions.onCancel,
+      });
+      return false;
     }
 
     const access = await window.cc3FeatureAccess.canAccess(featureKey);
@@ -463,10 +469,16 @@
    * @returns {Promise<boolean>}
    */
   async function gateAndStorePendingAction(featureKey, pendingAction, modalOptions = {}) {
-    // If featureAccess isn't loaded, assume premium (fail-open)
+    // If featureAccess isn't loaded, deny access (fail-closed for security)
     if (!window.cc3FeatureAccess) {
-      console.warn('[PremiumComponents] cc3FeatureAccess not loaded, allowing access');
-      return true;
+      console.error('[PremiumComponents] cc3FeatureAccess not loaded, denying access');
+      showUpgradeModal({
+        feature: modalOptions.feature || featureKey,
+        description: modalOptions.description || 'This feature requires a Pro subscription. Please try again or contact support if this persists.',
+        onUpgrade: modalOptions.onUpgrade,
+        onCancel: modalOptions.onCancel,
+      });
+      return false;
     }
 
     const access = await window.cc3FeatureAccess.canAccess(featureKey);
