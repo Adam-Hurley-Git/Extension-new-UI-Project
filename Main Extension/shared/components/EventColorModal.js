@@ -277,9 +277,22 @@ class EventColorModal {
 
   /**
    * Get the effective color for a property (working > original)
+   * Returns null if explicitly cleared, original if never set
    */
   getEffectiveColor(property) {
-    return this.workingColors[property] || this.originalColors[property] || null;
+    // If workingColors has this property set (even to null), use it
+    if (property in this.workingColors) {
+      return this.workingColors[property];
+    }
+    // Otherwise fall back to original
+    return this.originalColors[property] || null;
+  }
+
+  /**
+   * Check if a color property was explicitly cleared (set to null)
+   */
+  isColorCleared(property) {
+    return property in this.workingColors && this.workingColors[property] === null;
   }
 
   /**
@@ -289,13 +302,28 @@ class EventColorModal {
     const preview = this.element.querySelector(`#${this.id}-preview`);
     if (!preview) return;
 
+    // Check if background was explicitly cleared
+    const bgCleared = this.isColorCleared('background');
+    const textCleared = this.isColorCleared('text');
+
     // Use working colors if set, otherwise fall back to original event colors
-    const bg = this.getEffectiveColor('background') || '#039be5';
-    const text = this.workingColors.text || (this.currentColors.text ? this.currentColors.text : (this.originalColors.text || getContrastColor(bg)));
+    const bg = bgCleared ? null : (this.getEffectiveColor('background') || '#039be5');
     const border = this.getEffectiveColor('border');
     const borderWidth = this.workingColors.borderWidth || 2;
 
-    preview.style.backgroundColor = bg;
+    // Show "no color" pattern when background is cleared
+    if (bgCleared) {
+      preview.style.backgroundColor = '#f3f4f6';
+      preview.style.backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,.08) 5px, rgba(0,0,0,.08) 10px)';
+      preview.classList.add('ecm-preview-cleared');
+    } else {
+      preview.style.backgroundColor = bg;
+      preview.style.backgroundImage = 'none';
+      preview.classList.remove('ecm-preview-cleared');
+    }
+
+    // Text color - show "no color" state or calculate contrast
+    const text = textCleared ? '#666' : (this.workingColors.text || (this.currentColors.text ? this.currentColors.text : (this.originalColors.text || getContrastColor(bg || '#039be5'))));
     preview.style.color = text;
 
     if (border) {
@@ -321,18 +349,37 @@ class EventColorModal {
     const textIndicator = this.element.querySelector(`#${this.id}-text-indicator`);
     const borderIndicator = this.element.querySelector(`#${this.id}-border-indicator`);
 
-    // Background indicator - use working color if set, else original event color
+    // Background indicator - show "no color" state if explicitly cleared
     if (bgIndicator) {
-      const bgColor = this.getEffectiveColor('background') || '#039be5';
-      bgIndicator.style.backgroundColor = bgColor;
-      bgIndicator.classList.toggle('has-color', !!this.workingColors.background);
+      if (this.isColorCleared('background')) {
+        // Explicitly cleared - show diagonal line pattern
+        bgIndicator.style.backgroundColor = '#e0e0e0';
+        bgIndicator.style.backgroundImage = 'linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%)';
+        bgIndicator.classList.remove('has-color');
+        bgIndicator.classList.add('no-border');
+      } else {
+        const bgColor = this.getEffectiveColor('background') || '#039be5';
+        bgIndicator.style.backgroundColor = bgColor;
+        bgIndicator.style.backgroundImage = 'none';
+        bgIndicator.classList.toggle('has-color', !!this.workingColors.background);
+        bgIndicator.classList.remove('no-border');
+      }
     }
 
-    // Text indicator - use working color if set, else original event text color
+    // Text indicator - show "no color" state if explicitly cleared
     if (textIndicator) {
-      const textColor = this.getEffectiveColor('text') || '#ffffff';
-      textIndicator.style.backgroundColor = textColor;
-      textIndicator.classList.toggle('has-color', !!this.workingColors.text);
+      if (this.isColorCleared('text')) {
+        textIndicator.style.backgroundColor = '#e0e0e0';
+        textIndicator.style.backgroundImage = 'linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%)';
+        textIndicator.classList.remove('has-color');
+        textIndicator.classList.add('no-border');
+      } else {
+        const textColor = this.getEffectiveColor('text') || '#ffffff';
+        textIndicator.style.backgroundColor = textColor;
+        textIndicator.style.backgroundImage = 'none';
+        textIndicator.classList.toggle('has-color', !!this.workingColors.text);
+        textIndicator.classList.remove('no-border');
+      }
     }
 
     // Border indicator - use working color if set, else original or show no border style
@@ -340,11 +387,13 @@ class EventColorModal {
       const borderColor = this.getEffectiveColor('border');
       if (borderColor) {
         borderIndicator.style.backgroundColor = borderColor;
+        borderIndicator.style.backgroundImage = 'none';
         borderIndicator.classList.add('has-color');
         borderIndicator.classList.remove('no-border');
       } else {
         // No border set - show a "no border" style (gray with diagonal line)
         borderIndicator.style.backgroundColor = '#e0e0e0';
+        borderIndicator.style.backgroundImage = 'linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%)';
         borderIndicator.classList.remove('has-color');
         borderIndicator.classList.add('no-border');
       }

@@ -42,6 +42,13 @@
 
     // Create tooltip element for labels
     createTooltipElement: function () {
+      // Always clean up any existing tooltip by ID first (prevents orphaned elements)
+      const existing = document.getElementById('cc3-timeblock-tooltip');
+      if (existing) {
+        existing.remove();
+      }
+
+      // Skip if we already have a valid reference
       if (this.tooltipEl) return;
 
       this.tooltipEl = document.createElement('div');

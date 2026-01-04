@@ -68,8 +68,19 @@
 
     // Start DOM observer
     startObserver: function () {
+      // Clear any existing observer
       if (this.state.observer) {
         this.state.observer.disconnect();
+      }
+
+      // Clear any existing intervals to prevent duplicates
+      if (this.state.persistenceInterval) {
+        clearInterval(this.state.persistenceInterval);
+        this.state.persistenceInterval = null;
+      }
+      if (this.state.viewCheckInterval) {
+        clearInterval(this.state.viewCheckInterval);
+        this.state.viewCheckInterval = null;
       }
 
       // Anti-flicker approach - immediate render with smart throttling
