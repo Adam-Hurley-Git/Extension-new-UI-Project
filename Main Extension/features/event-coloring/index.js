@@ -1570,12 +1570,16 @@
     console.log('[EventColoring] openCustomColorModal - calendarDefaults:', calendarDefaults);
     console.log('[EventColoring] openCustomColorModal - currentColors to pass to modal:', currentColors);
 
-    // Get original event colors from DOM for accurate preview
+    // Get DOM colors (Google's actual displayed color)
     const domColors = getEventColorsFromDOM(eventId);
+
+    // Build originalColors for preview fallback:
+    // - Background: list coloring > Google's DOM color (always has a value, never blank)
+    // - Text/Border: list coloring only (blank if not explicitly set)
     const originalColors = {
-      background: domColors.background,
-      text: domColors.text,
-      border: domColors.border,
+      background: calendarDefaults?.background || domColors.background,
+      text: calendarDefaults?.text || null,
+      border: calendarDefaults?.border || null,
     };
     const eventTitle = domColors.title;
 

@@ -302,29 +302,16 @@ class EventColorModal {
     const preview = this.element.querySelector(`#${this.id}-preview`);
     if (!preview) return;
 
-    // Check if background was explicitly cleared
-    const bgCleared = this.isColorCleared('background');
-    const textCleared = this.isColorCleared('text');
+    // Background: ALWAYS show a color (events always have visible background)
+    // Priority: working color > original color (which includes list coloring > Google's color)
+    const bg = this.workingColors.background || this.originalColors.background;
+    preview.style.backgroundColor = bg;
+    preview.style.backgroundImage = 'none';
+    preview.classList.remove('ecm-preview-cleared');
 
-    // Use working colors if set, otherwise fall back to original event colors
-    const bg = bgCleared ? null : (this.getEffectiveColor('background') || '#039be5');
-    const border = this.getEffectiveColor('border');
+    // Border: show if set (working > original), otherwise none
+    const border = this.workingColors.border || this.originalColors.border;
     const borderWidth = this.workingColors.borderWidth || 2;
-
-    // Show "no color" pattern when background is cleared
-    if (bgCleared) {
-      preview.style.backgroundColor = '#f3f4f6';
-      preview.style.backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,.08) 5px, rgba(0,0,0,.08) 10px)';
-      preview.classList.add('ecm-preview-cleared');
-    } else {
-      preview.style.backgroundColor = bg;
-      preview.style.backgroundImage = 'none';
-      preview.classList.remove('ecm-preview-cleared');
-    }
-
-    // Text color - show "no color" state or calculate contrast
-    const text = textCleared ? '#666' : (this.workingColors.text || (this.currentColors.text ? this.currentColors.text : (this.originalColors.text || getContrastColor(bg || '#039be5'))));
-    preview.style.color = text;
 
     if (border) {
       preview.style.outline = `${borderWidth}px solid ${border}`;
@@ -332,6 +319,10 @@ class EventColorModal {
     } else {
       preview.style.outline = 'none';
     }
+
+    // Text color: working > original > auto-contrast based on background
+    const text = this.workingColors.text || this.originalColors.text || getContrastColor(bg);
+    preview.style.color = text;
 
     // Update title text color
     const title = preview.querySelector('.ecm-preview-title');
@@ -349,49 +340,43 @@ class EventColorModal {
     const textIndicator = this.element.querySelector(`#${this.id}-text-indicator`);
     const borderIndicator = this.element.querySelector(`#${this.id}-border-indicator`);
 
-    // Background indicator - show "no color" state if explicitly cleared
+    // Background indicator - ALWAYS show a color (events always have visible background)
+    // Priority: working color > original color (which includes list coloring > Google's color)
     if (bgIndicator) {
-      if (this.isColorCleared('background')) {
-        // Explicitly cleared - show diagonal line pattern
-        bgIndicator.style.backgroundColor = '#e0e0e0';
-        bgIndicator.style.backgroundImage = 'linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%)';
-        bgIndicator.classList.remove('has-color');
-        bgIndicator.classList.add('no-border');
-      } else {
-        const bgColor = this.getEffectiveColor('background') || '#039be5';
-        bgIndicator.style.backgroundColor = bgColor;
-        bgIndicator.style.backgroundImage = 'none';
-        bgIndicator.classList.toggle('has-color', !!this.workingColors.background);
-        bgIndicator.classList.remove('no-border');
-      }
+      const bgColor = this.workingColors.background || this.originalColors.background;
+      bgIndicator.style.backgroundColor = bgColor;
+      bgIndicator.style.backgroundImage = 'none';
+      bgIndicator.classList.toggle('has-color', !!this.workingColors.background);
+      bgIndicator.classList.remove('no-border');
     }
 
-    // Text indicator - show "no color" state if explicitly cleared
+    // Text indicator - show color if set (working > original), otherwise blank state
     if (textIndicator) {
-      if (this.isColorCleared('text')) {
-        textIndicator.style.backgroundColor = '#e0e0e0';
-        textIndicator.style.backgroundImage = 'linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%)';
-        textIndicator.classList.remove('has-color');
-        textIndicator.classList.add('no-border');
-      } else {
-        const textColor = this.getEffectiveColor('text') || '#ffffff';
+      const textColor = this.workingColors.text || this.originalColors.text;
+      if (textColor) {
         textIndicator.style.backgroundColor = textColor;
         textIndicator.style.backgroundImage = 'none';
         textIndicator.classList.toggle('has-color', !!this.workingColors.text);
         textIndicator.classList.remove('no-border');
+      } else {
+        // No text color set - show blank state (gray with diagonal line)
+        textIndicator.style.backgroundColor = '#e0e0e0';
+        textIndicator.style.backgroundImage = 'linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%)';
+        textIndicator.classList.remove('has-color');
+        textIndicator.classList.add('no-border');
       }
     }
 
-    // Border indicator - use working color if set, else original or show no border style
+    // Border indicator - show color if set (working > original), otherwise blank state
     if (borderIndicator) {
-      const borderColor = this.getEffectiveColor('border');
+      const borderColor = this.workingColors.border || this.originalColors.border;
       if (borderColor) {
         borderIndicator.style.backgroundColor = borderColor;
         borderIndicator.style.backgroundImage = 'none';
-        borderIndicator.classList.add('has-color');
+        borderIndicator.classList.toggle('has-color', !!this.workingColors.border);
         borderIndicator.classList.remove('no-border');
       } else {
-        // No border set - show a "no border" style (gray with diagonal line)
+        // No border set - show blank state (gray with diagonal line)
         borderIndicator.style.backgroundColor = '#e0e0e0';
         borderIndicator.style.backgroundImage = 'linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%)';
         borderIndicator.classList.remove('has-color');
