@@ -8721,18 +8721,21 @@ Would you like to refresh all Google Calendar tabs?`;
     };
 
     // Calculate preview styles
-    const previewBg = bgColor || calendar.backgroundColor || '#039be5';
+    // Use DOM color if available (actual Google Calendar color), fall back to API color
+    const googleColor = calendarDOMColors[calendar.id] || calendar.backgroundColor || '#039be5';
+    // If no custom background set, use the Google color (DOM or API)
+    const previewBg = bgColor || googleColor;
     const previewText = textColor || getContrastColor(previewBg);
     const previewBorder = borderColor ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: -${borderWidth * 0.3}px;` : '';
-    // Use DOM color if available (more accurate), fall back to API color
-    const stripeColor = calendarDOMColors[calendar.id] || calendar.backgroundColor || '#1a73e8';
+    // Stripe always uses Google's color (the sidebar stripe matches Google's intent)
+    const stripeColor = googleColor;
 
     item.innerHTML = `
       <div class="event-calendar-card">
         <div class="event-calendar-header">
           <div class="event-calendar-title-group">
             <div class="event-calendar-title">
-              <span class="event-calendar-google-color" style="background-color: ${calendar.backgroundColor};" title="Google calendar color"></span>
+              <span class="event-calendar-google-color" style="background-color: ${googleColor};" title="Google calendar color"></span>
               <span class="event-calendar-name" title="${escapeHtml(calendar.name)}">${escapeHtml(calendar.name)}</span>
             </div>
             <div class="event-calendar-meta">Google Calendar</div>
@@ -9148,7 +9151,8 @@ Would you like to refresh all Google Calendar tabs?`;
     // Get all current colors for this calendar
     const colors = eventCalendarColors[calendarId] || {};
     const calendar = eventCalendarsList.find(c => c.id === calendarId);
-    const googleBgColor = calendar?.backgroundColor || '#039be5';
+    // Use DOM color if available (actual Google Calendar color), fall back to API color
+    const googleBgColor = calendarDOMColors[calendarId] || calendar?.backgroundColor || '#039be5';
 
     // Update the unified preview card
     const previewCard = item.querySelector('.event-calendar-preview');
@@ -9255,7 +9259,8 @@ Would you like to refresh all Google Calendar tabs?`;
 
     const colors = eventCalendarColors[calendarId] || {};
     const calendar = eventCalendarsList.find(c => c.id === calendarId);
-    const googleBgColor = calendar?.backgroundColor || '#039be5';
+    // Use DOM color if available (actual Google Calendar color), fall back to API color
+    const googleBgColor = calendarDOMColors[calendarId] || calendar?.backgroundColor || '#039be5';
 
     const previewCard = item.querySelector('.event-calendar-preview');
     if (previewCard) {

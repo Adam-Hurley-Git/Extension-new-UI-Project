@@ -916,7 +916,7 @@ class EventColorModal {
       }
       .ecm-preview-stripe {
         width: 5px;
-        background: #f4511e;
+        /* Color is set inline from originalColors.background */
         flex-shrink: 0;
       }
       .ecm-preview-content {
