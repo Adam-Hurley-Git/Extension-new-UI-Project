@@ -673,6 +673,12 @@
     // Apply stored colors
     applyStoredColors();
 
+    // Scan and cache calendar DOM colors for popup use
+    // Use a small delay to ensure DOM is fully rendered
+    setTimeout(() => {
+      scanAndCacheCalendarDOMColors();
+    }, 500);
+
     // Capture event clicks
     setupEventClickCapture();
 
@@ -735,6 +741,8 @@
       if (renderTimeout) clearTimeout(renderTimeout);
       renderTimeout = setTimeout(() => {
         applyStoredColors();
+        // Also update calendar DOM colors cache for popup
+        debouncedScanAndCacheCalendarDOMColors();
       }, 100);
     });
 
@@ -1310,16 +1318,19 @@
       return { background: '#039be5', text: '#ffffff', border: null, title: 'Sample Event' };
     }
 
-    // Get computed styles
-    const computedStyle = window.getComputedStyle(element);
+    // Get the true original color using our priority-based detection
+    // (1st: .jSrjCf stripe, 2nd: element background, 3rd: API color)
+    let background = getOriginalEventColor(element);
 
-    // Get background color
-    let background = computedStyle.backgroundColor;
-    if (background === 'rgba(0, 0, 0, 0)' || background === 'transparent') {
-      background = '#039be5'; // Default calendar blue
-    } else {
-      // Convert rgb to hex
-      background = rgbToHex(background);
+    // Fallback if getOriginalEventColor returns null
+    if (!background) {
+      const computedStyle = window.getComputedStyle(element);
+      background = computedStyle.backgroundColor;
+      if (background === 'rgba(0, 0, 0, 0)' || background === 'transparent') {
+        background = '#039be5'; // Default calendar blue
+      } else {
+        background = rgbToHex(background);
+      }
     }
 
     // Get text color from the title element
@@ -1420,6 +1431,95 @@
     }
 
     return null;
+  }
+
+  /**
+   * Scan all visible events and build a calendarId → DOM color cache.
+   * This captures the actual colors Google displays (which may differ from API colors)
+   * and stores them to chrome.storage.local for use by the popup.
+   */
+  let calendarDOMColorsCacheTimeout = null;
+
+  async function scanAndCacheCalendarDOMColors() {
+    const calendarDOMColors = {};
+
+    // Find all event elements that have the original color cached or can provide it
+    const allEventElements = document.querySelectorAll('[data-eventid]');
+
+    allEventElements.forEach((element) => {
+      // Skip events in dialogs
+      if (element.closest('[role="dialog"]')) return;
+
+      const eventId = element.getAttribute('data-eventid');
+      if (!eventId) return;
+
+      // Get the calendar ID for this event
+      const calendarId = getCalendarIdForEvent(eventId);
+      if (!calendarId) return;
+
+      // Skip if we already have a color for this calendar
+      if (calendarDOMColors[calendarId]) return;
+
+      // Try to get the original color from this element
+      // Check cached value first
+      let domColor = element.dataset.cfOriginalColor;
+
+      // If not cached, try to read from the DOM (only if not modified by our extension)
+      if (!domColor && !element.dataset.cfEventColored) {
+        // Look for the sidebar stripe element
+        const sidebarStripe = element.querySelector('.jSrjCf');
+        if (sidebarStripe) {
+          const stripeStyle = window.getComputedStyle(sidebarStripe);
+          const stripeColor = stripeStyle.backgroundColor;
+          if (stripeColor && stripeColor !== 'rgba(0, 0, 0, 0)' && stripeColor !== 'transparent') {
+            domColor = rgbToHex(stripeColor);
+          }
+        }
+
+        // Fall back to element background
+        if (!domColor) {
+          const computedStyle = window.getComputedStyle(element);
+          const bgColor = computedStyle.backgroundColor;
+          if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+            // Check if it's a gradient (from our extension)
+            if (!bgColor.includes('gradient')) {
+              domColor = rgbToHex(bgColor);
+            }
+          }
+        }
+      }
+
+      if (domColor) {
+        calendarDOMColors[calendarId] = domColor;
+      }
+    });
+
+    // Only save if we found any colors
+    if (Object.keys(calendarDOMColors).length > 0) {
+      try {
+        // Merge with existing cache to preserve colors from calendars not currently visible
+        const existing = await chrome.storage.local.get('cf.calendarDOMColors');
+        const merged = {
+          ...(existing['cf.calendarDOMColors'] || {}),
+          ...calendarDOMColors,
+        };
+
+        await chrome.storage.local.set({ 'cf.calendarDOMColors': merged });
+        console.log('[EventColoring] Cached calendar DOM colors:', merged);
+      } catch (error) {
+        console.error('[EventColoring] Failed to cache calendar DOM colors:', error);
+      }
+    }
+  }
+
+  // Debounced version to avoid excessive calls
+  function debouncedScanAndCacheCalendarDOMColors() {
+    if (calendarDOMColorsCacheTimeout) {
+      clearTimeout(calendarDOMColorsCacheTimeout);
+    }
+    calendarDOMColorsCacheTimeout = setTimeout(() => {
+      scanAndCacheCalendarDOMColors();
+    }, 500);
   }
 
   /**

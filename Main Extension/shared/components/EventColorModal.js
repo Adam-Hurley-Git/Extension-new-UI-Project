@@ -155,7 +155,7 @@ class EventColorModal {
         <div class="ecm-preview-label">PREVIEW</div>
         <div class="ecm-preview-container">
           <div class="ecm-preview-event" id="${this.id}-preview">
-            <div class="ecm-preview-stripe"></div>
+            <div class="ecm-preview-stripe" style="background-color: ${this.originalColors.background || '#039be5'};"></div>
             <div class="ecm-preview-content">
               <span class="ecm-preview-title">${this.eventTitle}</span>
             </div>

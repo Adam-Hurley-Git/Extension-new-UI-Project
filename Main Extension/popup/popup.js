@@ -8617,6 +8617,7 @@ Would you like to refresh all Google Calendar tabs?`;
 
   let eventCalendarsList = []; // Cache of calendars from API
   let eventCalendarColors = {}; // Cache of calendar colors from settings
+  let calendarDOMColors = {}; // Cache of actual DOM colors from content script (more accurate than API colors)
   let activeEventCalendarColorPicker = null; // Currently open color picker
 
   // Load event calendar colors
@@ -8647,6 +8648,11 @@ Would you like to refresh all Google Calendar tabs?`;
 
       // Get saved calendar colors from storage
       eventCalendarColors = await window.cc3Storage.getEventCalendarColors();
+
+      // Get cached DOM colors (actual colors displayed in Google Calendar, may differ from API)
+      const domColorsData = await chrome.storage.local.get('cf.calendarDOMColors');
+      calendarDOMColors = domColorsData['cf.calendarDOMColors'] || {};
+      debugLog('Loaded DOM colors cache:', calendarDOMColors);
 
       // Convert response to array (now includes summary from API)
       eventCalendarsList = Object.entries(calendars).map(([id, data]) => ({
@@ -8718,7 +8724,8 @@ Would you like to refresh all Google Calendar tabs?`;
     const previewBg = bgColor || calendar.backgroundColor || '#039be5';
     const previewText = textColor || getContrastColor(previewBg);
     const previewBorder = borderColor ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: -${borderWidth * 0.3}px;` : '';
-    const stripeColor = calendar.backgroundColor || '#1a73e8';
+    // Use DOM color if available (more accurate), fall back to API color
+    const stripeColor = calendarDOMColors[calendar.id] || calendar.backgroundColor || '#1a73e8';
 
     item.innerHTML = `
       <div class="event-calendar-card">
