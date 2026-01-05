@@ -1652,16 +1652,17 @@
 
     // Build originalColors for preview fallback:
     // - Background: list coloring > event's actual background (Google's 12-color) > stripe > cached
-    // - Text/Border: list coloring only (blank if not explicitly set)
+    // - Text: list coloring > DOM text color (Google's auto black/white) > null (let modal calculate)
+    // - Border: list coloring only (blank if not explicitly set)
     // - stripeColor: stripe element's color (calendar's default, doesn't change with Google's 12-color)
     const originalColors = {
       background: calendarDefaults?.background || currentEventBackground || currentStripeColor || domColors.background,
-      text: calendarDefaults?.text || null,
+      text: calendarDefaults?.text || domColors.text || null,  // Include Google's auto text color
       border: calendarDefaults?.border || null,
       stripeColor: currentStripeColor || currentEventBackground || domColors.background,
     };
 
-    console.log('[EventColoring] DOM colors - stripe:', currentStripeColor, 'eventBg:', currentEventBackground);
+    console.log('[EventColoring] DOM colors - stripe:', currentStripeColor, 'eventBg:', currentEventBackground, 'text:', domColors.text);
     const eventTitle = domColors.title;
 
     // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal

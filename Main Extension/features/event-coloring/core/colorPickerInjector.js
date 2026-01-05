@@ -375,6 +375,7 @@ export class ColorPickerInjector {
     // - Event background = actual event color (changes when user picks from Google's 12 colors)
     const currentStripeColor = this.getStripeOnlyFromDOM(eventElement);
     const currentEventBackground = this.getEventBackgroundFromDOM(eventElement);
+    const currentTextColor = this.getTextColorFromDOM(eventElement);
 
     // Get event title from DOM
     let eventTitle = 'Sample Event';
@@ -387,16 +388,17 @@ export class ColorPickerInjector {
 
     // Build originalColors for preview fallback:
     // - Background: list coloring > event's actual background (Google's 12-color) > stripe > default
+    // - Text: list coloring > DOM text color (Google's auto black/white) > null (let modal calculate)
     // - stripeColor: stripe element's color (calendar's default, doesn't change with Google's 12-color)
     const originalColors = {
       background: calendarDefaults?.background || currentEventBackground || currentStripeColor || '#039be5',
-      text: calendarDefaults?.text || null,
+      text: calendarDefaults?.text || currentTextColor || null,  // Include Google's auto text color
       border: calendarDefaults?.border || null,
       stripeColor: currentStripeColor || currentEventBackground || '#039be5',
     };
 
     console.log('[CF] Opening EventColorModal with colors:', currentColors, 'originalColors:', originalColors, 'calendarDefaults:', calendarDefaults);
-    console.log('[CF] DOM colors - stripe:', currentStripeColor, 'eventBg:', currentEventBackground);
+    console.log('[CF] DOM colors - stripe:', currentStripeColor, 'eventBg:', currentEventBackground, 'text:', currentTextColor);
 
     this.activeModal = new EventColorModal({
       id: `cf-event-color-modal-${Date.now()}`,
@@ -454,6 +456,28 @@ export class ColorPickerInjector {
     const bgColor = computedStyle.backgroundColor;
     if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
       return this.rgbToHex(bgColor);
+    }
+
+    return null;
+  }
+
+  /**
+   * Get the text color from the DOM (Google's auto black/white).
+   * Reads from the title element inside the event.
+   * @param {HTMLElement} element - The event element
+   * @returns {string|null} - The text hex color or null
+   */
+  getTextColorFromDOM(element) {
+    if (!element) return null;
+
+    // Read from the title element (same selectors as used elsewhere)
+    const titleEl = element.querySelector('.I0UMhf') || element.querySelector('.lhydbb');
+    if (titleEl) {
+      const titleStyle = window.getComputedStyle(titleEl);
+      const textColor = titleStyle.color;
+      if (textColor && textColor !== 'rgba(0, 0, 0, 0)' && textColor !== 'transparent') {
+        return this.rgbToHex(textColor);
+      }
     }
 
     return null;
