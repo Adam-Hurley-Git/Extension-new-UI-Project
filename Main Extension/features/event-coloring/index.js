@@ -1605,8 +1605,27 @@
 
     // Get CURRENT stripe color directly from DOM (bypasses cache)
     // This ensures we show Google's actual current color even if user changed it via Google's picker
-    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
-    const currentStripeColor = getCurrentStripeColorFromDOM(eventElement) || domColors.background;
+    // IMPORTANT: Find the event element in the CALENDAR, not in dialogs (dialogs may not have stripe)
+    const allEventElements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+    let calendarEventElement = null;
+    let dialogEventElement = null;
+    for (const el of allEventElements) {
+      if (!el.closest('[role="dialog"]')) {
+        calendarEventElement = el;
+        break;  // Prefer calendar element
+      } else if (!dialogEventElement) {
+        dialogEventElement = el;  // Keep as fallback
+      }
+    }
+
+    // Try calendar element first (has stripe), then dialog element, then fall back to cached
+    let currentStripeColor = getCurrentStripeColorFromDOM(calendarEventElement);
+    if (!currentStripeColor && dialogEventElement) {
+      currentStripeColor = getCurrentStripeColorFromDOM(dialogEventElement);
+    }
+    if (!currentStripeColor) {
+      currentStripeColor = domColors.background;  // Last resort: cached value
+    }
 
     // Build originalColors for preview fallback:
     // - Background: list coloring > current DOM color (what user sees on calendar)
