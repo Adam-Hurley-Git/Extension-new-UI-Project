@@ -1318,13 +1318,15 @@
       return { background: '#039be5', text: '#ffffff', border: null, title: 'Sample Event' };
     }
 
+    // Get computed styles (needed for both background fallback and border detection)
+    const computedStyle = window.getComputedStyle(element);
+
     // Get the true original color using our priority-based detection
     // (1st: .jSrjCf stripe, 2nd: element background, 3rd: API color)
     let background = getOriginalEventColor(element);
 
     // Fallback if getOriginalEventColor returns null
     if (!background) {
-      const computedStyle = window.getComputedStyle(element);
       background = computedStyle.backgroundColor;
       if (background === 'rgba(0, 0, 0, 0)' || background === 'transparent') {
         background = '#039be5'; // Default calendar blue
