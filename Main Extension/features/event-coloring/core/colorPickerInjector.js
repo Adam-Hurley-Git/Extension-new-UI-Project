@@ -354,7 +354,7 @@ export class ColorPickerInjector {
       borderWidth: colorData?.borderWidth || calendarDefaults?.borderWidth || 2,
     };
 
-    // Get current stripe color from DOM (bypasses cache to get Google's actual current color)
+    // Get colors from DOM (bypasses cache to get Google's actual current colors)
     // Find event element in calendar (prefer calendar over dialog since dialog may not have stripe)
     const allEventElements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
     let calendarEventElement = null;
@@ -368,9 +368,13 @@ export class ColorPickerInjector {
       }
     }
 
-    // Read current stripe color directly from DOM (no cache)
     const eventElement = calendarEventElement || dialogEventElement;
-    let currentStripeColor = this.getCurrentStripeColorFromDOM(eventElement);
+
+    // IMPORTANT: Read stripe and background SEPARATELY
+    // - Stripe (.jSrjCf) = calendar's default color (doesn't change with Google's 12-color picker)
+    // - Event background = actual event color (changes when user picks from Google's 12 colors)
+    const currentStripeColor = this.getStripeOnlyFromDOM(eventElement);
+    const currentEventBackground = this.getEventBackgroundFromDOM(eventElement);
 
     // Get event title from DOM
     let eventTitle = 'Sample Event';
@@ -382,16 +386,17 @@ export class ColorPickerInjector {
     }
 
     // Build originalColors for preview fallback:
-    // - Background: list coloring > current DOM color (what user sees on calendar)
-    // - stripeColor: ALWAYS current Google color (bypasses cache, reflects Google picker changes)
+    // - Background: list coloring > event's actual background (Google's 12-color) > stripe > default
+    // - stripeColor: stripe element's color (calendar's default, doesn't change with Google's 12-color)
     const originalColors = {
-      background: calendarDefaults?.background || currentStripeColor || '#039be5',
+      background: calendarDefaults?.background || currentEventBackground || currentStripeColor || '#039be5',
       text: calendarDefaults?.text || null,
       border: calendarDefaults?.border || null,
-      stripeColor: currentStripeColor || '#039be5',  // Google's actual current stripe color
+      stripeColor: currentStripeColor || currentEventBackground || '#039be5',
     };
 
     console.log('[CF] Opening EventColorModal with colors:', currentColors, 'originalColors:', originalColors, 'calendarDefaults:', calendarDefaults);
+    console.log('[CF] DOM colors - stripe:', currentStripeColor, 'eventBg:', currentEventBackground);
 
     this.activeModal = new EventColorModal({
       id: `cf-event-color-modal-${Date.now()}`,
@@ -412,15 +417,16 @@ export class ColorPickerInjector {
   }
 
   /**
-   * Get the CURRENT stripe color from the DOM (bypasses any cache).
-   * Reads directly from Google's .jSrjCf stripe element.
+   * Get ONLY the stripe color from the DOM (calendar's default color).
+   * The stripe (.jSrjCf) represents the calendar's color, which doesn't change
+   * when user picks from Google's 12-color event picker.
    * @param {HTMLElement} element - The event element
-   * @returns {string|null} - The current hex color or null
+   * @returns {string|null} - The stripe hex color or null
    */
-  getCurrentStripeColorFromDOM(element) {
+  getStripeOnlyFromDOM(element) {
     if (!element) return null;
 
-    // Read directly from the sidebar stripe element (no cache)
+    // Read ONLY from the sidebar stripe element
     const sidebarStripe = element.querySelector('.jSrjCf');
     if (sidebarStripe) {
       const stripeStyle = window.getComputedStyle(sidebarStripe);
@@ -430,7 +436,20 @@ export class ColorPickerInjector {
       }
     }
 
-    // Fallback: read element background
+    return null;
+  }
+
+  /**
+   * Get the event's actual BACKGROUND color from the DOM.
+   * This is the color that changes when user picks from Google's 12-color picker.
+   * Reads from the event element itself, NOT the stripe.
+   * @param {HTMLElement} element - The event element
+   * @returns {string|null} - The event background hex color or null
+   */
+  getEventBackgroundFromDOM(element) {
+    if (!element) return null;
+
+    // Read directly from the event element's background (not stripe)
     const computedStyle = window.getComputedStyle(element);
     const bgColor = computedStyle.backgroundColor;
     if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
