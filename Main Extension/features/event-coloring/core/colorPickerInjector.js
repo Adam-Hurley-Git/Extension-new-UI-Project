@@ -354,11 +354,51 @@ export class ColorPickerInjector {
       borderWidth: colorData?.borderWidth || calendarDefaults?.borderWidth || 2,
     };
 
-    console.log('[CF] Opening EventColorModal with colors:', currentColors, 'calendarDefaults:', calendarDefaults);
+    // Get current stripe color from DOM (bypasses cache to get Google's actual current color)
+    // Find event element in calendar (prefer calendar over dialog since dialog may not have stripe)
+    const allEventElements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+    let calendarEventElement = null;
+    let dialogEventElement = null;
+    for (const el of allEventElements) {
+      if (!el.closest('[role="dialog"]')) {
+        calendarEventElement = el;
+        break;  // Prefer calendar element (has stripe)
+      } else if (!dialogEventElement) {
+        dialogEventElement = el;  // Keep as fallback
+      }
+    }
+
+    // Read current stripe color directly from DOM (no cache)
+    const eventElement = calendarEventElement || dialogEventElement;
+    let currentStripeColor = this.getCurrentStripeColorFromDOM(eventElement);
+
+    // Get event title from DOM
+    let eventTitle = 'Sample Event';
+    if (eventElement) {
+      const titleEl = eventElement.querySelector('.I0UMhf') || eventElement.querySelector('.lhydbb');
+      if (titleEl) {
+        eventTitle = titleEl.textContent?.trim() || 'Sample Event';
+      }
+    }
+
+    // Build originalColors for preview fallback:
+    // - Background: list coloring > current DOM color (what user sees on calendar)
+    // - stripeColor: ALWAYS current Google color (bypasses cache, reflects Google picker changes)
+    const originalColors = {
+      background: calendarDefaults?.background || currentStripeColor || '#039be5',
+      text: calendarDefaults?.text || null,
+      border: calendarDefaults?.border || null,
+      stripeColor: currentStripeColor || '#039be5',  // Google's actual current stripe color
+    };
+
+    console.log('[CF] Opening EventColorModal with colors:', currentColors, 'originalColors:', originalColors, 'calendarDefaults:', calendarDefaults);
 
     this.activeModal = new EventColorModal({
       id: `cf-event-color-modal-${Date.now()}`,
       currentColors,
+      originalColors,
+      eventTitle,
+      eventId,  // For freemium gating
       onApply: async (colors) => {
         console.log('[CF] Event colors applied:', colors);
         await this.handleFullColorSelect(eventId, colors);
@@ -369,6 +409,54 @@ export class ColorPickerInjector {
     });
 
     this.activeModal.open();
+  }
+
+  /**
+   * Get the CURRENT stripe color from the DOM (bypasses any cache).
+   * Reads directly from Google's .jSrjCf stripe element.
+   * @param {HTMLElement} element - The event element
+   * @returns {string|null} - The current hex color or null
+   */
+  getCurrentStripeColorFromDOM(element) {
+    if (!element) return null;
+
+    // Read directly from the sidebar stripe element (no cache)
+    const sidebarStripe = element.querySelector('.jSrjCf');
+    if (sidebarStripe) {
+      const stripeStyle = window.getComputedStyle(sidebarStripe);
+      const stripeColor = stripeStyle.backgroundColor;
+      if (stripeColor && stripeColor !== 'rgba(0, 0, 0, 0)' && stripeColor !== 'transparent') {
+        return this.rgbToHex(stripeColor);
+      }
+    }
+
+    // Fallback: read element background
+    const computedStyle = window.getComputedStyle(element);
+    const bgColor = computedStyle.backgroundColor;
+    if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+      return this.rgbToHex(bgColor);
+    }
+
+    return null;
+  }
+
+  /**
+   * Convert RGB string to hex
+   * @param {string} rgb - RGB color string like "rgb(255, 0, 0)"
+   * @returns {string|null} - Hex color like "#ff0000" or null
+   */
+  rgbToHex(rgb) {
+    if (!rgb) return null;
+    if (rgb.startsWith('#')) return rgb;
+
+    const match = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!match) return null;
+
+    const r = parseInt(match[1]).toString(16).padStart(2, '0');
+    const g = parseInt(match[2]).toString(16).padStart(2, '0');
+    const b = parseInt(match[3]).toString(16).padStart(2, '0');
+
+    return `#${r}${g}${b}`;
   }
 
   /**
