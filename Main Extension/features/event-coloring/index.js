@@ -1366,6 +1366,63 @@
   }
 
   /**
+   * Get or cache the original sidebar stripe color from the DOM
+   * This reads the actual displayed color from Google's .jSrjCf stripe element,
+   * which is the TRUE color Google uses for the calendar/event sidebar.
+   * Falls back to event background color or API color if stripe not found.
+   * @param {HTMLElement} element - The event element
+   * @returns {string|null} - The original hex color or null
+   */
+  function getOriginalEventColor(element) {
+    if (!element) return null;
+
+    // Check if we already cached the original color
+    const cachedColor = element.dataset.cfOriginalColor;
+    if (cachedColor) {
+      return cachedColor;
+    }
+
+    let hexColor = null;
+
+    // PRIORITY 1: Look for Google's sidebar stripe element (.jSrjCf)
+    // This is the most accurate representation of the calendar/event color
+    const sidebarStripe = element.querySelector('.jSrjCf');
+    if (sidebarStripe) {
+      const stripeStyle = window.getComputedStyle(sidebarStripe);
+      const stripeColor = stripeStyle.backgroundColor;
+      if (stripeColor && stripeColor !== 'rgba(0, 0, 0, 0)' && stripeColor !== 'transparent') {
+        hexColor = rgbToHex(stripeColor);
+        if (hexColor) {
+          element.dataset.cfOriginalColor = hexColor;
+          return hexColor;
+        }
+      }
+    }
+
+    // PRIORITY 2: Read the event element's background color
+    const computedStyle = window.getComputedStyle(element);
+    let bgColor = computedStyle.backgroundColor;
+
+    if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+      hexColor = rgbToHex(bgColor);
+      if (hexColor) {
+        element.dataset.cfOriginalColor = hexColor;
+        return hexColor;
+      }
+    }
+
+    // PRIORITY 3: Fall back to API color
+    const eventId = element.getAttribute('data-eventid');
+    const apiColor = getCalendarColorForEvent(eventId);
+    if (apiColor) {
+      element.dataset.cfOriginalColor = apiColor;
+      return apiColor;
+    }
+
+    return null;
+  }
+
+  /**
    * Open the custom color swatch modal (with bg/text/border tabs)
    */
   let activeColorModal = null;
@@ -1696,16 +1753,17 @@
     if (isTaskElement(element)) return;
 
     const { background, text, border, borderWidth = 2 } = colors;
-    const eventId = element.getAttribute('data-eventid');
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
+      // Get the original color from DOM (captures event-specific colors, not just calendar defaults)
+      // Must be called BEFORE we modify the element's background
+      const originalColor = getOriginalEventColor(element);
+
       // Apply background
       if (background) {
-        const calendarColor = getCalendarColorForEvent(eventId);
-
-        if (calendarColor) {
-          const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${background} 4px)`;
+        if (originalColor) {
+          const gradient = `linear-gradient(to right, ${originalColor} 4px, ${background} 4px)`;
           element.style.setProperty('background', gradient, 'important');
         } else {
           element.style.setProperty('background-color', background, 'important');
@@ -2378,19 +2436,19 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // Get the calendar's color from API cache (using event ID to determine calendar)
-      const eventId = element.getAttribute('data-eventid');
-      const calendarColor = getCalendarColorForEvent(eventId);
+      // Get the original color from DOM (captures event-specific colors, not just calendar defaults)
+      // Must be called BEFORE we modify the element's background
+      const originalColor = getOriginalEventColor(element);
 
       // Apply background color
       if (background) {
-        // Use a gradient to preserve the left 4px with calendar color
+        // Use a gradient to preserve the left 4px with original event color
         // and apply our custom color to the rest of the element
-        if (calendarColor) {
-          const gradient = `linear-gradient(to right, ${calendarColor} 4px, ${background} 4px)`;
+        if (originalColor) {
+          const gradient = `linear-gradient(to right, ${originalColor} 4px, ${background} 4px)`;
           element.style.setProperty('background', gradient, 'important');
         } else {
-          // Fallback: just apply the custom color if we don't have calendar color
+          // Fallback: just apply the custom color if we don't have original color
           element.style.setProperty('background-color', background, 'important');
         }
 
@@ -2585,6 +2643,7 @@
           el.style.borderColor = '';
           el.style.color = '';
           delete el.dataset.cfEventColored;
+          delete el.dataset.cfOriginalColor;
         });
       }
     } else if (message.type === 'EVENT_COLORING_SETTINGS_CHANGED') {
@@ -2640,6 +2699,7 @@
         el.style.borderColor = '';
         el.style.color = '';
         delete el.dataset.cfEventColored;
+        delete el.dataset.cfOriginalColor;
       });
       console.log('[EventColoring] Feature disabled');
     },
