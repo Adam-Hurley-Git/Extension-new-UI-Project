@@ -103,6 +103,8 @@ class EventColorModal {
       text: options.originalColors?.text || '#ffffff',
       border: options.originalColors?.border || null,
     };
+    // Google's actual stripe color (separate from background, which may include list coloring)
+    this.stripeColor = options.originalColors?.stripeColor || this.originalColors.background;
     // Event title for preview
     this.eventTitle = options.eventTitle || 'Sample Event';
     // Event ID for pending action storage (freemium gating)
@@ -155,7 +157,7 @@ class EventColorModal {
         <div class="ecm-preview-label">PREVIEW</div>
         <div class="ecm-preview-container">
           <div class="ecm-preview-event" id="${this.id}-preview">
-            <div class="ecm-preview-stripe" style="background-color: ${this.originalColors.background || '#039be5'};"></div>
+            <div class="ecm-preview-stripe" style="background-color: ${this.stripeColor};"></div>
             <div class="ecm-preview-content">
               <span class="ecm-preview-title">${this.eventTitle}</span>
             </div>

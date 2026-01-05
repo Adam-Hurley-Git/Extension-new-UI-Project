@@ -1574,12 +1574,14 @@
     const domColors = getEventColorsFromDOM(eventId);
 
     // Build originalColors for preview fallback:
-    // - Background: list coloring > Google's DOM color (always has a value, never blank)
+    // - Background: list coloring > Google's DOM color (what user sees on calendar)
     // - Text/Border: list coloring only (blank if not explicitly set)
+    // - stripeColor: ALWAYS Google's DOM color (preserved even with list coloring)
     const originalColors = {
       background: calendarDefaults?.background || domColors.background,
       text: calendarDefaults?.text || null,
       border: calendarDefaults?.border || null,
+      stripeColor: domColors.background,  // Google's actual stripe color (never list coloring)
     };
     const eventTitle = domColors.title;
 
