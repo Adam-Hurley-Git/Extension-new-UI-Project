@@ -1450,6 +1450,10 @@
       // Skip events in dialogs
       if (element.closest('[role="dialog"]')) return;
 
+      // Skip task elements - they have different colors than calendar events
+      // but share the same calendar ID (email), so we don't want to cache task colors
+      if (isTaskElement(element)) return;
+
       const eventId = element.getAttribute('data-eventid');
       if (!eventId) return;
 
