@@ -1436,6 +1436,36 @@
   }
 
   /**
+   * Get the CURRENT stripe color from the DOM (bypasses cache).
+   * Use this for modal preview to get Google's actual current color,
+   * which may have changed via Google's native color picker.
+   * @param {HTMLElement} element - The event element
+   * @returns {string|null} - The current hex color or null
+   */
+  function getCurrentStripeColorFromDOM(element) {
+    if (!element) return null;
+
+    // Read directly from the sidebar stripe element (no cache)
+    const sidebarStripe = element.querySelector('.jSrjCf');
+    if (sidebarStripe) {
+      const stripeStyle = window.getComputedStyle(sidebarStripe);
+      const stripeColor = stripeStyle.backgroundColor;
+      if (stripeColor && stripeColor !== 'rgba(0, 0, 0, 0)' && stripeColor !== 'transparent') {
+        return rgbToHex(stripeColor);
+      }
+    }
+
+    // Fallback: read element background (skip gradients from our extension)
+    const computedStyle = window.getComputedStyle(element);
+    const bgColor = computedStyle.backgroundColor;
+    if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+      return rgbToHex(bgColor);
+    }
+
+    return null;
+  }
+
+  /**
    * Scan all visible events and build a calendarId → DOM color cache.
    * This captures the actual colors Google displays (which may differ from API colors)
    * and stores them to chrome.storage.local for use by the popup.
@@ -1570,12 +1600,42 @@
     console.log('[EventColoring] openCustomColorModal - calendarDefaults:', calendarDefaults);
     console.log('[EventColoring] openCustomColorModal - currentColors to pass to modal:', currentColors);
 
-    // Get original event colors from DOM for accurate preview
+    // Get DOM colors (uses cache for original color preservation)
     const domColors = getEventColorsFromDOM(eventId);
+
+    // Get CURRENT stripe color directly from DOM (bypasses cache)
+    // This ensures we show Google's actual current color even if user changed it via Google's picker
+    // IMPORTANT: Find the event element in the CALENDAR, not in dialogs (dialogs may not have stripe)
+    const allEventElements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+    let calendarEventElement = null;
+    let dialogEventElement = null;
+    for (const el of allEventElements) {
+      if (!el.closest('[role="dialog"]')) {
+        calendarEventElement = el;
+        break;  // Prefer calendar element
+      } else if (!dialogEventElement) {
+        dialogEventElement = el;  // Keep as fallback
+      }
+    }
+
+    // Try calendar element first (has stripe), then dialog element, then fall back to cached
+    let currentStripeColor = getCurrentStripeColorFromDOM(calendarEventElement);
+    if (!currentStripeColor && dialogEventElement) {
+      currentStripeColor = getCurrentStripeColorFromDOM(dialogEventElement);
+    }
+    if (!currentStripeColor) {
+      currentStripeColor = domColors.background;  // Last resort: cached value
+    }
+
+    // Build originalColors for preview fallback:
+    // - Background: list coloring > current DOM color (what user sees on calendar)
+    // - Text/Border: list coloring only (blank if not explicitly set)
+    // - stripeColor: ALWAYS current Google color (bypasses cache, reflects Google picker changes)
     const originalColors = {
-      background: domColors.background,
-      text: domColors.text,
-      border: domColors.border,
+      background: calendarDefaults?.background || currentStripeColor,
+      text: calendarDefaults?.text || null,
+      border: calendarDefaults?.border || null,
+      stripeColor: currentStripeColor,  // Google's actual current stripe color (never cached, never list coloring)
     };
     const eventTitle = domColors.title;
 
