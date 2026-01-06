@@ -2519,15 +2519,9 @@
               closeColorPicker();
             },
             onReplaceAll: async () => {
-              // Replace: remove all custom colors, let Google's color take over
-              console.log('[EventColoring] Google color - Replacing all');
-              await window.cc3Storage.removeEventColor(eventId);
-              delete eventColors[eventId];
-
-              // Simulate clicking the button again to apply Google's color
-              // But since we removed our custom color, Google's will show
-              closeColorPicker();
-              refreshColors();
+              // Replace: apply only the Google background color, clear other properties
+              console.log('[EventColoring] Google color - Replacing all with background only');
+              await applyBackgroundOnly(eventId, googleColor);
             },
             onOpenFullModal: () => {
               // Open full modal prefilled with Google color + existing properties
@@ -2898,6 +2892,7 @@
       borderWidth: colorData.borderWidth ?? null,
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
+      overrideDefaults: colorData.overrideDefaults || false,
     };
   }
 
