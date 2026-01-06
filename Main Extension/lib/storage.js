@@ -647,6 +647,8 @@
           hex: colors.background || null,
           isRecurring: false,
           appliedAt: Date.now(),
+          // Preserve overrideDefaults flag - used by "Replace all styling" to prevent calendar defaults from merging
+          overrideDefaults: colors.overrideDefaults || false,
         };
 
         console.log('[Storage] colorData to store:', colorData);
@@ -728,6 +730,7 @@
       borderWidth: colorData.borderWidth || 2, // Default if not set
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
+      overrideDefaults: colorData.overrideDefaults || false,
     };
   }
 

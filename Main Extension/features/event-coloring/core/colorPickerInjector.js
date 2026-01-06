@@ -823,6 +823,37 @@ export class ColorPickerInjector {
   }
 
   /**
+   * Check if event has non-background properties that would be lost
+   */
+  hasNonBackgroundProperties(existingColors, calendarDefaults) {
+    if (!existingColors && !calendarDefaults) return false;
+
+    // Check event-level properties first
+    const hasEventText = !!existingColors?.text;
+    const hasEventBorder = !!existingColors?.border;
+    const hasEventBorderWidth = existingColors?.borderWidth != null && existingColors?.borderWidth !== 2;
+
+    // Check calendar-level properties
+    const hasCalendarText = !!calendarDefaults?.text;
+    const hasCalendarBorder = !!calendarDefaults?.border;
+    const hasCalendarBorderWidth = calendarDefaults?.borderWidth != null && calendarDefaults?.borderWidth !== 2;
+
+    return hasEventText || hasEventBorder || hasEventBorderWidth ||
+           hasCalendarText || hasCalendarBorder || hasCalendarBorderWidth;
+  }
+
+  /**
+   * Get calendar default colors for an event
+   */
+  async getCalendarDefaultColorsForEvent(eventId) {
+    const calendarId = this.getCalendarIdForEvent(eventId);
+    if (!calendarId) return null;
+
+    const calendarColors = await this.storageService.getEventCalendarColors?.();
+    return calendarColors?.[calendarId] || null;
+  }
+
+  /**
    * Handle color selection (legacy single color)
    */
   async handleColorSelect(eventId, color) {
@@ -830,44 +861,405 @@ export class ColorPickerInjector {
       const scenario = ScenarioDetector.findColorPickerScenario();
       console.log('[CF] handleColorSelect:', { scenario, eventId, color });
 
-      // Check if this is a recurring event
-      const parsed = EventIdUtils.fromEncoded(eventId);
+      // Get existing colors and calendar defaults
+      const getColors = this.storageService.findEventColorFull || this.storageService.findEventColor;
+      const existingColors = await getColors?.(eventId) || {};
+      const calendarDefaults = await this.getCalendarDefaultColorsForEvent(eventId) || {};
 
-      if (parsed.isRecurring) {
-        // Show recurring event dialog
-        showRecurringEventDialog({
+      // Get event title for preview
+      const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+      const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
+
+      // Check if event has non-background properties that would be lost
+      if (this.hasNonBackgroundProperties(existingColors, calendarDefaults)) {
+        console.log('[CF] Event has non-background properties, showing dialog');
+
+        // Show existing properties dialog
+        this.showExistingPropertiesDialog({
           eventId,
-          color,
-          onConfirm: async (applyToAll) => {
-            console.log('[CF] Recurring dialog confirmed, applyToAll:', applyToAll);
-
-            // Save with appropriate storage method
-            if (this.storageService.saveEventColorAdvanced) {
-              await this.storageService.saveEventColorAdvanced(eventId, color, { applyToAll });
-            } else {
-              await this.storageService.saveEventColor(eventId, color, applyToAll);
-            }
-
-            // Trigger re-render
-            this.triggerColorUpdate();
+          newBackground: color,
+          existingColors,
+          calendarDefaults,
+          eventTitle,
+          onKeepExisting: async () => {
+            // Merge: keep existing properties, just update background
+            const mergedColors = {
+              background: color,
+              text: existingColors.text || calendarDefaults.text || null,
+              border: existingColors.border || calendarDefaults.border || null,
+              borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
+            };
+            console.log('[CF] Keeping existing, merged colors:', mergedColors);
+            await this.applyBackgroundWithMerge(eventId, mergedColors);
+          },
+          onReplaceAll: async () => {
+            // Replace: clear all properties, just use background
+            console.log('[CF] Replacing all with background only');
+            await this.applyBackgroundOnly(eventId, color);
+          },
+          onOpenFullModal: () => {
+            // Open full modal prefilled with new background + existing properties
+            console.log('[CF] Opening full modal');
+            this.closeMenus();
+            this.openCustomColorModalPrefilled(eventId, color, existingColors, calendarDefaults);
           },
           onClose: () => {
-            console.log('[CF] Recurring dialog closed');
+            console.log('[CF] Existing properties dialog closed');
           },
         });
       } else {
-        // Single event - save directly
-        await this.storageService.saveEventColor(eventId, color, false);
-
-        // Close menus
-        this.closeMenus();
-
-        // Trigger re-render
-        this.triggerColorUpdate();
+        // No other properties, apply background only (current behavior)
+        await this.applyBackgroundOnly(eventId, color);
       }
     } catch (error) {
       console.error('[CF] Error handling color select:', error);
     }
+  }
+
+  /**
+   * Apply background color with merged properties (keeps existing text/border)
+   */
+  async applyBackgroundWithMerge(eventId, colors) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    if (parsed.isRecurring) {
+      showRecurringEventDialog({
+        eventId,
+        color: colors.background,
+        onConfirm: async (applyToAll) => {
+          if (this.storageService.saveEventColorsFullAdvanced) {
+            await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+          }
+          this.closeMenus();
+          this.triggerColorUpdate();
+        },
+        onClose: () => {},
+      });
+    } else {
+      if (this.storageService.saveEventColorsFullAdvanced) {
+        await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      }
+      this.closeMenus();
+      this.triggerColorUpdate();
+    }
+  }
+
+  /**
+   * Apply background color only (clears other properties)
+   * Uses overrideDefaults flag to ensure calendar defaults are not merged in
+   */
+  async applyBackgroundOnly(eventId, color) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Create colors object that explicitly overrides calendar defaults
+    const colors = {
+      background: color,
+      text: null,
+      border: null,
+      borderWidth: 2, // Reset to default
+      overrideDefaults: true, // Flag to indicate this should override calendar defaults
+    };
+
+    if (parsed.isRecurring) {
+      showRecurringEventDialog({
+        eventId,
+        color,
+        onConfirm: async (applyToAll) => {
+          console.log('[CF] Recurring dialog confirmed (background only), applyToAll:', applyToAll);
+
+          // Save full colors with overrideDefaults flag
+          if (this.storageService.saveEventColorsFullAdvanced) {
+            await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+          } else if (this.storageService.saveEventColorAdvanced) {
+            await this.storageService.saveEventColorAdvanced(eventId, color, { applyToAll });
+          } else {
+            await this.storageService.saveEventColor(eventId, color, applyToAll);
+          }
+
+          // Trigger re-render
+          this.triggerColorUpdate();
+        },
+        onClose: () => {
+          console.log('[CF] Recurring dialog closed');
+        },
+      });
+    } else {
+      // Single event - save full colors with overrideDefaults flag
+      if (this.storageService.saveEventColorsFullAdvanced) {
+        await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      } else {
+        await this.storageService.saveEventColor(eventId, color, false);
+      }
+
+      // Close menus
+      this.closeMenus();
+
+      // Trigger re-render
+      this.triggerColorUpdate();
+    }
+  }
+
+  /**
+   * Open custom color modal prefilled with new background and existing properties
+   */
+  openCustomColorModalPrefilled(eventId, newBackground, existingColors, calendarDefaults) {
+    // Prefilled colors: new background + existing/calendar text/border
+    const prefilledColors = {
+      background: newBackground,
+      text: existingColors.text || calendarDefaults.text || null,
+      border: existingColors.border || calendarDefaults.border || null,
+      borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? 2,
+    };
+
+    // Get original colors for preview
+    const originalColors = {
+      background: existingColors.background || calendarDefaults.background || '#039be5',
+      text: existingColors.text || calendarDefaults.text || null,
+      border: existingColors.border || calendarDefaults.border || null,
+      stripeColor: existingColors.background || calendarDefaults.background || '#039be5',
+    };
+
+    // Get event title
+    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+    const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
+
+    // Use window.cfEventColoring if available (from index.js)
+    if (window.cfEventColoring?.openCustomColorModal) {
+      window.cfEventColoring.openCustomColorModal(eventId, prefilledColors, originalColors, eventTitle);
+    } else {
+      // Fallback to our own modal
+      this.openCustomColorModal(eventId);
+    }
+  }
+
+  /**
+   * Show existing properties dialog
+   */
+  showExistingPropertiesDialog(options) {
+    const {
+      eventId,
+      newBackground,
+      existingColors,
+      calendarDefaults,
+      eventTitle,
+      onKeepExisting,
+      onReplaceAll,
+      onOpenFullModal,
+      onClose
+    } = options;
+
+    // Remove existing dialogs
+    document.querySelectorAll('.cf-existing-props-dialog-container').forEach(el => el.remove());
+
+    // Get contrasting text color helper
+    const getContrastingTextColor = (bgColor) => {
+      if (!bgColor) return '#ffffff';
+      const hex = bgColor.replace('#', '');
+      const r = parseInt(hex.substr(0, 2), 16);
+      const g = parseInt(hex.substr(2, 2), 16);
+      const b = parseInt(hex.substr(4, 2), 16);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.5 ? '#000000' : '#ffffff';
+    };
+
+    // Create container
+    const container = document.createElement('div');
+    container.className = 'cf-existing-props-dialog-container';
+    container.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    // Overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+    `;
+    overlay.addEventListener('click', close);
+
+    // Dialog
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.style.cssText = `
+      position: relative;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      padding: 24px;
+      min-width: 380px;
+      max-width: 440px;
+      z-index: 1;
+    `;
+
+    // Title
+    const title = document.createElement('h2');
+    title.textContent = 'Additional Styling Detected';
+    title.style.cssText = `
+      margin: 0 0 12px;
+      font-size: 18px;
+      font-weight: 500;
+      color: #202124;
+      text-align: center;
+    `;
+
+    // Description
+    const description = document.createElement('p');
+    description.textContent = 'This event has custom text, border, or width styling. How would you like to apply the new background color?';
+    description.style.cssText = `
+      margin: 0 0 20px;
+      font-size: 14px;
+      color: #5f6368;
+      text-align: center;
+      line-height: 1.5;
+    `;
+
+    // Preview section
+    const previewSection = createPreviewSection();
+
+    // Buttons
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.style.cssText = 'display: flex; flex-direction: column; gap: 10px; margin-top: 20px;';
+
+    const keepBtn = createActionButton(
+      'Keep existing styling',
+      'Apply new background, keep text/border settings',
+      () => { if (onKeepExisting) onKeepExisting(); close(); },
+      '#1a73e8', 'white'
+    );
+
+    const replaceBtn = createActionButton(
+      'Replace all styling',
+      'Use only the new background color',
+      () => { if (onReplaceAll) onReplaceAll(); close(); },
+      'white', '#1a73e8', true
+    );
+
+    const fullModalBtn = createActionButton(
+      'Customize in full editor',
+      'Fine-tune all color properties',
+      () => { close(); if (onOpenFullModal) onOpenFullModal(); },
+      '#f1f3f4', '#202124'
+    );
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = `
+      background: transparent;
+      border: none;
+      color: #5f6368;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 4px;
+    `;
+    cancelBtn.addEventListener('click', close);
+
+    function createPreviewSection() {
+      const section = document.createElement('div');
+      section.style.cssText = 'display: flex; gap: 12px; justify-content: center; margin: 16px 0;';
+
+      const currentBg = existingColors?.background || calendarDefaults?.background || '#039be5';
+      const currentText = existingColors?.text || calendarDefaults?.text;
+      const currentBorder = existingColors?.border || calendarDefaults?.border;
+      const currentBorderWidth = existingColors?.borderWidth ?? calendarDefaults?.borderWidth ?? 2;
+
+      section.appendChild(createPreviewItem('Current', currentBg, currentText, currentBorder, currentBorderWidth));
+
+      const arrow = document.createElement('div');
+      arrow.textContent = '→';
+      arrow.style.cssText = 'display: flex; align-items: center; font-size: 18px; color: #5f6368;';
+      section.appendChild(arrow);
+
+      section.appendChild(createPreviewItem('Keep', newBackground, currentText, currentBorder, currentBorderWidth));
+      section.appendChild(createPreviewItem('Replace', newBackground, null, null, 2));
+
+      return section;
+    }
+
+    function createPreviewItem(label, bg, textColor, borderColor, borderWidth) {
+      const item = document.createElement('div');
+      item.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 4px;';
+
+      const labelEl = document.createElement('div');
+      labelEl.textContent = label;
+      labelEl.style.cssText = 'font-size: 10px; font-weight: 500; color: #5f6368; text-transform: uppercase;';
+
+      const chip = document.createElement('div');
+      const effectiveText = textColor || getContrastingTextColor(bg);
+      chip.style.cssText = `
+        width: 60px; height: 24px;
+        border-radius: 4px;
+        background-color: ${bg || '#039be5'};
+        color: ${effectiveText};
+        font-size: 10px; font-weight: 500;
+        display: flex; align-items: center; justify-content: center;
+        ${borderColor ? `outline: ${borderWidth || 2}px solid ${borderColor}; outline-offset: -${Math.round((borderWidth || 2) * 0.3)}px;` : ''}
+      `;
+      chip.textContent = (eventTitle || 'Event').substring(0, 6);
+
+      item.appendChild(labelEl);
+      item.appendChild(chip);
+      return item;
+    }
+
+    function createActionButton(text, subtitle, onClick, bgColor, textColor, hasBorder = false) {
+      const btn = document.createElement('button');
+      btn.style.cssText = `
+        background: ${bgColor};
+        color: ${textColor};
+        border: ${hasBorder ? '1px solid #1a73e8' : 'none'};
+        border-radius: 6px;
+        padding: 12px 20px;
+        font-size: 14px;
+        cursor: pointer;
+        text-align: left;
+      `;
+
+      const mainText = document.createElement('div');
+      mainText.textContent = text;
+      mainText.style.cssText = 'font-weight: 500;';
+
+      const subText = document.createElement('div');
+      subText.textContent = subtitle;
+      subText.style.cssText = 'font-size: 12px; opacity: 0.8; margin-top: 2px;';
+
+      btn.appendChild(mainText);
+      btn.appendChild(subText);
+      btn.addEventListener('click', onClick);
+      return btn;
+    }
+
+    function close() {
+      container.remove();
+      if (onClose) onClose();
+    }
+
+    // Handle escape
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    buttonsContainer.appendChild(keepBtn);
+    buttonsContainer.appendChild(replaceBtn);
+    buttonsContainer.appendChild(fullModalBtn);
+    buttonsContainer.appendChild(cancelBtn);
+
+    dialog.appendChild(title);
+    dialog.appendChild(description);
+    dialog.appendChild(previewSection);
+    dialog.appendChild(buttonsContainer);
+
+    container.appendChild(overlay);
+    container.appendChild(dialog);
+    document.body.appendChild(container);
   }
 
   /**

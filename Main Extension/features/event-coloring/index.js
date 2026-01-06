@@ -443,6 +443,272 @@
   }
 
   // ========================================
+  // EXISTING PROPERTIES DIALOG
+  // Shows when user selects background-only color but event has other properties
+  // ========================================
+
+  /**
+   * Check if an event has non-background properties that would be lost
+   * @param {Object} existingColors - The existing color data for the event
+   * @param {Object} calendarDefaults - The calendar default colors
+   * @returns {boolean} - True if there are non-background properties
+   */
+  function hasNonBackgroundProperties(existingColors, calendarDefaults) {
+    if (!existingColors && !calendarDefaults) return false;
+
+    // Check event-level properties first
+    const hasEventText = !!existingColors?.text;
+    const hasEventBorder = !!existingColors?.border;
+    const hasEventBorderWidth = existingColors?.borderWidth != null && existingColors?.borderWidth !== 2;
+
+    // Check calendar-level properties
+    const hasCalendarText = !!calendarDefaults?.text;
+    const hasCalendarBorder = !!calendarDefaults?.border;
+    const hasCalendarBorderWidth = calendarDefaults?.borderWidth != null && calendarDefaults?.borderWidth !== 2;
+
+    return hasEventText || hasEventBorder || hasEventBorderWidth ||
+           hasCalendarText || hasCalendarBorder || hasCalendarBorderWidth;
+  }
+
+  /**
+   * Get contrasting text color for a background
+   */
+  function getContrastingTextColor(bgColor) {
+    if (!bgColor) return '#ffffff';
+    const hex = bgColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  }
+
+  /**
+   * Show existing properties dialog
+   * When user selects background-only color but event has other properties set
+   */
+  function showExistingPropertiesDialog(options) {
+    const {
+      eventId,
+      newBackground,
+      existingColors,
+      calendarDefaults,
+      eventTitle,
+      onKeepExisting,
+      onReplaceAll,
+      onOpenFullModal,
+      onClose
+    } = options;
+
+    // Remove existing dialogs
+    document.querySelectorAll('.cf-existing-props-dialog-container').forEach(el => el.remove());
+
+    // Create container
+    const container = document.createElement('div');
+    container.className = 'cf-existing-props-dialog-container';
+    container.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    // Overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+    `;
+    overlay.addEventListener('click', close);
+
+    // Dialog
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.style.cssText = `
+      position: relative;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      padding: 24px;
+      min-width: 380px;
+      max-width: 440px;
+      z-index: 1;
+    `;
+
+    // Title
+    const title = document.createElement('h2');
+    title.textContent = 'Additional Styling Detected';
+    title.style.cssText = `
+      margin: 0 0 12px;
+      font-size: 18px;
+      font-weight: 500;
+      color: #202124;
+      text-align: center;
+    `;
+
+    // Description
+    const description = document.createElement('p');
+    description.textContent = 'This event has custom text, border, or width styling. How would you like to apply the new background color?';
+    description.style.cssText = `
+      margin: 0 0 20px;
+      font-size: 14px;
+      color: #5f6368;
+      text-align: center;
+      line-height: 1.5;
+    `;
+
+    // Preview section
+    const previewSection = createPreviewSection();
+
+    // Buttons
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.style.cssText = 'display: flex; flex-direction: column; gap: 10px; margin-top: 20px;';
+
+    const keepBtn = createActionButton(
+      'Keep existing styling',
+      'Apply new background, keep text/border settings',
+      () => { if (onKeepExisting) onKeepExisting(); close(); },
+      '#1a73e8', 'white'
+    );
+
+    const replaceBtn = createActionButton(
+      'Replace all styling',
+      'Use only the new background color',
+      () => { if (onReplaceAll) onReplaceAll(); close(); },
+      'white', '#1a73e8', true
+    );
+
+    const fullModalBtn = createActionButton(
+      'Customize in full editor',
+      'Fine-tune all color properties',
+      () => { close(); if (onOpenFullModal) onOpenFullModal(); },
+      '#f1f3f4', '#202124'
+    );
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = `
+      background: transparent;
+      border: none;
+      color: #5f6368;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 4px;
+    `;
+    cancelBtn.addEventListener('click', close);
+
+    function createPreviewSection() {
+      const section = document.createElement('div');
+      section.style.cssText = 'display: flex; gap: 12px; justify-content: center; margin: 16px 0;';
+
+      const currentBg = existingColors?.background || calendarDefaults?.background || '#039be5';
+      const currentText = existingColors?.text || calendarDefaults?.text;
+      const currentBorder = existingColors?.border || calendarDefaults?.border;
+      const currentBorderWidth = existingColors?.borderWidth ?? calendarDefaults?.borderWidth ?? 2;
+
+      // Current preview
+      section.appendChild(createPreviewItem('Current', currentBg, currentText, currentBorder, currentBorderWidth));
+
+      // Arrow
+      const arrow = document.createElement('div');
+      arrow.textContent = '→';
+      arrow.style.cssText = 'display: flex; align-items: center; font-size: 18px; color: #5f6368;';
+      section.appendChild(arrow);
+
+      // Keep existing (merged)
+      section.appendChild(createPreviewItem('Keep', newBackground, currentText, currentBorder, currentBorderWidth));
+
+      // Replace all
+      section.appendChild(createPreviewItem('Replace', newBackground, null, null, 2));
+
+      return section;
+    }
+
+    function createPreviewItem(label, bg, textColor, borderColor, borderWidth) {
+      const item = document.createElement('div');
+      item.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 4px;';
+
+      const labelEl = document.createElement('div');
+      labelEl.textContent = label;
+      labelEl.style.cssText = 'font-size: 10px; font-weight: 500; color: #5f6368; text-transform: uppercase;';
+
+      const chip = document.createElement('div');
+      const effectiveText = textColor || getContrastingTextColor(bg);
+      chip.style.cssText = `
+        width: 60px; height: 24px;
+        border-radius: 4px;
+        background-color: ${bg || '#039be5'};
+        color: ${effectiveText};
+        font-size: 10px; font-weight: 500;
+        display: flex; align-items: center; justify-content: center;
+        ${borderColor ? `outline: ${borderWidth || 2}px solid ${borderColor}; outline-offset: -${Math.round((borderWidth || 2) * 0.3)}px;` : ''}
+      `;
+      chip.textContent = (eventTitle || 'Event').substring(0, 6);
+
+      item.appendChild(labelEl);
+      item.appendChild(chip);
+      return item;
+    }
+
+    function createActionButton(text, subtitle, onClick, bgColor, textColor, hasBorder = false) {
+      const btn = document.createElement('button');
+      btn.style.cssText = `
+        background: ${bgColor};
+        color: ${textColor};
+        border: ${hasBorder ? '1px solid #1a73e8' : 'none'};
+        border-radius: 6px;
+        padding: 12px 20px;
+        font-size: 14px;
+        cursor: pointer;
+        text-align: left;
+      `;
+
+      const mainText = document.createElement('div');
+      mainText.textContent = text;
+      mainText.style.cssText = 'font-weight: 500;';
+
+      const subText = document.createElement('div');
+      subText.textContent = subtitle;
+      subText.style.cssText = 'font-size: 12px; opacity: 0.8; margin-top: 2px;';
+
+      btn.appendChild(mainText);
+      btn.appendChild(subText);
+      btn.addEventListener('click', onClick);
+      return btn;
+    }
+
+    function close() {
+      container.remove();
+      if (onClose) onClose();
+    }
+
+    // Handle escape
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    buttonsContainer.appendChild(keepBtn);
+    buttonsContainer.appendChild(replaceBtn);
+    buttonsContainer.appendChild(fullModalBtn);
+    buttonsContainer.appendChild(cancelBtn);
+
+    dialog.appendChild(title);
+    dialog.appendChild(description);
+    dialog.appendChild(previewSection);
+    dialog.appendChild(buttonsContainer);
+
+    container.appendChild(overlay);
+    container.appendChild(dialog);
+    document.body.appendChild(container);
+  }
+
+  // ========================================
   // CALENDAR COLORS API
   // ========================================
 
@@ -1584,10 +1850,14 @@
 
   /**
    * Open the custom color swatch modal (with bg/text/border tabs)
+   * @param {string} eventId - Event ID
+   * @param {Object} prefilledColors - Optional prefilled colors { background, text, border, borderWidth }
+   * @param {Object} prefilledOriginal - Optional prefilled original colors for preview
+   * @param {string} prefilledTitle - Optional prefilled event title
    */
   let activeColorModal = null;
 
-  function openCustomColorModal(eventId) {
+  function openCustomColorModal(eventId, prefilledColors = null, prefilledOriginal = null, prefilledTitle = null) {
     // Clean up any orphaned backdrop/modal elements from previous instances
     // This prevents the UI from becoming unclickable due to stale backdrops
     document.querySelectorAll('.ecm-backdrop, .csm-backdrop').forEach(el => el.remove());
@@ -1609,16 +1879,22 @@
     // This ensures we inherit borderWidth from calendar if event doesn't have one
     const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
 
-    // Merge: event colors take precedence, calendar colors fill in gaps
-    // This is critical for borderWidth - if user hasn't set a manual borderWidth,
-    // we should show the calendar's borderWidth, not the default 2px
-    const currentColors = {
-      background: colorData?.background || colorData?.hex || null,
-      text: colorData?.text || null,
-      border: colorData?.border || null,
-      // Use event borderWidth, fall back to calendar borderWidth, then default to 2
-      borderWidth: colorData?.borderWidth ?? calendarDefaults?.borderWidth ?? 2,
-    };
+    // If prefilled colors are provided, use them; otherwise compute from storage
+    let currentColors;
+    if (prefilledColors) {
+      currentColors = prefilledColors;
+    } else {
+      // Merge: event colors take precedence, calendar colors fill in gaps
+      // This is critical for borderWidth - if user hasn't set a manual borderWidth,
+      // we should show the calendar's borderWidth, not the default 2px
+      currentColors = {
+        background: colorData?.background || colorData?.hex || null,
+        text: colorData?.text || null,
+        border: colorData?.border || null,
+        // Use event borderWidth, fall back to calendar borderWidth, then default to 2
+        borderWidth: colorData?.borderWidth ?? calendarDefaults?.borderWidth ?? 2,
+      };
+    }
 
     console.log('[EventColoring] openCustomColorModal - colorData:', colorData);
     console.log('[EventColoring] openCustomColorModal - calendarDefaults:', calendarDefaults);
@@ -1655,7 +1931,8 @@
     // - Text: list coloring > DOM text color (Google's auto black/white) > null (let modal calculate)
     // - Border: list coloring only (blank if not explicitly set)
     // - stripeColor: stripe element's color (calendar's default, doesn't change with Google's 12-color)
-    const originalColors = {
+    // Use prefilled original colors if provided
+    const originalColors = prefilledOriginal || {
       background: calendarDefaults?.background || currentEventBackground || currentStripeColor || domColors.background,
       text: calendarDefaults?.text || domColors.text || null,  // Include Google's auto text color
       border: calendarDefaults?.border || null,
@@ -1663,7 +1940,7 @@
     };
 
     console.log('[EventColoring] DOM colors - stripe:', currentStripeColor, 'eventBg:', currentEventBackground, 'text:', domColors.text);
-    const eventTitle = domColors.title;
+    const eventTitle = prefilledTitle || domColors.title;
 
     // Check if EventColorModal is available (preferred), fallback to ColorSwatchModal
     if (typeof window.EventColorModal === 'function') {
@@ -2186,14 +2463,78 @@
       if (button.hasAttribute('data-cf-handler')) return;
       button.setAttribute('data-cf-handler', 'true');
 
-      button.addEventListener('click', async () => {
+      button.addEventListener('click', async (e) => {
         const scenario = ScenarioDetector.findColorPickerScenario();
         const eventId = ScenarioDetector.findEventIdByScenario(button, scenario) ||
                        lastClickedEventId ||
                        getEventIdFromContext();
 
-        if (eventId) {
-          // Remove custom color when Google color is selected
+        if (!eventId) return;
+
+        // Get the Google color from the button
+        const googleColor = button.getAttribute('data-color');
+        console.log('[EventColoring] Google color clicked:', googleColor, 'for event:', eventId);
+
+        // Get existing colors and calendar defaults
+        const existingColors = findColorForEvent(eventId) || {};
+        const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
+
+        console.log('[EventColoring] Google color - Existing colors:', JSON.stringify(existingColors));
+        console.log('[EventColoring] Google color - Calendar defaults:', JSON.stringify(calendarDefaults));
+
+        // Check if event has non-background properties that would be lost
+        const hasExistingProps = hasNonBackgroundProperties(existingColors, calendarDefaults);
+        console.log('[EventColoring] Google color - Has non-background properties:', hasExistingProps);
+
+        if (hasExistingProps && googleColor) {
+          // Prevent default to stop Google's color from being applied immediately
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Get event title for preview
+          const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+          const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
+
+          console.log('[EventColoring] Google color - showing dialog');
+
+          // Show existing properties dialog
+          showExistingPropertiesDialog({
+            eventId,
+            newBackground: googleColor,
+            existingColors,
+            calendarDefaults,
+            eventTitle,
+            onKeepExisting: async () => {
+              // Merge: keep existing properties with the Google color as background
+              const mergedColors = {
+                background: googleColor,
+                text: existingColors.text || calendarDefaults.text || null,
+                border: existingColors.border || calendarDefaults.border || null,
+                borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
+              };
+              console.log('[EventColoring] Google color - Keeping existing, merged colors:', mergedColors);
+
+              // Save the merged colors (this will override Google's native color)
+              await handleFullColorSelection(eventId, mergedColors);
+              closeColorPicker();
+            },
+            onReplaceAll: async () => {
+              // Replace: apply only the Google background color, clear other properties
+              console.log('[EventColoring] Google color - Replacing all with background only');
+              await applyBackgroundOnly(eventId, googleColor);
+            },
+            onOpenFullModal: () => {
+              // Open full modal prefilled with Google color + existing properties
+              console.log('[EventColoring] Google color - Opening full modal');
+              closeColorPicker();
+              openCustomColorModalPrefilled(eventId, googleColor, existingColors, calendarDefaults);
+            },
+            onClose: () => {
+              console.log('[EventColoring] Google color - Dialog closed');
+            },
+          });
+        } else {
+          // No other properties, remove custom color (current behavior)
           await window.cc3Storage.removeEventColor(eventId);
           delete eventColors[eventId];
           console.log('[EventColoring] Removed custom color for:', eventId);
@@ -2278,21 +2619,117 @@
   async function handleColorSelection(eventId, colorHex) {
     console.log('[EventColoring] Color selected:', eventId, colorHex);
 
-    // Check if recurring event
+    // Get existing colors and calendar defaults
+    const existingColors = findColorForEvent(eventId) || {};
+    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
+
+    console.log('[EventColoring] Existing colors:', JSON.stringify(existingColors));
+    console.log('[EventColoring] Calendar defaults:', JSON.stringify(calendarDefaults));
+
+    // Get event title for preview
+    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+    const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
+
+    // Check if event has non-background properties that would be lost
+    const hasExistingProps = hasNonBackgroundProperties(existingColors, calendarDefaults);
+    console.log('[EventColoring] Has non-background properties:', hasExistingProps);
+
+    if (hasExistingProps) {
+      console.log('[EventColoring] Event has non-background properties, showing dialog');
+
+      // Show existing properties dialog
+      showExistingPropertiesDialog({
+        eventId,
+        newBackground: colorHex,
+        existingColors,
+        calendarDefaults,
+        eventTitle,
+        onKeepExisting: async () => {
+          // Merge: keep existing properties, just update background
+          const mergedColors = {
+            background: colorHex,
+            text: existingColors.text || calendarDefaults.text || null,
+            border: existingColors.border || calendarDefaults.border || null,
+            borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
+          };
+          console.log('[EventColoring] Keeping existing, merged colors:', mergedColors);
+          await applyBackgroundWithMerge(eventId, mergedColors);
+        },
+        onReplaceAll: async () => {
+          // Replace: clear all properties, just use background
+          console.log('[EventColoring] Replacing all with background only');
+          await applyBackgroundOnly(eventId, colorHex);
+        },
+        onOpenFullModal: () => {
+          // Open full modal prefilled with new background + existing properties
+          console.log('[EventColoring] Opening full modal');
+          openCustomColorModalPrefilled(eventId, colorHex, existingColors, calendarDefaults);
+        },
+        onClose: () => {
+          console.log('[EventColoring] Existing properties dialog closed');
+        },
+      });
+    } else {
+      // No other properties, apply background only (current behavior)
+      await applyBackgroundOnly(eventId, colorHex);
+    }
+  }
+
+  /**
+   * Apply background color with merged properties (keeps existing text/border)
+   */
+  async function applyBackgroundWithMerge(eventId, colors) {
     const parsed = EventIdUtils.fromEncoded(eventId);
 
     if (parsed.isRecurring) {
-      // Show recurring event dialog
+      showRecurringEventDialog({
+        eventId,
+        color: colors.background,
+        onConfirm: async (applyToAll) => {
+          await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
+          updateGoogleColorSwatch(eventId, colors.background);
+          closeColorPicker();
+          refreshColors();
+        },
+        onClose: () => {},
+      });
+    } else {
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      eventColors[eventId] = {
+        ...colors,
+        hex: colors.background,
+        isRecurring: false,
+        appliedAt: Date.now()
+      };
+      updateGoogleColorSwatch(eventId, colors.background);
+      closeColorPicker();
+      refreshColors();
+    }
+  }
+
+  /**
+   * Apply background color only (clears other properties and overrides calendar defaults)
+   */
+  async function applyBackgroundOnly(eventId, colorHex) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Create colors object that explicitly overrides calendar defaults
+    const colors = {
+      background: colorHex,
+      text: null,
+      border: null,
+      borderWidth: 2, // Reset to default
+      overrideDefaults: true, // Flag to indicate this should override calendar defaults
+    };
+
+    if (parsed.isRecurring) {
       showRecurringEventDialog({
         eventId,
         color: colorHex,
         onConfirm: async (applyToAll) => {
-          console.log('[EventColoring] Recurring confirmed, applyToAll:', applyToAll);
-          await saveColorWithRecurringSupport(eventId, colorHex, applyToAll);
-
-          // Update the Google color swatch before closing
+          console.log('[EventColoring] Recurring confirmed (background only), applyToAll:', applyToAll);
+          await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
           updateGoogleColorSwatch(eventId, colorHex);
-
           closeColorPicker();
           refreshColors();
         },
@@ -2301,16 +2738,49 @@
         },
       });
     } else {
-      // Single event
-      await window.cc3Storage.saveEventColor(eventId, colorHex, false);
-      eventColors[eventId] = { hex: colorHex, isRecurring: false, appliedAt: Date.now() };
-
-      // Update the Google color swatch before closing
+      // Single event - save with explicit overrides
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      eventColors[eventId] = {
+        ...colors,
+        hex: colorHex,
+        isRecurring: false,
+        appliedAt: Date.now()
+      };
       updateGoogleColorSwatch(eventId, colorHex);
-
       closeColorPicker();
-      applyColorToEvent(eventId, colorHex);
+      refreshColors();
     }
+  }
+
+  /**
+   * Open custom color modal prefilled with new background and existing properties
+   */
+  function openCustomColorModalPrefilled(eventId, newBackground, existingColors, calendarDefaults) {
+    // Close color picker first
+    closeColorPicker();
+
+    // Get event title
+    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+    const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
+
+    // Prefilled colors: new background + existing/calendar text/border
+    const prefilledColors = {
+      background: newBackground,
+      text: existingColors.text || calendarDefaults.text || null,
+      border: existingColors.border || calendarDefaults.border || null,
+      borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? 2,
+    };
+
+    // Get original colors for preview (what the event looks like now)
+    const originalColors = {
+      background: existingColors.background || calendarDefaults.background || '#039be5',
+      text: existingColors.text || calendarDefaults.text || null,
+      border: existingColors.border || calendarDefaults.border || null,
+      stripeColor: existingColors.background || calendarDefaults.background || '#039be5',
+    };
+
+    // Open the modal with prefilled values
+    openCustomColorModal(eventId, prefilledColors, originalColors, eventTitle);
   }
 
   /**
@@ -2422,6 +2892,7 @@
       borderWidth: colorData.borderWidth ?? null,
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
+      overrideDefaults: colorData.overrideDefaults || false,
     };
   }
 
@@ -2557,6 +3028,18 @@
     if (!manualColors && !calendarColors) return null;
     if (!calendarColors) return manualColors;
     if (!manualColors) return calendarColors;
+
+    // If overrideDefaults is set, don't merge with calendar colors - use manual colors only
+    // This is used by "Replace all styling" to ensure calendar defaults don't get applied
+    if (manualColors.overrideDefaults) {
+      return {
+        background: manualColors.background || null,
+        text: null,
+        border: null,
+        borderWidth: manualColors.borderWidth != null ? manualColors.borderWidth : 2,
+        isRecurring: manualColors.isRecurring || false,
+      };
+    }
 
     // Merge: manual takes precedence for each property
     // For borderWidth: use manual if explicitly set (not null/undefined), else calendar, else default 2
@@ -2905,6 +3388,10 @@
     findColorForEvent,
     EventIdUtils,
     ScenarioDetector,
+    openCustomColorModal,
+    getCalendarDefaultColorsForEvent,
+    hasNonBackgroundProperties,
+    showExistingPropertiesDialog,
   };
 
   console.log('[EventColoring] Feature registered (enhanced)');
