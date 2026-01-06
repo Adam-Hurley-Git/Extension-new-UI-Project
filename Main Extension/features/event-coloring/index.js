@@ -2463,14 +2463,84 @@
       if (button.hasAttribute('data-cf-handler')) return;
       button.setAttribute('data-cf-handler', 'true');
 
-      button.addEventListener('click', async () => {
+      button.addEventListener('click', async (e) => {
         const scenario = ScenarioDetector.findColorPickerScenario();
         const eventId = ScenarioDetector.findEventIdByScenario(button, scenario) ||
                        lastClickedEventId ||
                        getEventIdFromContext();
 
-        if (eventId) {
-          // Remove custom color when Google color is selected
+        if (!eventId) return;
+
+        // Get the Google color from the button
+        const googleColor = button.getAttribute('data-color');
+        console.log('[EventColoring] Google color clicked:', googleColor, 'for event:', eventId);
+
+        // Get existing colors and calendar defaults
+        const existingColors = findColorForEvent(eventId) || {};
+        const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
+
+        console.log('[EventColoring] Google color - Existing colors:', JSON.stringify(existingColors));
+        console.log('[EventColoring] Google color - Calendar defaults:', JSON.stringify(calendarDefaults));
+
+        // Check if event has non-background properties that would be lost
+        const hasExistingProps = hasNonBackgroundProperties(existingColors, calendarDefaults);
+        console.log('[EventColoring] Google color - Has non-background properties:', hasExistingProps);
+
+        if (hasExistingProps && googleColor) {
+          // Prevent default to stop Google's color from being applied immediately
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Get event title for preview
+          const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+          const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
+
+          console.log('[EventColoring] Google color - showing dialog');
+
+          // Show existing properties dialog
+          showExistingPropertiesDialog({
+            eventId,
+            newBackground: googleColor,
+            existingColors,
+            calendarDefaults,
+            eventTitle,
+            onKeepExisting: async () => {
+              // Merge: keep existing properties with the Google color as background
+              const mergedColors = {
+                background: googleColor,
+                text: existingColors.text || calendarDefaults.text || null,
+                border: existingColors.border || calendarDefaults.border || null,
+                borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
+              };
+              console.log('[EventColoring] Google color - Keeping existing, merged colors:', mergedColors);
+
+              // Save the merged colors (this will override Google's native color)
+              await handleFullColorSelection(eventId, mergedColors);
+              closeColorPicker();
+            },
+            onReplaceAll: async () => {
+              // Replace: remove all custom colors, let Google's color take over
+              console.log('[EventColoring] Google color - Replacing all');
+              await window.cc3Storage.removeEventColor(eventId);
+              delete eventColors[eventId];
+
+              // Simulate clicking the button again to apply Google's color
+              // But since we removed our custom color, Google's will show
+              closeColorPicker();
+              refreshColors();
+            },
+            onOpenFullModal: () => {
+              // Open full modal prefilled with Google color + existing properties
+              console.log('[EventColoring] Google color - Opening full modal');
+              closeColorPicker();
+              openCustomColorModalPrefilled(eventId, googleColor, existingColors, calendarDefaults);
+            },
+            onClose: () => {
+              console.log('[EventColoring] Google color - Dialog closed');
+            },
+          });
+        } else {
+          // No other properties, remove custom color (current behavior)
           await window.cc3Storage.removeEventColor(eventId);
           delete eventColors[eventId];
           console.log('[EventColoring] Removed custom color for:', eventId);
@@ -2559,12 +2629,18 @@
     const existingColors = findColorForEvent(eventId) || {};
     const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
 
+    console.log('[EventColoring] Existing colors:', JSON.stringify(existingColors));
+    console.log('[EventColoring] Calendar defaults:', JSON.stringify(calendarDefaults));
+
     // Get event title for preview
     const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
     const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
 
     // Check if event has non-background properties that would be lost
-    if (hasNonBackgroundProperties(existingColors, calendarDefaults)) {
+    const hasExistingProps = hasNonBackgroundProperties(existingColors, calendarDefaults);
+    console.log('[EventColoring] Has non-background properties:', hasExistingProps);
+
+    if (hasExistingProps) {
       console.log('[EventColoring] Event has non-background properties, showing dialog');
 
       // Show existing properties dialog
