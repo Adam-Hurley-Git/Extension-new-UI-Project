@@ -2714,18 +2714,27 @@
   }
 
   /**
-   * Apply background color only (clears other properties)
+   * Apply background color only (clears other properties and overrides calendar defaults)
    */
   async function applyBackgroundOnly(eventId, colorHex) {
     const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Create colors object that explicitly overrides calendar defaults
+    const colors = {
+      background: colorHex,
+      text: null,
+      border: null,
+      borderWidth: 2, // Reset to default
+      overrideDefaults: true, // Flag to indicate this should override calendar defaults
+    };
 
     if (parsed.isRecurring) {
       showRecurringEventDialog({
         eventId,
         color: colorHex,
         onConfirm: async (applyToAll) => {
-          console.log('[EventColoring] Recurring confirmed, applyToAll:', applyToAll);
-          await saveColorWithRecurringSupport(eventId, colorHex, applyToAll);
+          console.log('[EventColoring] Recurring confirmed (background only), applyToAll:', applyToAll);
+          await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
           updateGoogleColorSwatch(eventId, colorHex);
           closeColorPicker();
           refreshColors();
@@ -2735,12 +2744,17 @@
         },
       });
     } else {
-      // Single event - save background only
-      await window.cc3Storage.saveEventColor(eventId, colorHex, false);
-      eventColors[eventId] = { hex: colorHex, isRecurring: false, appliedAt: Date.now() };
+      // Single event - save with explicit overrides
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      eventColors[eventId] = {
+        ...colors,
+        hex: colorHex,
+        isRecurring: false,
+        appliedAt: Date.now()
+      };
       updateGoogleColorSwatch(eventId, colorHex);
       closeColorPicker();
-      applyColorToEvent(eventId, colorHex);
+      refreshColors();
     }
   }
 
@@ -3019,6 +3033,18 @@
     if (!manualColors && !calendarColors) return null;
     if (!calendarColors) return manualColors;
     if (!manualColors) return calendarColors;
+
+    // If overrideDefaults is set, don't merge with calendar colors - use manual colors only
+    // This is used by "Replace all styling" to ensure calendar defaults don't get applied
+    if (manualColors.overrideDefaults) {
+      return {
+        background: manualColors.background || null,
+        text: null,
+        border: null,
+        borderWidth: manualColors.borderWidth != null ? manualColors.borderWidth : 2,
+        isRecurring: manualColors.isRecurring || false,
+      };
+    }
 
     // Merge: manual takes precedence for each property
     // For borderWidth: use manual if explicitly set (not null/undefined), else calendar, else default 2

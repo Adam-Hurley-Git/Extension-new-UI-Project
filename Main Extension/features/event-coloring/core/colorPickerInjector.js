@@ -946,19 +946,31 @@ export class ColorPickerInjector {
 
   /**
    * Apply background color only (clears other properties)
+   * Uses overrideDefaults flag to ensure calendar defaults are not merged in
    */
   async applyBackgroundOnly(eventId, color) {
     const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Create colors object that explicitly overrides calendar defaults
+    const colors = {
+      background: color,
+      text: null,
+      border: null,
+      borderWidth: 2, // Reset to default
+      overrideDefaults: true, // Flag to indicate this should override calendar defaults
+    };
 
     if (parsed.isRecurring) {
       showRecurringEventDialog({
         eventId,
         color,
         onConfirm: async (applyToAll) => {
-          console.log('[CF] Recurring dialog confirmed, applyToAll:', applyToAll);
+          console.log('[CF] Recurring dialog confirmed (background only), applyToAll:', applyToAll);
 
-          // Save with appropriate storage method
-          if (this.storageService.saveEventColorAdvanced) {
+          // Save full colors with overrideDefaults flag
+          if (this.storageService.saveEventColorsFullAdvanced) {
+            await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+          } else if (this.storageService.saveEventColorAdvanced) {
             await this.storageService.saveEventColorAdvanced(eventId, color, { applyToAll });
           } else {
             await this.storageService.saveEventColor(eventId, color, applyToAll);
@@ -972,8 +984,12 @@ export class ColorPickerInjector {
         },
       });
     } else {
-      // Single event - save directly
-      await this.storageService.saveEventColor(eventId, color, false);
+      // Single event - save full colors with overrideDefaults flag
+      if (this.storageService.saveEventColorsFullAdvanced) {
+        await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      } else {
+        await this.storageService.saveEventColor(eventId, color, false);
+      }
 
       // Close menus
       this.closeMenus();
