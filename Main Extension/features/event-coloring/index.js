@@ -2440,7 +2440,8 @@
           }
 
           closeColorPicker();
-          refreshColors();
+          // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+          applyStoredColors();
         },
         onClose: () => {
           console.log('[EventColoring] Recurring dialog closed');
@@ -3060,7 +3061,8 @@
           await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
           updateGoogleColorSwatch(eventId, colors.background);
           closeColorPicker();
-          refreshColors();
+          // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+          applyStoredColors();
         },
         onClose: () => {},
       });
@@ -3074,7 +3076,8 @@
       };
       updateGoogleColorSwatch(eventId, colors.background);
       closeColorPicker();
-      refreshColors();
+      // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+      applyStoredColors();
     }
   }
 
@@ -3102,7 +3105,8 @@
           await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
           updateGoogleColorSwatch(eventId, colorHex);
           closeColorPicker();
-          refreshColors();
+          // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+          applyStoredColors();
         },
         onClose: () => {
           console.log('[EventColoring] Recurring dialog closed');
@@ -3119,7 +3123,8 @@
       };
       updateGoogleColorSwatch(eventId, colorHex);
       closeColorPicker();
-      refreshColors();
+      // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+      applyStoredColors();
     }
   }
 
