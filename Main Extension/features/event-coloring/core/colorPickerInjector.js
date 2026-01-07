@@ -833,7 +833,13 @@ export class ColorPickerInjector {
     const hasEventBorder = !!existingColors?.border;
     const hasEventBorderWidth = existingColors?.borderWidth != null && existingColors?.borderWidth !== 2;
 
-    // Check calendar-level properties
+    // If event has overrideDefaults, calendar defaults aren't actually applied to this event
+    // So we should only check event-level properties, not calendar defaults
+    if (existingColors?.overrideDefaults) {
+      return hasEventText || hasEventBorder || hasEventBorderWidth;
+    }
+
+    // Check calendar-level properties (only if event doesn't have overrideDefaults)
     const hasCalendarText = !!calendarDefaults?.text;
     const hasCalendarBorder = !!calendarDefaults?.border;
     const hasCalendarBorderWidth = calendarDefaults?.borderWidth != null && calendarDefaults?.borderWidth !== 2;
