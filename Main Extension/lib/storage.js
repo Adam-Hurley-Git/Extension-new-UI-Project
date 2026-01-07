@@ -549,6 +549,49 @@
   }
 
   /**
+   * Remove all color entries for a recurring event (base ID and all instances)
+   * Use this when removing colors from "all events in series"
+   * @param {string} eventId - Any event ID from the recurring series
+   * @returns {Promise<number>} - Number of entries removed
+   */
+  async function removeRecurringEventColors(eventId) {
+    if (!eventId) return 0;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        const eventColors = result['cf.eventColors'] || {};
+        const parsed = parseEventId(eventId);
+
+        if (parsed.type !== 'calendar') {
+          resolve(0);
+          return;
+        }
+
+        let removedCount = 0;
+        const baseId = parsed.decodedId;
+
+        // Find and remove all entries with matching base ID (base + all instances)
+        Object.keys(eventColors).forEach((storedId) => {
+          try {
+            const storedParsed = parseEventId(storedId);
+            if (storedParsed.decodedId === baseId) {
+              delete eventColors[storedId];
+              removedCount++;
+            }
+          } catch (e) {
+            // Skip invalid IDs
+          }
+        });
+
+        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+          console.log('[Storage] Removed', removedCount, 'color entries for recurring event');
+          resolve(removedCount);
+        });
+      });
+    });
+  }
+
+  /**
    * Save event color with recurring event support
    * When saving a recurring event with applyToAll=true, stores under base event ID
    * and cleans up individual instance colors
@@ -1416,6 +1459,7 @@
     getEventColor,
     getAllEventColors,
     removeEventColor,
+    removeRecurringEventColors,
     saveEventColorAdvanced,
     saveEventColorsFullAdvanced,
     findEventColor,
