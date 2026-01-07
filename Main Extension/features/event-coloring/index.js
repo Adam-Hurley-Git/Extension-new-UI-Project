@@ -1728,6 +1728,7 @@
   /**
    * Remove all custom coloring from an event, returning it to Google's native colors
    * For recurring events, removes ALL instance colors
+   * Uses markEventForGoogleColors to store a flag that bypasses list defaults
    */
   async function handleRemoveAllColoring(eventId) {
     const parsed = EventIdUtils.fromEncoded(eventId);
@@ -1746,19 +1747,20 @@
           console.log('[EventColoring] Remove coloring confirmed, applyToAll:', applyToAll);
 
           if (applyToAll) {
-            // Remove ALL colors for this recurring series (base + instances)
-            if (window.cc3Storage.removeRecurringEventColors) {
-              await window.cc3Storage.removeRecurringEventColors(eventId);
+            // Mark ALL events in series to use Google colors (bypasses list defaults)
+            if (window.cc3Storage.markRecurringEventForGoogleColors) {
+              await window.cc3Storage.markRecurringEventForGoogleColors(eventId);
             } else {
-              await window.cc3Storage.removeEventColor(eventId);
+              // Fallback: mark just this event
+              await window.cc3Storage.markEventForGoogleColors(eventId);
             }
           } else {
-            // Remove only this instance
-            await window.cc3Storage.removeEventColor(eventId);
+            // Mark only this instance to use Google colors
+            await window.cc3Storage.markEventForGoogleColors(eventId);
           }
 
-          // Clear from local cache
-          delete eventColors[eventId];
+          // Update local cache with the flag
+          eventColors[eventId] = { useGoogleColors: true };
 
           closeColorPickerMenus();
           // Force reload to ensure Google's colors are re-applied
@@ -1769,9 +1771,9 @@
         },
       });
     } else {
-      // Single event - remove directly
-      await window.cc3Storage.removeEventColor(eventId);
-      delete eventColors[eventId];
+      // Single event - mark to use Google colors (bypasses list defaults)
+      await window.cc3Storage.markEventForGoogleColors(eventId);
+      eventColors[eventId] = { useGoogleColors: true };
 
       closeColorPickerMenus();
       window.location.reload();
@@ -3389,6 +3391,13 @@
    */
   function mergeEventColors(manualColors, calendarColors) {
     if (!manualColors && !calendarColors) return null;
+
+    // If useGoogleColors flag is set, return null to use Google's native colors
+    // This bypasses both manual colors AND calendar defaults
+    if (manualColors && manualColors.useGoogleColors) {
+      return null;
+    }
+
     if (!calendarColors) return manualColors;
     if (!manualColors) return calendarColors;
 
