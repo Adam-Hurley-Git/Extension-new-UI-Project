@@ -2539,11 +2539,12 @@
               console.log('[EventColoring] Google color - Dialog closed');
             },
           });
-        } else {
-          // No other properties, remove custom color (current behavior)
-          await window.cc3Storage.removeEventColor(eventId);
-          delete eventColors[eventId];
-          console.log('[EventColoring] Removed custom color for:', eventId);
+        } else if (googleColor) {
+          // No other properties to preserve - apply the Google color directly
+          console.log('[EventColoring] Google color - No properties to preserve, applying directly:', googleColor);
+          e.preventDefault();
+          e.stopPropagation();
+          await applyBackgroundOnly(eventId, googleColor);
         }
       });
     });
