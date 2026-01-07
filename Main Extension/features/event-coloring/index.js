@@ -1924,18 +1924,6 @@
   }
 
   /**
-   * Get calendar ID for an event
-   */
-  function getCalendarIdForEvent(eventId) {
-    try {
-      const parsed = EventIdUtils.fromEncoded(eventId);
-      return parsed.emailSuffix || null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /**
    * Close color picker menus
    */
   function closeColorPickerMenus() {
