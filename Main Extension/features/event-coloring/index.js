@@ -2483,6 +2483,9 @@
       hex: colors.background || null, // Backward compatibility
       isRecurring: false,
       appliedAt: Date.now(),
+      // Preserve flags for proper merging behavior
+      overrideDefaults: colors.overrideDefaults || false,
+      useGoogleColors: colors.useGoogleColors || false,
     };
 
     console.log('[EventColoring] colorData to save:', colorData);
@@ -2517,6 +2520,9 @@
       hex: colors.background || null,
       isRecurring: applyToAll && parsed.isRecurring,
       appliedAt: Date.now(),
+      // Preserve flags for proper merging behavior
+      overrideDefaults: colors.overrideDefaults || false,
+      useGoogleColors: colors.useGoogleColors || false,
     };
 
     // Update local cache FIRST for immediate effect (before async storage operations)
