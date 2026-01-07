@@ -824,6 +824,7 @@ export class ColorPickerInjector {
   /**
    * Remove all custom coloring from an event, returning it to Google's native colors
    * For recurring events, removes ALL instance colors
+   * Uses markEventForGoogleColors to store a flag that bypasses list defaults
    * @param {string} eventId - Event ID
    */
   async handleRemoveAllColoring(eventId) {
@@ -843,15 +844,16 @@ export class ColorPickerInjector {
           console.log('[CF] Remove coloring confirmed, applyToAll:', applyToAll);
 
           if (applyToAll) {
-            // Remove ALL colors for this recurring series (base + instances)
-            if (this.storageService.removeRecurringEventColors) {
-              await this.storageService.removeRecurringEventColors(eventId);
+            // Mark ALL events in series to use Google colors (bypasses list defaults)
+            if (this.storageService.markRecurringEventForGoogleColors) {
+              await this.storageService.markRecurringEventForGoogleColors(eventId);
             } else {
-              await this.storageService.removeEventColor(eventId);
+              // Fallback: mark just this event
+              await this.storageService.markEventForGoogleColors(eventId);
             }
           } else {
-            // Remove only this instance
-            await this.storageService.removeEventColor(eventId);
+            // Mark only this instance to use Google colors
+            await this.storageService.markEventForGoogleColors(eventId);
           }
 
           this.closeMenus();
@@ -863,8 +865,8 @@ export class ColorPickerInjector {
         },
       });
     } else {
-      // Single event - remove directly
-      await this.storageService.removeEventColor(eventId);
+      // Single event - mark to use Google colors (bypasses list defaults)
+      await this.storageService.markEventForGoogleColors(eventId);
       this.closeMenus();
       window.location.reload();
     }

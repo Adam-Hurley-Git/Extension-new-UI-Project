@@ -592,6 +592,81 @@
   }
 
   /**
+   * Mark an event to use Google's native colors (bypasses list defaults)
+   * This stores a special flag that tells mergeEventColors to return null
+   * @param {string} eventId - Calendar event ID
+   * @returns {Promise<void>}
+   */
+  async function markEventForGoogleColors(eventId) {
+    if (!eventId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        const eventColors = result['cf.eventColors'] || {};
+
+        eventColors[eventId] = {
+          useGoogleColors: true,
+          appliedAt: Date.now(),
+        };
+
+        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+          console.log('[Storage] Marked event for Google colors:', eventId);
+          resolve();
+        });
+      });
+    });
+  }
+
+  /**
+   * Mark all events in a recurring series to use Google's native colors
+   * Removes existing colors and stores useGoogleColors flag for the base event
+   * @param {string} eventId - Any event ID from the recurring series
+   * @returns {Promise<void>}
+   */
+  async function markRecurringEventForGoogleColors(eventId) {
+    if (!eventId) return;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get('cf.eventColors', (result) => {
+        const eventColors = result['cf.eventColors'] || {};
+        const parsed = parseEventId(eventId);
+
+        if (parsed.type !== 'calendar') {
+          resolve();
+          return;
+        }
+
+        const baseId = parsed.decodedId;
+
+        // Remove all existing entries for this recurring series
+        Object.keys(eventColors).forEach((storedId) => {
+          try {
+            const storedParsed = parseEventId(storedId);
+            if (storedParsed.decodedId === baseId) {
+              delete eventColors[storedId];
+            }
+          } catch (e) {
+            // Skip invalid IDs
+          }
+        });
+
+        // Store the useGoogleColors flag under the original eventId (not decoded)
+        // This ensures it matches when looking up the event later
+        eventColors[eventId] = {
+          useGoogleColors: true,
+          isRecurring: true,
+          appliedAt: Date.now(),
+        };
+
+        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+          console.log('[Storage] Marked recurring event for Google colors:', eventId);
+          resolve();
+        });
+      });
+    });
+  }
+
+  /**
    * Save event color with recurring event support
    * When saving a recurring event with applyToAll=true, stores under base event ID
    * and cleans up individual instance colors
@@ -774,6 +849,7 @@
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
       overrideDefaults: colorData.overrideDefaults || false,
+      useGoogleColors: colorData.useGoogleColors || false,
     };
   }
 
@@ -1460,6 +1536,8 @@
     getAllEventColors,
     removeEventColor,
     removeRecurringEventColors,
+    markEventForGoogleColors,
+    markRecurringEventForGoogleColors,
     saveEventColorAdvanced,
     saveEventColorsFullAdvanced,
     findEventColor,

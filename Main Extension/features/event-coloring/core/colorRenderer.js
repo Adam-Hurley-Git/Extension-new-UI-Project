@@ -95,6 +95,7 @@ export class ColorRenderer {
       borderWidth: colorData.borderWidth || 2, // Default if not set
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
+      useGoogleColors: colorData.useGoogleColors || false,
     };
   }
 
@@ -132,6 +133,10 @@ export class ColorRenderer {
       Object.entries(eventColors).forEach(([eventId, colorData]) => {
         const normalized = this.normalizeColorData(colorData);
         if (!normalized) return;
+
+        // Skip events marked to use Google's native colors
+        // These should not have any custom colors applied
+        if (normalized.useGoogleColors) return;
 
         if (normalized.isRecurring) {
           recurringEvents.push({ eventId, colors: normalized });
