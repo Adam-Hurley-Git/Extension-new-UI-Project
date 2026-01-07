@@ -461,7 +461,13 @@
     const hasEventBorder = !!existingColors?.border;
     const hasEventBorderWidth = existingColors?.borderWidth != null && existingColors?.borderWidth !== 2;
 
-    // Check calendar-level properties
+    // If event has overrideDefaults, calendar defaults aren't actually applied to this event
+    // So we should only check event-level properties, not calendar defaults
+    if (existingColors?.overrideDefaults) {
+      return hasEventText || hasEventBorder || hasEventBorderWidth;
+    }
+
+    // Check calendar-level properties (only if event doesn't have overrideDefaults)
     const hasCalendarText = !!calendarDefaults?.text;
     const hasCalendarBorder = !!calendarDefaults?.border;
     const hasCalendarBorderWidth = calendarDefaults?.borderWidth != null && calendarDefaults?.borderWidth !== 2;
@@ -2533,11 +2539,12 @@
               console.log('[EventColoring] Google color - Dialog closed');
             },
           });
-        } else {
-          // No other properties, remove custom color (current behavior)
-          await window.cc3Storage.removeEventColor(eventId);
-          delete eventColors[eventId];
-          console.log('[EventColoring] Removed custom color for:', eventId);
+        } else if (googleColor) {
+          // No other properties to preserve - apply the Google color directly
+          console.log('[EventColoring] Google color - No properties to preserve, applying directly:', googleColor);
+          e.preventDefault();
+          e.stopPropagation();
+          await applyBackgroundOnly(eventId, googleColor);
         }
       });
     });
