@@ -16,6 +16,12 @@ export class RecurringEventDialog {
     this.onClose = options.onClose;
     this.container = null;
     this.overlay = null;
+    // Customizable strings (with defaults for backward compatibility)
+    this.dialogTitle = options.dialogTitle || 'Recurring Event';
+    this.dialogMessage = options.dialogMessage || 'This is a recurring event. Would you like to apply this color to:';
+    this.allEventsLabel = options.allEventsLabel || 'All events in series';
+    this.thisOnlyLabel = options.thisOnlyLabel || 'This event only';
+    this.showColorPreview = options.showColorPreview !== false; // default true
   }
 
   /**
@@ -81,21 +87,25 @@ export class RecurringEventDialog {
       z-index: 1;
     `;
 
-    // Color preview
+    // Color preview (optional - can be hidden for removal dialogs)
     const colorPreview = document.createElement('div');
-    colorPreview.style.cssText = `
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background-color: ${this.color};
-      margin: 0 auto 16px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    `;
+    if (this.showColorPreview && this.color) {
+      colorPreview.style.cssText = `
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: ${this.color};
+        margin: 0 auto 16px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      `;
+    } else {
+      colorPreview.style.display = 'none';
+    }
 
-    // Title
+    // Title (customizable)
     const title = document.createElement('h2');
     title.id = 'cf-dialog-title';
-    title.textContent = 'Recurring Event';
+    title.textContent = this.dialogTitle;
     title.style.cssText = `
       margin: 0 0 8px;
       font-size: 18px;
@@ -104,9 +114,9 @@ export class RecurringEventDialog {
       text-align: center;
     `;
 
-    // Description
+    // Description (customizable)
     const description = document.createElement('p');
-    description.textContent = 'This is a recurring event. Would you like to apply this color to:';
+    description.textContent = this.dialogMessage;
     description.style.cssText = `
       margin: 0 0 20px;
       font-size: 14px;
@@ -123,17 +133,17 @@ export class RecurringEventDialog {
       gap: 12px;
     `;
 
-    // "This event only" button
+    // "This event only" button (customizable label)
     const thisOnlyButton = this.createButton(
-      'This event only',
+      this.thisOnlyLabel,
       false,
       '#1a73e8',
       'white'
     );
 
-    // "All events in series" button
+    // "All events in series" button (customizable label)
     const allEventsButton = this.createButton(
-      'All events in series',
+      this.allEventsLabel,
       true,
       'white',
       '#1a73e8',

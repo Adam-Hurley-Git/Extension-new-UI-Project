@@ -641,7 +641,7 @@ export class ColorPickerInjector {
   }
 
   /**
-   * Create the "Custom Color" section with the "+" button
+   * Create the "Custom Color" section with the "+" button and reset actions
    */
   createCustomColorSection(container, scenario) {
     const section = document.createElement('div');
@@ -678,7 +678,335 @@ export class ColorPickerInjector {
     section.appendChild(label);
     section.appendChild(buttonContainer);
 
+    // Add Reset Actions section
+    const resetSection = this.createResetActionsSection(container, scenario);
+    section.appendChild(resetSection);
+
     return section;
+  }
+
+  /**
+   * Create the Reset Actions section with "Remove all coloring" and "Reset to list defaults" buttons
+   */
+  createResetActionsSection(container, scenario) {
+    const section = document.createElement('div');
+    section.className = 'cf-reset-actions-section';
+    section.style.cssText = `
+      margin-top: 16px;
+      border-top: 1px solid #e8eaed;
+      padding-top: 12px;
+    `;
+
+    // Label
+    const label = document.createElement('div');
+    label.textContent = 'Reset Options';
+    label.style.cssText = `
+      font-size: 11px;
+      font-weight: 500;
+      color: #5f6368;
+      margin: 0 0 10px 0;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    `;
+
+    // Buttons container
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    `;
+
+    // "Remove all coloring" button
+    const removeAllBtn = this.createResetButton(
+      'Remove all coloring',
+      'Return to Google Calendar colors',
+      container,
+      scenario,
+      'removeAll'
+    );
+
+    // "Reset to list defaults" button
+    const resetToListBtn = this.createResetButton(
+      'Reset to list defaults',
+      'Apply calendar list colors',
+      container,
+      scenario,
+      'resetToList'
+    );
+
+    buttonsContainer.appendChild(removeAllBtn);
+    buttonsContainer.appendChild(resetToListBtn);
+
+    section.appendChild(label);
+    section.appendChild(buttonsContainer);
+
+    return section;
+  }
+
+  /**
+   * Create a reset action button
+   * @param {string} title - Button title
+   * @param {string} subtitle - Helper text
+   * @param {HTMLElement} container - Color picker container
+   * @param {string} scenario - Current scenario
+   * @param {string} action - 'removeAll' or 'resetToList'
+   */
+  createResetButton(title, subtitle, container, scenario, action) {
+    const button = document.createElement('button');
+    button.className = `cf-reset-btn cf-reset-${action}`;
+    button.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      width: 100%;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: left;
+    `;
+
+    const titleEl = document.createElement('span');
+    titleEl.textContent = title;
+    titleEl.style.cssText = `
+      font-size: 13px;
+      font-weight: 500;
+      color: #202124;
+      line-height: 1.3;
+    `;
+
+    const subtitleEl = document.createElement('span');
+    subtitleEl.textContent = subtitle;
+    subtitleEl.style.cssText = `
+      font-size: 11px;
+      color: #5f6368;
+      margin-top: 2px;
+    `;
+
+    button.appendChild(titleEl);
+    button.appendChild(subtitleEl);
+
+    // Hover effects
+    button.addEventListener('mouseenter', () => {
+      button.style.background = '#e8eaed';
+      button.style.borderColor = '#c6c6c6';
+    });
+
+    button.addEventListener('mouseleave', () => {
+      button.style.background = '#f8f9fa';
+      button.style.borderColor = '#dadce0';
+    });
+
+    // Click handler
+    button.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+      if (!eventId) {
+        console.error('[CF] Could not find event ID for reset action');
+        return;
+      }
+
+      if (action === 'removeAll') {
+        await this.handleRemoveAllColoring(eventId);
+      } else if (action === 'resetToList') {
+        await this.handleResetToListDefaults(eventId);
+      }
+    });
+
+    return button;
+  }
+
+  /**
+   * Remove all custom coloring from an event, returning it to Google's native colors
+   * For recurring events, removes ALL instance colors
+   * @param {string} eventId - Event ID
+   */
+  async handleRemoveAllColoring(eventId) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    if (parsed.isRecurring) {
+      // Show recurring event dialog with custom options for removal
+      showRecurringEventDialog({
+        eventId,
+        color: null,
+        showColorPreview: false,
+        dialogTitle: 'Remove Coloring',
+        dialogMessage: 'This is a recurring event. Remove coloring from:',
+        allEventsLabel: 'All events in series',
+        thisOnlyLabel: 'This event only',
+        onConfirm: async (applyToAll) => {
+          console.log('[CF] Remove coloring confirmed, applyToAll:', applyToAll);
+
+          if (applyToAll) {
+            // Remove ALL colors for this recurring series (base + instances)
+            if (this.storageService.removeRecurringEventColors) {
+              await this.storageService.removeRecurringEventColors(eventId);
+            } else {
+              await this.storageService.removeEventColor(eventId);
+            }
+          } else {
+            // Remove only this instance
+            await this.storageService.removeEventColor(eventId);
+          }
+
+          this.closeMenus();
+          // Force reload to ensure Google's colors are re-applied
+          window.location.reload();
+        },
+        onClose: () => {
+          console.log('[CF] Remove coloring dialog closed');
+        },
+      });
+    } else {
+      // Single event - remove directly
+      await this.storageService.removeEventColor(eventId);
+      this.closeMenus();
+      window.location.reload();
+    }
+  }
+
+  /**
+   * Reset event to calendar list default colors
+   * This removes custom colors so calendar defaults apply via mergeEventColors
+   * @param {string} eventId - Event ID
+   */
+  async handleResetToListDefaults(eventId) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Get calendar defaults for this event
+    const calendarId = this.getCalendarIdForEvent(eventId);
+    const calendarDefaults = await this.storageService.getEventCalendarColor?.(calendarId);
+
+    // If no calendar defaults exist, inform user
+    if (!calendarDefaults || (!calendarDefaults.background && !calendarDefaults.text && !calendarDefaults.border)) {
+      this.showNoListDefaultsDialog(eventId, parsed.isRecurring);
+      return;
+    }
+
+    if (parsed.isRecurring) {
+      showRecurringEventDialog({
+        eventId,
+        color: calendarDefaults.background,
+        dialogTitle: 'Reset to List Defaults',
+        dialogMessage: 'This is a recurring event. Apply list defaults to:',
+        allEventsLabel: 'All events in series',
+        thisOnlyLabel: 'This event only',
+        onConfirm: async (applyToAll) => {
+          console.log('[CF] Reset to list defaults confirmed, applyToAll:', applyToAll);
+
+          // Remove existing custom colors to let list defaults apply
+          if (applyToAll) {
+            if (this.storageService.removeRecurringEventColors) {
+              await this.storageService.removeRecurringEventColors(eventId);
+            } else {
+              await this.storageService.removeEventColor(eventId);
+            }
+          } else {
+            await this.storageService.removeEventColor(eventId);
+          }
+
+          this.closeMenus();
+          this.triggerColorUpdate();
+        },
+        onClose: () => {},
+      });
+    } else {
+      // Single event - just remove custom color to let list defaults apply
+      await this.storageService.removeEventColor(eventId);
+      this.closeMenus();
+      this.triggerColorUpdate();
+    }
+  }
+
+  /**
+   * Show dialog when no list defaults exist for calendar
+   */
+  showNoListDefaultsDialog(eventId, isRecurring) {
+    // Remove existing dialogs
+    document.querySelectorAll('.cf-no-defaults-dialog').forEach(el => el.remove());
+
+    const container = document.createElement('div');
+    container.className = 'cf-no-defaults-dialog';
+    container.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      position: relative;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      padding: 24px;
+      max-width: 380px;
+      z-index: 1;
+      text-align: center;
+    `;
+
+    const title = document.createElement('h3');
+    title.textContent = 'No List Defaults Set';
+    title.style.cssText = 'margin: 0 0 12px; font-size: 16px; color: #202124;';
+
+    const message = document.createElement('p');
+    message.textContent = 'This calendar has no default colors configured. You can set list defaults in the extension popup under "Calendar List Colors".';
+    message.style.cssText = 'margin: 0 0 20px; font-size: 14px; color: #5f6368; line-height: 1.5;';
+
+    const removeInsteadBtn = document.createElement('button');
+    removeInsteadBtn.textContent = 'Remove custom coloring instead';
+    removeInsteadBtn.style.cssText = `
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 8px;
+    `;
+    removeInsteadBtn.addEventListener('click', async () => {
+      container.remove();
+      await this.handleRemoveAllColoring(eventId);
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = `
+      background: transparent;
+      border: none;
+      color: #5f6368;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    `;
+    cancelBtn.addEventListener('click', () => container.remove());
+
+    overlay.addEventListener('click', () => container.remove());
+
+    dialog.appendChild(title);
+    dialog.appendChild(message);
+    dialog.appendChild(removeInsteadBtn);
+    dialog.appendChild(cancelBtn);
+    container.appendChild(overlay);
+    container.appendChild(dialog);
+    document.body.appendChild(container);
   }
 
   /**
