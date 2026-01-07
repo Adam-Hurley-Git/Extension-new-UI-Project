@@ -849,6 +849,7 @@
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
       overrideDefaults: colorData.overrideDefaults || false,
+      useGoogleColors: colorData.useGoogleColors || false,
     };
   }
 
