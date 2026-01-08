@@ -3191,6 +3191,7 @@
 
   /**
    * Apply background color with merged properties (keeps existing text/border)
+   * Uses saveFullColors() to ensure proper sequence handling for race condition prevention
    */
   async function applyBackgroundWithMerge(eventId, colors) {
     const parsed = EventIdUtils.fromEncoded(eventId);
@@ -3209,22 +3210,18 @@
         onClose: () => {},
       });
     } else {
-      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
-      eventColors[eventId] = {
-        ...colors,
-        hex: colors.background,
-        isRecurring: false,
-        appliedAt: Date.now()
-      };
+      // Use saveFullColors which handles sequences properly for race condition prevention
+      const colorDataWithSequence = await saveFullColors(eventId, colors);
       updateGoogleColorSwatch(eventId, colors.background);
       closeColorPicker();
-      // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
-      applyStoredColors();
+      // Apply with sequence-protected path
+      applyFullColorsToEvent(eventId, colorDataWithSequence);
     }
   }
 
   /**
    * Apply background color only (clears other properties and overrides calendar defaults)
+   * Uses saveFullColors() to ensure proper sequence handling for race condition prevention
    */
   async function applyBackgroundOnly(eventId, colorHex) {
     const parsed = EventIdUtils.fromEncoded(eventId);
@@ -3255,18 +3252,12 @@
         },
       });
     } else {
-      // Single event - save with explicit overrides
-      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
-      eventColors[eventId] = {
-        ...colors,
-        hex: colorHex,
-        isRecurring: false,
-        appliedAt: Date.now()
-      };
+      // Use saveFullColors which handles sequences properly for race condition prevention
+      const colorDataWithSequence = await saveFullColors(eventId, colors);
       updateGoogleColorSwatch(eventId, colorHex);
       closeColorPicker();
-      // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
-      applyStoredColors();
+      // Apply with sequence-protected path
+      applyFullColorsToEvent(eventId, colorDataWithSequence);
     }
   }
 
@@ -3337,8 +3328,15 @@
     }
   }
 
+  /**
+   * Legacy function for saving simple hex color with recurring support
+   * Includes sequence for race condition prevention
+   */
   async function saveColorWithRecurringSupport(eventId, colorHex, applyToAll) {
     const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Get sequence for race condition prevention
+    const sequence = getNextColorSequence();
 
     if (applyToAll && parsed.isRecurring) {
       // Store under base ID for recurring events
@@ -3351,8 +3349,8 @@
         await window.cc3Storage.saveEventColor(baseStorageId, colorHex, true);
       }
 
-      // Update local cache
-      eventColors[baseStorageId] = { hex: colorHex, isRecurring: true, appliedAt: Date.now() };
+      // Update local cache with sequence
+      eventColors[baseStorageId] = { hex: colorHex, isRecurring: true, appliedAt: Date.now(), sequence };
 
       // Clean up individual instance colors
       Object.keys(eventColors).forEach((storedId) => {
@@ -3365,7 +3363,7 @@
       });
     } else {
       await window.cc3Storage.saveEventColor(eventId, colorHex, false);
-      eventColors[eventId] = { hex: colorHex, isRecurring: false, appliedAt: Date.now() };
+      eventColors[eventId] = { hex: colorHex, isRecurring: false, appliedAt: Date.now(), sequence };
     }
   }
 
