@@ -523,7 +523,7 @@
   function hasNonBackgroundProperties(existingColors, calendarDefaults) {
     if (!existingColors && !calendarDefaults) return false;
 
-    // Check event-level properties first (manual colors set on the event)
+    // Check event-level properties first
     const hasEventText = !!existingColors?.text;
     const hasEventBorder = !!existingColors?.border;
     const hasEventBorderWidth = existingColors?.borderWidth != null && existingColors?.borderWidth !== 2;
@@ -534,30 +534,7 @@
       return hasEventText || hasEventBorder || hasEventBorderWidth;
     }
 
-    // If event has useGoogleColors flag, it means user explicitly chose Google colors
-    // No manual properties to preserve
-    if (existingColors?.useGoogleColors) {
-      return false;
-    }
-
-    // Only consider calendar defaults if the event has SOME manual coloring applied
-    // If the event has no manual colors at all, calendar defaults shouldn't trigger the dialog
-    // This prevents the dialog from showing when clicking Google color on a fresh event
-    const eventHasAnyManualColors = existingColors && (
-      existingColors.background ||
-      existingColors.hex ||
-      existingColors.text ||
-      existingColors.border ||
-      (existingColors.borderWidth != null && existingColors.borderWidth !== 2)
-    );
-
-    if (!eventHasAnyManualColors) {
-      // No manual colors on event - don't check calendar defaults
-      return false;
-    }
-
-    // Event has manual colors, check if it has non-background properties
-    // Also check calendar-level properties since they would be merged
+    // Check calendar-level properties (only if event doesn't have overrideDefaults)
     const hasCalendarText = !!calendarDefaults?.text;
     const hasCalendarBorder = !!calendarDefaults?.border;
     const hasCalendarBorderWidth = calendarDefaults?.borderWidth != null && calendarDefaults?.borderWidth !== 2;
