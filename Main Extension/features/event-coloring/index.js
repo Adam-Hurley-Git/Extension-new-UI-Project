@@ -3817,19 +3817,20 @@
         if (eventId && !isTask) {
           lastClickedEventId = eventId;
           console.log('[EventColoring] Captured event ID:', eventId, 'from', e.type);
+          // Timeout extended to 30s to give more time for color selection
           setTimeout(() => {
             if (lastClickedEventId === eventId) {
               lastClickedEventId = null;
             }
-          }, 10000);
+          }, 30000);
         } else if (isTask) {
           console.log('[EventColoring] Captured task click, skipping color picker injection');
           // Clear lastClickedEventId to prevent stale event association
           lastClickedEventId = null;
-          // Reset task flag after a delay (similar to event ID timeout)
+          // Reset task flag after a delay
           setTimeout(() => {
             lastClickedIsTask = false;
-          }, 10000);
+          }, 30000);
         }
       }
     };
