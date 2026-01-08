@@ -36,6 +36,58 @@
   let colorChangeListenerSetup = false; // Prevent duplicate window listener
 
   // ========================================
+  // SEQUENCE INFRASTRUCTURE FOR RACE CONDITION PREVENTION
+  // ========================================
+  // Global sequence counter for color operations - ensures last-intention-wins
+  let colorOperationSequence = 0;
+  // Tracks the last applied sequence per event to prevent stale updates
+  const appliedSequences = new Map();
+
+  /**
+   * Get the next sequence number for a color operation
+   * @returns {number} Monotonically increasing sequence number
+   */
+  function getNextColorSequence() {
+    return ++colorOperationSequence;
+  }
+
+  /**
+   * Check if a color operation should be applied based on sequence
+   * @param {string} eventId - Event ID
+   * @param {number} sequence - Operation sequence number
+   * @returns {boolean} True if this operation should proceed
+   */
+  function shouldApplyColorOperation(eventId, sequence) {
+    const lastApplied = appliedSequences.get(eventId) || 0;
+    return sequence > lastApplied;
+  }
+
+  /**
+   * Mark a color operation as applied
+   * @param {string} eventId - Event ID
+   * @param {number} sequence - Operation sequence number
+   */
+  function markColorOperationApplied(eventId, sequence) {
+    appliedSequences.set(eventId, sequence);
+  }
+
+  /**
+   * Periodic cleanup of stale entries from appliedSequences Map
+   * Removes entries for events no longer in the DOM to prevent memory leaks
+   */
+  function pruneAppliedSequences() {
+    const activeEventIds = new Set();
+    document.querySelectorAll('[data-eventid]').forEach(el => {
+      activeEventIds.add(el.getAttribute('data-eventid'));
+    });
+    for (const eventId of appliedSequences.keys()) {
+      if (!activeEventIds.has(eventId)) {
+        appliedSequences.delete(eventId);
+      }
+    }
+  }
+
+  // ========================================
   // GOOGLE COLOR SCHEME MAPPING
   // Modern (saturated) vs Classic (pastel) color schemes
   // ========================================
@@ -1754,13 +1806,17 @@
               // Fallback: mark just this event
               await window.cc3Storage.markEventForGoogleColors(eventId);
             }
+            // Invalidate cache for all instances so fresh Google colors are read
+            invalidateRecurringOriginalColorCache(eventId);
           } else {
             // Mark only this instance to use Google colors
             await window.cc3Storage.markEventForGoogleColors(eventId);
+            // Invalidate cache for this instance
+            invalidateOriginalColorCache(eventId);
           }
 
-          // Update local cache with the flag
-          eventColors[eventId] = { useGoogleColors: true };
+          // Update local cache with the flag and new sequence
+          eventColors[eventId] = { useGoogleColors: true, sequence: getNextColorSequence() };
 
           closeColorPickerMenus();
           // Force reload to ensure Google's colors are re-applied
@@ -1773,7 +1829,12 @@
     } else {
       // Single event - mark to use Google colors (bypasses list defaults)
       await window.cc3Storage.markEventForGoogleColors(eventId);
-      eventColors[eventId] = { useGoogleColors: true };
+
+      // Invalidate cache so fresh Google color is read
+      invalidateOriginalColorCache(eventId);
+
+      // Update local cache with the flag and new sequence
+      eventColors[eventId] = { useGoogleColors: true, sequence: getNextColorSequence() };
 
       closeColorPickerMenus();
       window.location.reload();
@@ -2063,6 +2124,47 @@
     }
 
     return null;
+  }
+
+  /**
+   * Invalidate the cached original color for an event element
+   * Called when user selects a Google color or sets useGoogleColors flag
+   * This forces getOriginalEventColor() to re-read from the DOM on next call
+   * @param {string} eventId - Event ID to invalidate cache for
+   */
+  function invalidateOriginalColorCache(eventId) {
+    const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+    elements.forEach(element => {
+      if (element.hasAttribute('data-cf-original-color')) {
+        element.removeAttribute('data-cf-original-color');
+        console.log('[EventColoring] Invalidated original color cache for:', eventId.slice(0, 30) + '...');
+      }
+    });
+  }
+
+  /**
+   * Invalidate cache for all instances of a recurring event
+   * @param {string} eventId - Any event ID from the recurring series
+   */
+  function invalidateRecurringOriginalColorCache(eventId) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+    if (parsed.type !== 'calendar') return;
+
+    const allEventElements = document.querySelectorAll('[data-eventid]');
+    allEventElements.forEach(element => {
+      const elementEventId = element.getAttribute('data-eventid');
+      if (!elementEventId) return;
+
+      try {
+        const elementParsed = EventIdUtils.fromEncoded(elementEventId);
+        if (EventIdUtils.matchesEvent(elementParsed, parsed)) {
+          element.removeAttribute('data-cf-original-color');
+        }
+      } catch (e) {
+        // Skip invalid IDs
+      }
+    });
+    console.log('[EventColoring] Invalidated recurring original color cache for:', eventId.slice(0, 30) + '...');
   }
 
   /**
@@ -2469,10 +2571,17 @@
 
   /**
    * Save full colors (bg/text/border/borderWidth) for a single event
+   * @param {string} eventId - Event ID to save colors for
+   * @param {Object} colors - Color data to save
+   * @param {number|null} providedSequence - Optional sequence number (to avoid double increment when called from saveFullColorsWithRecurringSupport)
+   * @returns {number} The sequence number used for this operation
    */
-  async function saveFullColors(eventId, colors) {
+  async function saveFullColors(eventId, colors, providedSequence = null) {
     console.log('[EventColoring] saveFullColors called:', { eventId, colors });
     console.log('[EventColoring] colors.borderWidth:', colors.borderWidth, 'type:', typeof colors.borderWidth);
+
+    // Use provided sequence or get new one (avoids double increment when called from saveFullColorsWithRecurringSupport)
+    const sequence = providedSequence ?? getNextColorSequence();
 
     const colorData = {
       background: colors.background || null,
@@ -2487,63 +2596,81 @@
       // Preserve flags for proper merging behavior
       overrideDefaults: colors.overrideDefaults || false,
       useGoogleColors: colors.useGoogleColors || false,
+      // Sequence for race condition prevention
+      sequence: sequence,
     };
 
-    console.log('[EventColoring] colorData to save:', colorData);
+    console.log('[EventColoring] colorData to save with sequence:', sequence, colorData);
+
+    // Invalidate DOM cache if useGoogleColors is set (user wants Google's native colors)
+    if (colors.useGoogleColors) {
+      invalidateOriginalColorCache(eventId);
+    }
+
+    // Invalidate cache if using Google-picker style color (background only, no text/border)
+    // This ensures the stripe correctly reflects the new Google color selection
+    if (colors.overrideDefaults && colors.background && !colors.text && !colors.border) {
+      invalidateOriginalColorCache(eventId);
+    }
 
     // IMPORTANT: Update local cache FIRST for immediate effect
     // This prevents race conditions where MutationObserver fires before storage save completes
     eventColors[eventId] = colorData;
-    console.log('[EventColoring] Updated local cache FIRST for event:', eventId.slice(0, 30) + '...', 'borderWidth:', colorData.borderWidth);
+    console.log('[EventColoring] Updated local cache FIRST for event:', eventId.slice(0, 30) + '...', 'sequence:', sequence);
 
     // Then save to storage (async, can complete in background)
+    // Pass colorData (with sequence) instead of colors
     if (window.cc3Storage.saveEventColorsFullAdvanced) {
-      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colorData, { applyToAll: false });
       console.log('[EventColoring] Saved to storage via saveEventColorsFullAdvanced');
     } else {
       // Fallback: save as single color
       await window.cc3Storage.saveEventColor(eventId, colors.background, false);
     }
+
+    return sequence;
   }
 
   /**
    * Save full colors with recurring event support
+   * @param {string} eventId - Event ID to save colors for
+   * @param {Object} colors - Color data to save
+   * @param {boolean} applyToAll - Whether to apply to all recurring instances
+   * @returns {number} The sequence number used for this operation
    */
   async function saveFullColorsWithRecurringSupport(eventId, colors, applyToAll) {
     const parsed = EventIdUtils.fromEncoded(eventId);
 
-    const colorData = {
-      background: colors.background || null,
-      text: colors.text || null,
-      border: colors.border || null,
-      // Use null-coalescing to preserve the borderWidth value
-      borderWidth: colors.borderWidth ?? null,
-      hex: colors.background || null,
-      isRecurring: applyToAll && parsed.isRecurring,
-      appliedAt: Date.now(),
-      // Preserve flags for proper merging behavior
-      overrideDefaults: colors.overrideDefaults || false,
-      useGoogleColors: colors.useGoogleColors || false,
-    };
-
-    // Update local cache FIRST for immediate effect (before async storage operations)
-    if (applyToAll && parsed.isRecurring) {
-      const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
-      eventColors[baseStorageId] = colorData;
-    } else {
-      eventColors[eventId] = colorData;
-    }
+    // Get sequence at the START for all paths - ensures consistent ordering
+    const sequence = getNextColorSequence();
 
     if (applyToAll && parsed.isRecurring) {
-      const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
+      // Recurring event - apply to all instances
+      const colorData = {
+        background: colors.background || null,
+        text: colors.text || null,
+        border: colors.border || null,
+        borderWidth: colors.borderWidth ?? null,
+        hex: colors.background || null,
+        isRecurring: true,
+        appliedAt: Date.now(),
+        overrideDefaults: colors.overrideDefaults || false,
+        useGoogleColors: colors.useGoogleColors || false,
+        sequence: sequence,
+      };
 
-      if (window.cc3Storage.saveEventColorsFullAdvanced) {
-        await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: true });
-      } else if (window.cc3Storage.saveEventColorAdvanced) {
-        await window.cc3Storage.saveEventColorAdvanced(eventId, colors.background, { applyToAll: true });
+      // Handle cache invalidation for Google colors
+      if (colors.useGoogleColors || (colors.overrideDefaults && colors.background && !colors.text && !colors.border)) {
+        invalidateRecurringOriginalColorCache(eventId);
       }
 
-      // Clean up individual instance colors (cache was already updated at function start)
+      const baseStorageId = EventIdUtils.toEncodedEventId(parsed.decodedId, parsed.emailSuffix);
+
+      // Update local cache FIRST for immediate effect
+      eventColors[baseStorageId] = colorData;
+      console.log('[EventColoring] Updated recurring local cache with sequence:', sequence);
+
+      // Clean up individual instance colors
       Object.keys(eventColors).forEach((storedId) => {
         try {
           const storedParsed = EventIdUtils.fromEncoded(storedId);
@@ -2552,9 +2679,19 @@
           }
         } catch (e) {}
       });
+
+      // Save to storage - pass colorData with sequence
+      if (window.cc3Storage.saveEventColorsFullAdvanced) {
+        await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colorData, { applyToAll: true });
+      } else if (window.cc3Storage.saveEventColorAdvanced) {
+        await window.cc3Storage.saveEventColorAdvanced(eventId, colors.background, { applyToAll: true });
+      }
     } else {
-      await saveFullColors(eventId, colors);
+      // Single event - pass sequence to avoid double increment
+      await saveFullColors(eventId, colors, sequence);
     }
+
+    return sequence;
   }
 
   /**
@@ -3230,6 +3367,7 @@
   /**
    * Normalize color data from storage (handles old and new formats)
    * Preserves borderWidth if set, otherwise returns null to allow inheritance from calendar
+   * Preserves sequence for race condition prevention
    */
   function normalizeColorData(colorData) {
     if (!colorData) return null;
@@ -3243,6 +3381,7 @@
         borderWidth: null, // Allow inheritance from calendar
         hex: colorData,
         isRecurring: false,
+        sequence: 0, // Old formats get lowest priority
       };
     }
 
@@ -3256,6 +3395,7 @@
         borderWidth: colorData.borderWidth ?? null,
         hex: colorData.hex,
         isRecurring: colorData.isRecurring || false,
+        sequence: colorData.sequence || 0,
       };
     }
 
@@ -3270,6 +3410,7 @@
       isRecurring: colorData.isRecurring || false,
       overrideDefaults: colorData.overrideDefaults || false,
       useGoogleColors: colorData.useGoogleColors || false,
+      sequence: colorData.sequence || 0,
     };
   }
 
@@ -3389,15 +3530,19 @@
       }
 
       if (mergedColors) {
-        applyColorsToElement(element, mergedColors);
+        applyColorsToElement(element, mergedColors, eventId);
       }
     });
+
+    // Periodically clean up stale entries from appliedSequences Map
+    pruneAppliedSequences();
   }
 
   /**
    * Merge manual event colors with calendar default colors
    * Manual colors take precedence for each property independently
-   * @param {Object|null} manualColors - { background, text, border, borderWidth } from event coloring
+   * Preserves sequence for race condition prevention
+   * @param {Object|null} manualColors - { background, text, border, borderWidth, sequence } from event coloring
    * @param {Object|null} calendarColors - { background, text, border, borderWidth } from calendar defaults
    * @returns {Object|null} Merged colors or null if no colors
    */
@@ -3411,7 +3556,10 @@
     }
 
     if (!calendarColors) return manualColors;
-    if (!manualColors) return calendarColors;
+    if (!manualColors) {
+      // Calendar colors only - give lowest sequence priority
+      return { ...calendarColors, sequence: 0 };
+    }
 
     // If overrideDefaults is set, don't merge with calendar colors - use manual colors only
     // This is used by "Replace all styling" to ensure calendar defaults don't get applied
@@ -3422,6 +3570,7 @@
         border: null,
         borderWidth: manualColors.borderWidth != null ? manualColors.borderWidth : 2,
         isRecurring: manualColors.isRecurring || false,
+        sequence: manualColors.sequence || 0,
       };
     }
 
@@ -3438,6 +3587,8 @@
       borderWidth: mergedBorderWidth,
       // Preserve isRecurring from manual if present
       isRecurring: manualColors.isRecurring || false,
+      // Preserve sequence from manual colors for race condition prevention
+      sequence: manualColors.sequence || 0,
     };
   }
 
@@ -3456,7 +3607,7 @@
         if (elementParsed.type !== 'calendar') return;
 
         if (EventIdUtils.matchesEvent(elementParsed, parsed)) {
-          applyColorsToElement(element, colors);
+          applyColorsToElement(element, colors, elementEventId);
         }
       } catch (e) {}
     });
@@ -3471,7 +3622,7 @@
     const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
     elements.forEach((element) => {
       if (!element.closest('[role="dialog"]')) {
-        applyColorsToElement(element, colors);
+        applyColorsToElement(element, colors, eventId);
       }
     });
   }
@@ -3481,11 +3632,26 @@
     applyColorsToElement(element, { background: colorHex, text: null, border: null });
   }
 
-  function applyColorsToElement(element, colors) {
+  /**
+   * Apply colors to an event element
+   * @param {HTMLElement} element - The DOM element to apply colors to
+   * @param {Object} colors - Color data including background, text, border, borderWidth, sequence
+   * @param {string|null} eventId - Optional event ID for sequence tracking
+   */
+  function applyColorsToElement(element, colors, eventId = null) {
     if (!element) return;
 
     // Skip task elements - tasks should not receive event coloring
     if (isTaskElement(element)) return;
+
+    // Sequence guard - skip if a newer operation has already been applied
+    if (eventId && colors.sequence) {
+      if (!shouldApplyColorOperation(eventId, colors.sequence)) {
+        console.log('[EventColoring] Skipping stale color application, seq:', colors.sequence,
+                    'vs applied:', appliedSequences.get(eventId));
+        return;
+      }
+    }
 
     const { background, text, border, borderWidth = 2 } = colors;
     if (!background && !text && !border) return;
@@ -3539,6 +3705,11 @@
         element.style.outlineOffset = '';
       }
 
+      // Mark this sequence as applied for this event
+      if (eventId && colors.sequence) {
+        markColorOperationApplied(eventId, colors.sequence);
+      }
+
     } else if (element.matches('[data-draggable-id]')) {
       // For draggable items (different event type)
       if (background) {
@@ -3555,6 +3726,11 @@
       if (border) {
         element.style.outline = `${borderWidth}px solid ${border}`;
         element.style.outlineOffset = `-${borderWidth * 0.3}px`;
+      }
+
+      // Mark this sequence as applied for this event (draggable branch)
+      if (eventId && colors.sequence) {
+        markColorOperationApplied(eventId, colors.sequence);
       }
     }
   }

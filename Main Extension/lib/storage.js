@@ -769,6 +769,8 @@
           overrideDefaults: colors.overrideDefaults || false,
           // Preserve useGoogleColors flag - used by "Remove all coloring" to bypass list defaults
           useGoogleColors: colors.useGoogleColors || false,
+          // Preserve sequence for race condition prevention
+          sequence: colors.sequence || 0,
         };
 
         console.log('[Storage] colorData to store:', colorData);
@@ -813,7 +815,7 @@
   /**
    * Get normalized event color data (handles both old and new formats)
    * @param {Object} colorData - Raw color data from storage
-   * @returns {Object} Normalized { background, text, border, borderWidth, hex, isRecurring }
+   * @returns {Object} Normalized { background, text, border, borderWidth, hex, isRecurring, sequence }
    */
   function normalizeEventColorData(colorData) {
     if (!colorData) return null;
@@ -827,6 +829,7 @@
         borderWidth: 2, // Default border width
         hex: colorData,
         isRecurring: false,
+        sequence: 0, // Old formats get lowest priority
       };
     }
 
@@ -839,6 +842,7 @@
         borderWidth: colorData.borderWidth || 2, // Default if not set
         hex: colorData.hex,
         isRecurring: colorData.isRecurring || false,
+        sequence: colorData.sequence || 0,
       };
     }
 
@@ -852,6 +856,7 @@
       isRecurring: colorData.isRecurring || false,
       overrideDefaults: colorData.overrideDefaults || false,
       useGoogleColors: colorData.useGoogleColors || false,
+      sequence: colorData.sequence || 0,
     };
   }
 
