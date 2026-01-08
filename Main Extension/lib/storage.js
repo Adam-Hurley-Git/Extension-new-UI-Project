@@ -600,18 +600,21 @@
   async function markEventForGoogleColors(eventId) {
     if (!eventId) return;
 
-    return new Promise((resolve) => {
-      chrome.storage.local.get('cf.eventColors', (result) => {
-        const eventColors = result['cf.eventColors'] || {};
+    // Use queue to serialize writes and prevent race conditions
+    return queueEventColorWrite(() => {
+      return new Promise((resolve) => {
+        chrome.storage.local.get('cf.eventColors', (result) => {
+          const eventColors = result['cf.eventColors'] || {};
 
-        eventColors[eventId] = {
-          useGoogleColors: true,
-          appliedAt: Date.now(),
-        };
+          eventColors[eventId] = {
+            useGoogleColors: true,
+            appliedAt: Date.now(),
+          };
 
-        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
-          console.log('[Storage] Marked event for Google colors:', eventId);
-          resolve();
+          chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+            console.log('[Storage] Marked event for Google colors:', eventId);
+            resolve();
+          });
         });
       });
     });
@@ -626,41 +629,44 @@
   async function markRecurringEventForGoogleColors(eventId) {
     if (!eventId) return;
 
-    return new Promise((resolve) => {
-      chrome.storage.local.get('cf.eventColors', (result) => {
-        const eventColors = result['cf.eventColors'] || {};
-        const parsed = parseEventId(eventId);
+    // Use queue to serialize writes and prevent race conditions
+    return queueEventColorWrite(() => {
+      return new Promise((resolve) => {
+        chrome.storage.local.get('cf.eventColors', (result) => {
+          const eventColors = result['cf.eventColors'] || {};
+          const parsed = parseEventId(eventId);
 
-        if (parsed.type !== 'calendar') {
-          resolve();
-          return;
-        }
-
-        const baseId = parsed.decodedId;
-
-        // Remove all existing entries for this recurring series
-        Object.keys(eventColors).forEach((storedId) => {
-          try {
-            const storedParsed = parseEventId(storedId);
-            if (storedParsed.decodedId === baseId) {
-              delete eventColors[storedId];
-            }
-          } catch (e) {
-            // Skip invalid IDs
+          if (parsed.type !== 'calendar') {
+            resolve();
+            return;
           }
-        });
 
-        // Store the useGoogleColors flag under the original eventId (not decoded)
-        // This ensures it matches when looking up the event later
-        eventColors[eventId] = {
-          useGoogleColors: true,
-          isRecurring: true,
-          appliedAt: Date.now(),
-        };
+          const baseId = parsed.decodedId;
 
-        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
-          console.log('[Storage] Marked recurring event for Google colors:', eventId);
-          resolve();
+          // Remove all existing entries for this recurring series
+          Object.keys(eventColors).forEach((storedId) => {
+            try {
+              const storedParsed = parseEventId(storedId);
+              if (storedParsed.decodedId === baseId) {
+                delete eventColors[storedId];
+              }
+            } catch (e) {
+              // Skip invalid IDs
+            }
+          });
+
+          // Store the useGoogleColors flag under the original eventId (not decoded)
+          // This ensures it matches when looking up the event later
+          eventColors[eventId] = {
+            useGoogleColors: true,
+            isRecurring: true,
+            appliedAt: Date.now(),
+          };
+
+          chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+            console.log('[Storage] Marked recurring event for Google colors:', eventId);
+            resolve();
+          });
         });
       });
     });
@@ -732,10 +738,33 @@
     });
   }
 
+  // ========================================
+  // STORAGE WRITE QUEUE FOR RACE CONDITION PREVENTION
+  // ========================================
+  // Serializes storage writes to ensure they complete in order.
+  // Without this, rapid color changes can result in out-of-order writes
+  // where an older color overwrites a newer one in storage.
+  let eventColorWriteQueue = Promise.resolve();
+
+  /**
+   * Queue a storage write operation to ensure serial execution
+   * @param {Function} writeOperation - Async function that performs the storage write
+   * @returns {Promise} - Resolves when the write completes
+   */
+  function queueEventColorWrite(writeOperation) {
+    eventColorWriteQueue = eventColorWriteQueue
+      .then(writeOperation)
+      .catch((err) => {
+        console.error('[Storage] Error in queued write operation:', err);
+      });
+    return eventColorWriteQueue;
+  }
+
   /**
    * Save event colors with full background/text/border/borderWidth support
+   * Uses write queue to ensure serial execution and prevent race conditions
    * @param {string} eventId - Calendar event ID
-   * @param {Object} colors - Colors { background, text, border, borderWidth }
+   * @param {Object} colors - Colors { background, text, border, borderWidth, sequence }
    * @param {Object} options - Options { applyToAll: boolean }
    * @returns {Promise<void>}
    */
@@ -747,66 +776,71 @@
 
     const { applyToAll = false } = options;
 
-    return new Promise((resolve) => {
-      chrome.storage.local.get('cf.eventColors', (result) => {
-        const eventColors = result['cf.eventColors'] || {};
+    // Use queue to serialize writes and prevent race conditions
+    // This ensures that rapid color changes complete in order
+    return queueEventColorWrite(() => {
+      return new Promise((resolve) => {
+        chrome.storage.local.get('cf.eventColors', (result) => {
+          const eventColors = result['cf.eventColors'] || {};
 
-        // Parse the event ID to check if recurring
-        const parsed = parseEventId(eventId);
+          // Parse the event ID to check if recurring
+          const parsed = parseEventId(eventId);
 
-        // Use null-coalescing (??) for borderWidth to preserve explicit 0 values
-        // but fall back to 2 if undefined/null
-        const colorData = {
-          background: colors.background || null,
-          text: colors.text || null,
-          border: colors.border || null,
-          borderWidth: colors.borderWidth ?? 2, // Changed from || to ?? to properly handle numeric values
-          // Keep hex for backward compatibility (use background as primary)
-          hex: colors.background || null,
-          isRecurring: false,
-          appliedAt: Date.now(),
-          // Preserve overrideDefaults flag - used by "Replace all styling" to prevent calendar defaults from merging
-          overrideDefaults: colors.overrideDefaults || false,
-          // Preserve useGoogleColors flag - used by "Remove all coloring" to bypass list defaults
-          useGoogleColors: colors.useGoogleColors || false,
-          // Preserve sequence for race condition prevention
-          sequence: colors.sequence || 0,
-        };
+          // Use null-coalescing (??) for borderWidth to preserve explicit 0 values
+          // but fall back to 2 if undefined/null
+          const colorData = {
+            background: colors.background || null,
+            text: colors.text || null,
+            border: colors.border || null,
+            borderWidth: colors.borderWidth ?? 2, // Changed from || to ?? to properly handle numeric values
+            // Keep hex for backward compatibility (use background as primary)
+            hex: colors.background || null,
+            isRecurring: false,
+            appliedAt: Date.now(),
+            // Preserve overrideDefaults flag - used by "Replace all styling" to prevent calendar defaults from merging
+            overrideDefaults: colors.overrideDefaults || false,
+            // Preserve useGoogleColors flag - used by "Remove all coloring" to bypass list defaults
+            useGoogleColors: colors.useGoogleColors || false,
+            // Preserve sequence for race condition prevention
+            sequence: colors.sequence || 0,
+          };
 
-        console.log('[Storage] colorData to store:', colorData);
+          console.log('[Storage] colorData to store (queued):', colorData);
 
-        if (applyToAll && parsed.isRecurring) {
-          // Store under base ID for recurring events
-          const baseStorageId = encodeEventId(parsed.decodedId, parsed.emailSuffix);
+          if (applyToAll && parsed.isRecurring) {
+            // Store under base ID for recurring events
+            const baseStorageId = encodeEventId(parsed.decodedId, parsed.emailSuffix);
 
-          console.log('[Storage] Storing recurring event colors:', {
-            baseId: parsed.decodedId,
-            emailSuffix: parsed.emailSuffix,
-            storageId: baseStorageId,
-            colors,
-          });
+            console.log('[Storage] Storing recurring event colors:', {
+              baseId: parsed.decodedId,
+              emailSuffix: parsed.emailSuffix,
+              storageId: baseStorageId,
+              colors,
+            });
 
-          colorData.isRecurring = true;
-          eventColors[baseStorageId] = colorData;
+            colorData.isRecurring = true;
+            eventColors[baseStorageId] = colorData;
 
-          // Clean up any individual instance colors for this recurring event
-          Object.keys(eventColors).forEach((storedId) => {
-            try {
-              const storedParsed = parseEventId(storedId);
-              if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
-                delete eventColors[storedId];
+            // Clean up any individual instance colors for this recurring event
+            Object.keys(eventColors).forEach((storedId) => {
+              try {
+                const storedParsed = parseEventId(storedId);
+                if (storedParsed.decodedId === parsed.decodedId && storedId !== baseStorageId) {
+                  delete eventColors[storedId];
+                }
+              } catch (e) {
+                // Skip invalid IDs
               }
-            } catch (e) {
-              // Skip invalid IDs
-            }
-          });
-        } else {
-          // Single event or single instance
-          eventColors[eventId] = colorData;
-        }
+            });
+          } else {
+            // Single event or single instance
+            eventColors[eventId] = colorData;
+          }
 
-        chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
-          resolve();
+          chrome.storage.local.set({ 'cf.eventColors': eventColors }, () => {
+            console.log('[Storage] Write completed for sequence:', colors.sequence || 0);
+            resolve();
+          });
         });
       });
     });
