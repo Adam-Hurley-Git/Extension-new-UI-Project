@@ -2440,7 +2440,8 @@
           }
 
           closeColorPicker();
-          refreshColors();
+          // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+          applyStoredColors();
         },
         onClose: () => {
           console.log('[EventColoring] Recurring dialog closed');
@@ -2483,6 +2484,9 @@
       hex: colors.background || null, // Backward compatibility
       isRecurring: false,
       appliedAt: Date.now(),
+      // Preserve flags for proper merging behavior
+      overrideDefaults: colors.overrideDefaults || false,
+      useGoogleColors: colors.useGoogleColors || false,
     };
 
     console.log('[EventColoring] colorData to save:', colorData);
@@ -2517,6 +2521,9 @@
       hex: colors.background || null,
       isRecurring: applyToAll && parsed.isRecurring,
       appliedAt: Date.now(),
+      // Preserve flags for proper merging behavior
+      overrideDefaults: colors.overrideDefaults || false,
+      useGoogleColors: colors.useGoogleColors || false,
     };
 
     // Update local cache FIRST for immediate effect (before async storage operations)
@@ -3054,7 +3061,8 @@
           await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
           updateGoogleColorSwatch(eventId, colors.background);
           closeColorPicker();
-          refreshColors();
+          // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+          applyStoredColors();
         },
         onClose: () => {},
       });
@@ -3068,7 +3076,8 @@
       };
       updateGoogleColorSwatch(eventId, colors.background);
       closeColorPicker();
-      refreshColors();
+      // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+      applyStoredColors();
     }
   }
 
@@ -3096,7 +3105,8 @@
           await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
           updateGoogleColorSwatch(eventId, colorHex);
           closeColorPicker();
-          refreshColors();
+          // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+          applyStoredColors();
         },
         onClose: () => {
           console.log('[EventColoring] Recurring dialog closed');
@@ -3113,7 +3123,8 @@
       };
       updateGoogleColorSwatch(eventId, colorHex);
       closeColorPicker();
-      refreshColors();
+      // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
+      applyStoredColors();
     }
   }
 

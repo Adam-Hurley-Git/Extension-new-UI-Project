@@ -767,6 +767,8 @@
           appliedAt: Date.now(),
           // Preserve overrideDefaults flag - used by "Replace all styling" to prevent calendar defaults from merging
           overrideDefaults: colors.overrideDefaults || false,
+          // Preserve useGoogleColors flag - used by "Remove all coloring" to bypass list defaults
+          useGoogleColors: colors.useGoogleColors || false,
         };
 
         console.log('[Storage] colorData to store:', colorData);
