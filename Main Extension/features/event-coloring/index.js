@@ -59,7 +59,9 @@
    */
   function shouldApplyColorOperation(eventId, sequence) {
     const lastApplied = appliedSequences.get(eventId) || 0;
-    return sequence > lastApplied;
+    // Use >= to allow re-applying the same sequence (needed when Google redraws events)
+    // This still prevents older sequences from overwriting newer ones
+    return sequence >= lastApplied;
   }
 
   /**
