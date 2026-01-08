@@ -2551,7 +2551,8 @@
       });
     } else {
       // Single event - save with full colors
-      await saveFullColors(eventId, colors);
+      // saveFullColors returns colorData with sequence for immediate application
+      const colorDataWithSequence = await saveFullColors(eventId, colors);
 
       // Update the Google color swatch
       if (colors.background) {
@@ -2559,7 +2560,8 @@
       }
 
       closeColorPicker();
-      applyFullColorsToEvent(eventId, colors);
+      // Pass colorData WITH sequence for race condition protection
+      applyFullColorsToEvent(eventId, colorDataWithSequence);
     }
 
     // Close the modal
@@ -2574,7 +2576,7 @@
    * @param {string} eventId - Event ID to save colors for
    * @param {Object} colors - Color data to save
    * @param {number|null} providedSequence - Optional sequence number (to avoid double increment when called from saveFullColorsWithRecurringSupport)
-   * @returns {number} The sequence number used for this operation
+   * @returns {Object} The colorData object with sequence (for immediate application)
    */
   async function saveFullColors(eventId, colors, providedSequence = null) {
     console.log('[EventColoring] saveFullColors called:', { eventId, colors });
@@ -2628,7 +2630,8 @@
       await window.cc3Storage.saveEventColor(eventId, colors.background, false);
     }
 
-    return sequence;
+    // Return colorData (with sequence) for immediate application with sequence guard
+    return colorData;
   }
 
   /**
@@ -2697,9 +2700,10 @@
   /**
    * Apply full colors to an event element
    * Merges with calendar defaults to ensure inherited properties (like border) are applied
+   * Uses sequence-protected applyColorsToElement() to prevent race conditions
    */
   function applyFullColorsToEvent(eventId, colors) {
-    console.log('[EventColoring] applyFullColorsToEvent called:', { eventId, colors });
+    console.log('[EventColoring] applyFullColorsToEvent called:', { eventId, colors, sequence: colors.sequence });
 
     // Get calendar default colors and merge - this ensures that if the user
     // only changed borderWidth but not border color, we still apply the
@@ -2715,7 +2719,8 @@
 
     elements.forEach((element) => {
       if (!element.closest('[role="dialog"]')) {
-        applyFullColorsToElement(element, mergedColors || colors);
+        // Use applyColorsToElement with eventId for sequence-based race condition protection
+        applyColorsToElement(element, mergedColors || colors, eventId);
       }
     });
   }
