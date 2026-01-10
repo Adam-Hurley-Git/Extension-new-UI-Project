@@ -983,6 +983,7 @@ class ColorPickerInjector {
   /**
    * Inject color categories into the color picker
    * Redesigned with binary ownership model: Google Mode vs ColorKit Mode
+   * @returns {Promise<boolean>} true if injection succeeded, false if failed
    */
   async injectColorCategories(categories) {
     console.log('[CF] Injecting categories (redesigned):', categories?.length || 0);
@@ -992,7 +993,7 @@ class ColorPickerInjector {
 
     if (!ScenarioDetector) {
       console.error('[CF] ScenarioDetector not available!');
-      return;
+      return false;
     }
 
     try {
@@ -1002,7 +1003,7 @@ class ColorPickerInjector {
 
     if (scenario !== Scenario.EVENTEDIT && scenario !== Scenario.LISTVIEW) {
       console.log('[CF] Not injecting for scenario:', scenario);
-      return;
+      return false;
     }
 
     // Find the color picker container
@@ -1018,7 +1019,7 @@ class ColorPickerInjector {
 
     if (!container) {
       console.log('[CF] No color picker container found');
-      return;
+      return false;
     }
 
     // Get event ID
@@ -1027,7 +1028,7 @@ class ColorPickerInjector {
     console.log('[CF] Event ID:', eventId ? eventId.slice(0, 30) + '...' : null);
     if (!eventId) {
       console.log('[CF] No event ID found');
-      return;
+      return false;
     }
 
     // Detect current mode (google or colorkit)
@@ -1054,7 +1055,7 @@ class ColorPickerInjector {
     const wrapper = container.querySelector('div');
     if (!wrapper) {
       console.log('[CF] No wrapper found');
-      return;
+      return false;
     }
 
     // Hide Google's built-in color group - we'll provide our own UI
@@ -1275,8 +1276,10 @@ class ColorPickerInjector {
     await this.modifyGoogleColorLabels();
 
     console.log('[CF] Color picker UI injection completed');
+    return true;
     } catch (error) {
       console.error('[CF] Error injecting color categories:', error);
+      return false;
     }
   }
 

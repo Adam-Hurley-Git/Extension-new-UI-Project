@@ -1125,20 +1125,31 @@
                   return;
                 }
 
-                // Use new ColorPickerInjector if available, otherwise fall back to old method
-                if (colorPickerInjector) {
-                  // Mark as modified to prevent double injection
-                  colorPicker.dataset.cfEventColorModified = 'true';
-                  // Convert categories object to array and call new injector
-                  const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
-                  // Call async method and catch any errors
-                  colorPickerInjector.injectColorCategories(categoriesArray).catch((err) => {
-                    console.error('[EventColoring] Error in colorPickerInjector:', err);
-                  });
-                } else {
-                  // Fall back to old injection method
-                  injectCustomCategories(colorPicker);
-                }
+                // Try new ColorPickerInjector first, fall back to old method if it fails
+                (async () => {
+                  let injectionSucceeded = false;
+
+                  if (colorPickerInjector) {
+                    try {
+                      console.log('[EventColoring] Attempting new ColorPickerInjector...');
+                      const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
+                      injectionSucceeded = await colorPickerInjector.injectColorCategories(categoriesArray);
+                      console.log('[EventColoring] New injector result:', injectionSucceeded);
+                    } catch (err) {
+                      console.error('[EventColoring] Error in new colorPickerInjector:', err);
+                      injectionSucceeded = false;
+                    }
+                  }
+
+                  // If new injector failed or wasn't available, use old method
+                  if (!injectionSucceeded && !colorPicker.dataset.cfEventColorModified) {
+                    console.log('[EventColoring] Falling back to old injection method');
+                    injectCustomCategories(colorPicker);
+                  } else if (injectionSucceeded) {
+                    // Mark as modified only after successful injection
+                    colorPicker.dataset.cfEventColorModified = 'true';
+                  }
+                })();
               }
             }
           });
