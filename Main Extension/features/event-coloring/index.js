@@ -1131,7 +1131,10 @@
                   colorPicker.dataset.cfEventColorModified = 'true';
                   // Convert categories object to array and call new injector
                   const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
-                  colorPickerInjector.injectColorCategories(categoriesArray);
+                  // Call async method and catch any errors
+                  colorPickerInjector.injectColorCategories(categoriesArray).catch((err) => {
+                    console.error('[EventColoring] Error in colorPickerInjector:', err);
+                  });
                 } else {
                   // Fall back to old injection method
                   injectCustomCategories(colorPicker);

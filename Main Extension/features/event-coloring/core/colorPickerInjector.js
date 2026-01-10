@@ -982,9 +982,18 @@ class ColorPickerInjector {
    * Redesigned with binary ownership model: Google Mode vs ColorKit Mode
    */
   async injectColorCategories(categories) {
-    console.log('[CF] Injecting categories (redesigned):', categories.length);
+    console.log('[CF] Injecting categories (redesigned):', categories?.length || 0);
 
-    const scenario = ScenarioDetector.findColorPickerScenario();
+    // Ensure dependencies are loaded
+    ensureDependencies();
+
+    if (!ScenarioDetector) {
+      console.error('[CF] ScenarioDetector not available!');
+      return;
+    }
+
+    try {
+      const scenario = ScenarioDetector.findColorPickerScenario();
     if (scenario !== Scenario.EVENTEDIT && scenario !== Scenario.LISTVIEW) {
       console.log('[CF] Not injecting for scenario:', scenario);
       return;
@@ -1254,6 +1263,11 @@ class ColorPickerInjector {
 
     // Update Google color labels
     await this.modifyGoogleColorLabels();
+
+    console.log('[CF] Color picker UI injection completed');
+    } catch (error) {
+      console.error('[CF] Error injecting color categories:', error);
+    }
   }
 
   /**
