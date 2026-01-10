@@ -65,6 +65,9 @@
       quickAccessColors: [], // Recently used colors
       disableCustomColors: false, // Hide custom categories, show only Google colors
       calendarColors: {}, // Per-calendar default colors: calendarId -> { background, text, border }
+      // Mode switch confirmation preferences
+      hideGoogleSwitchWarning: false, // Don't show "Switch to Google" confirmation modal
+      hideColorKitSwitchWarning: false, // Don't show "Switch to ColorKit" confirmation modal
     },
   };
 
@@ -761,6 +764,7 @@
           text: colors.text || null,
           border: colors.border || null,
           borderWidth: colors.borderWidth ?? 2, // Changed from || to ?? to properly handle numeric values
+          stripeColor: colors.stripeColor || null, // Calendar stripe color (4px left bar)
           // Keep hex for backward compatibility (use background as primary)
           hex: colors.background || null,
           isRecurring: false,
@@ -813,7 +817,7 @@
   /**
    * Get normalized event color data (handles both old and new formats)
    * @param {Object} colorData - Raw color data from storage
-   * @returns {Object} Normalized { background, text, border, borderWidth, hex, isRecurring }
+   * @returns {Object} Normalized { background, text, border, borderWidth, stripeColor, hex, isRecurring }
    */
   function normalizeEventColorData(colorData) {
     if (!colorData) return null;
@@ -825,6 +829,7 @@
         text: null,
         border: null,
         borderWidth: 2, // Default border width
+        stripeColor: null, // No stripe in old format
         hex: colorData,
         isRecurring: false,
       };
@@ -837,6 +842,7 @@
         text: null,
         border: null,
         borderWidth: colorData.borderWidth || 2, // Default if not set
+        stripeColor: colorData.stripeColor || null,
         hex: colorData.hex,
         isRecurring: colorData.isRecurring || false,
       };
@@ -848,6 +854,7 @@
       text: colorData.text || null,
       border: colorData.border || null,
       borderWidth: colorData.borderWidth || 2, // Default if not set
+      stripeColor: colorData.stripeColor || null, // Calendar stripe color
       hex: colorData.hex || colorData.background || null,
       isRecurring: colorData.isRecurring || false,
       overrideDefaults: colorData.overrideDefaults || false,
@@ -1038,6 +1045,51 @@
 
     return setSettings({
       eventColoring: { quickAccessColors: updated },
+    });
+  }
+
+  // ========================================
+  // MODE SWITCH CONFIRMATION PREFERENCES
+  // Controls whether to show "don't show again" modals
+  // ========================================
+
+  /**
+   * Get "hide Google switch warning" preference
+   * @returns {Promise<boolean>}
+   */
+  async function getHideGoogleSwitchWarning() {
+    const settings = await getSettings();
+    return settings.eventColoring?.hideGoogleSwitchWarning || false;
+  }
+
+  /**
+   * Set "hide Google switch warning" preference
+   * @param {boolean} value - Whether to hide the warning
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setHideGoogleSwitchWarning(value) {
+    return setSettings({
+      eventColoring: { hideGoogleSwitchWarning: !!value },
+    });
+  }
+
+  /**
+   * Get "hide ColorKit switch warning" preference
+   * @returns {Promise<boolean>}
+   */
+  async function getHideColorKitSwitchWarning() {
+    const settings = await getSettings();
+    return settings.eventColoring?.hideColorKitSwitchWarning || false;
+  }
+
+  /**
+   * Set "hide ColorKit switch warning" preference
+   * @param {boolean} value - Whether to hide the warning
+   * @returns {Promise<Object>} Updated settings
+   */
+  async function setHideColorKitSwitchWarning(value) {
+    return setSettings({
+      eventColoring: { hideColorKitSwitchWarning: !!value },
     });
   }
 
@@ -1550,6 +1602,11 @@
     getIsCustomColorsDisabled,
     setDisableCustomColors,
     addQuickAccessColor,
+    // Mode switch confirmation preferences
+    getHideGoogleSwitchWarning,
+    setHideGoogleSwitchWarning,
+    getHideColorKitSwitchWarning,
+    setHideColorKitSwitchWarning,
     // Event calendar coloring functions (per-calendar default colors)
     getEventCalendarColors,
     getEventCalendarColor,

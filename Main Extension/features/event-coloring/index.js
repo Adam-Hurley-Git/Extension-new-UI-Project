@@ -26,6 +26,7 @@
   let templates = {}; // Color templates: templateId → { id, name, background, text, border, borderWidth, categoryId }
   let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor } (from Google API)
   let calendarDefaultColors = {}; // User-defined per-calendar colors: calendarId → { background, text, border }
+  let calendarDOMColorsCache = {}; // Cache: calendarId → hex color (from DOM stripe elements)
   let isEnabled = false;
   let colorPickerObserver = null;
   let colorRenderObserver = null;
@@ -911,6 +912,105 @@
     return null;
   }
 
+  /**
+   * Get stripe color for a calendar (used for the 4px left bar)
+   * Priority: DOM colors cache > Google API colors > default blue
+   * @param {string} calendarId - Calendar ID (email)
+   * @returns {string} Hex color for stripe
+   */
+  function getStripeColorForCalendar(calendarId) {
+    if (!calendarId) return '#039be5';
+
+    // Priority 1: DOM colors cache (actual displayed color)
+    if (calendarDOMColorsCache[calendarId]) {
+      return calendarDOMColorsCache[calendarId];
+    }
+
+    // Priority 2: Google API colors
+    if (calendarColors[calendarId]?.backgroundColor) {
+      return calendarColors[calendarId].backgroundColor;
+    }
+
+    // Priority 3: Default peacock blue
+    return '#039be5';
+  }
+
+  /**
+   * Get stripe color for an event based on its calendar
+   * @param {string} encodedEventId - The data-eventid value
+   * @returns {string} Hex color for stripe
+   */
+  function getStripeColorForEvent(encodedEventId) {
+    const calendarId = getCalendarIdForEvent(encodedEventId);
+    return getStripeColorForCalendar(calendarId);
+  }
+
+  /**
+   * Detect current color mode for an event
+   * @param {string} eventId - Event ID
+   * @returns {Promise<'google'|'colorkit'>} Current mode
+   */
+  async function detectCurrentMode(eventId) {
+    const colorKitColor = await window.cc3Storage.findEventColorFull(eventId);
+    // If we have ColorKit color data AND it's not marked for Google colors, it's ColorKit mode
+    if (colorKitColor && !colorKitColor.useGoogleColors) {
+      return 'colorkit';
+    }
+    return 'google';
+  }
+
+  /**
+   * Clear all ColorKit styling from an event element
+   * Used when switching to Google mode
+   * @param {string} eventId - Event ID
+   */
+  function clearColorKitStyling(eventId) {
+    const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+
+    elements.forEach(element => {
+      // Remove all ColorKit inline styles
+      element.style.removeProperty('background');
+      element.style.removeProperty('background-color');
+      element.style.removeProperty('color');
+      element.style.removeProperty('outline');
+      element.style.removeProperty('outline-offset');
+      element.style.removeProperty('border-color');
+
+      // Remove ColorKit marker
+      delete element.dataset.cfEventColored;
+      delete element.dataset.cfOriginalColor;
+
+      // Also clear styles on child text elements
+      element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach(child => {
+        if (child instanceof HTMLElement) {
+          child.style.removeProperty('color');
+        }
+      });
+    });
+
+    console.log('[EventColoring] Cleared ColorKit styling for event:', eventId.slice(0, 20) + '...');
+  }
+
+  /**
+   * Force Google to re-render an event's color
+   * Used after switching from ColorKit to Google mode
+   * @param {string} eventId - Event ID
+   */
+  function forceGoogleColorRefresh(eventId) {
+    clearColorKitStyling(eventId);
+
+    // Toggle a harmless attribute to potentially trigger Google's observers
+    const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+    elements.forEach(element => {
+      const current = element.getAttribute('data-cf-refresh');
+      element.setAttribute('data-cf-refresh', current ? '' : '1');
+      // Remove it after a tick to clean up
+      requestAnimationFrame(() => {
+        element.removeAttribute('data-cf-refresh');
+      });
+    });
+  }
+
   // ========================================
   // INITIALIZATION
   // ========================================
@@ -949,6 +1049,16 @@
     // Load calendar default colors (user-defined per-calendar colors)
     calendarDefaultColors = await window.cc3Storage.getEventCalendarColors();
     console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');
+
+    // Load DOM colors cache (for stripe colors)
+    try {
+      const domColorsData = await chrome.storage.local.get('cf.calendarDOMColors');
+      calendarDOMColorsCache = domColorsData['cf.calendarDOMColors'] || {};
+      console.log('[EventColoring] Loaded DOM colors cache for', Object.keys(calendarDOMColorsCache).length, 'calendars');
+    } catch (e) {
+      console.log('[EventColoring] Could not load DOM colors cache:', e);
+      calendarDOMColorsCache = {};
+    }
 
     // Fetch calendar colors from API (single call, cached in background)
     await fetchCalendarColors();
@@ -3376,8 +3486,11 @@
       // Get calendar default colors
       const calendarDefaultColorsForEvent = getCalendarDefaultColorsForEvent(eventId);
 
+      // Get stripe color from cache (for the 4px left bar)
+      const eventStripeColor = getStripeColorForEvent(eventId);
+
       // Merge: manual colors take precedence, calendar defaults fill in gaps
-      const mergedColors = mergeEventColors(manualColors, calendarDefaultColorsForEvent);
+      const mergedColors = mergeEventColors(manualColors, calendarDefaultColorsForEvent, eventStripeColor);
 
       // Debug logging for borderWidth issues
       if (manualColors && manualColors.borderWidth != null) {
@@ -3397,11 +3510,12 @@
   /**
    * Merge manual event colors with calendar default colors
    * Manual colors take precedence for each property independently
-   * @param {Object|null} manualColors - { background, text, border, borderWidth } from event coloring
+   * @param {Object|null} manualColors - { background, text, border, borderWidth, stripeColor } from event coloring
    * @param {Object|null} calendarColors - { background, text, border, borderWidth } from calendar defaults
+   * @param {string|null} eventStripeColor - Stripe color from calendar DOM colors cache
    * @returns {Object|null} Merged colors or null if no colors
    */
-  function mergeEventColors(manualColors, calendarColors) {
+  function mergeEventColors(manualColors, calendarColors, eventStripeColor = null) {
     if (!manualColors && !calendarColors) return null;
 
     // If useGoogleColors flag is set, return null to use Google's native colors
@@ -3410,8 +3524,17 @@
       return null;
     }
 
-    if (!calendarColors) return manualColors;
-    if (!manualColors) return calendarColors;
+    if (!calendarColors) {
+      // Add stripeColor to manual colors if not present
+      if (manualColors && !manualColors.stripeColor && eventStripeColor) {
+        return { ...manualColors, stripeColor: eventStripeColor };
+      }
+      return manualColors;
+    }
+    if (!manualColors) {
+      // Add stripeColor to calendar colors
+      return { ...calendarColors, stripeColor: eventStripeColor || calendarColors.background };
+    }
 
     // If overrideDefaults is set, don't merge with calendar colors - use manual colors only
     // This is used by "Replace all styling" to ensure calendar defaults don't get applied
@@ -3421,6 +3544,7 @@
         text: null,
         border: null,
         borderWidth: manualColors.borderWidth != null ? manualColors.borderWidth : 2,
+        stripeColor: manualColors.stripeColor || eventStripeColor || null,
         isRecurring: manualColors.isRecurring || false,
       };
     }
@@ -3436,6 +3560,8 @@
       text: manualColors.text || calendarColors.text || null,
       border: manualColors.border || calendarColors.border || null,
       borderWidth: mergedBorderWidth,
+      // Use stored stripeColor, or eventStripeColor from cache, or fallback to background
+      stripeColor: manualColors.stripeColor || eventStripeColor || calendarColors.background || null,
       // Preserve isRecurring from manual if present
       isRecurring: manualColors.isRecurring || false,
     };
@@ -3487,7 +3613,7 @@
     // Skip task elements - tasks should not receive event coloring
     if (isTaskElement(element)) return;
 
-    const { background, text, border, borderWidth = 2 } = colors;
+    const { background, text, border, borderWidth = 2, stripeColor } = colors;
     if (!background && !text && !border) return;
 
     // Only color the main event chip element - NOT child elements
@@ -3495,21 +3621,16 @@
     const isEventChip = element.matches('[data-eventchip]');
 
     if (isEventChip) {
-      // Get the original color from DOM (captures event-specific colors, not just calendar defaults)
-      // Must be called BEFORE we modify the element's background
-      const originalColor = getOriginalEventColor(element);
-
-      // Apply background color
+      // Apply background color with stripe
       if (background) {
-        // Use a gradient to preserve the left 4px with original event color
-        // and apply our custom color to the rest of the element
-        if (originalColor) {
-          const gradient = `linear-gradient(to right, ${originalColor} 4px, ${background} 4px)`;
-          element.style.setProperty('background', gradient, 'important');
-        } else {
-          // Fallback: just apply the custom color if we don't have original color
-          element.style.setProperty('background-color', background, 'important');
-        }
+        // Use stripeColor from colors (cached calendar color) for the 4px left stripe
+        // This is the redesign approach - we own the stripe, not Google
+        const effectiveStripeColor = stripeColor || getOriginalEventColor(element) || background;
+
+        // Use a gradient to create the 4px left stripe with calendar color
+        // and apply our custom background to the rest
+        const gradient = `linear-gradient(to right, ${effectiveStripeColor} 4px, ${background} 4px)`;
+        element.style.setProperty('background', gradient, 'important');
 
         element.style.borderColor = adjustColorBrightness(background, -15);
       }
@@ -3776,6 +3897,13 @@
     getCalendarDefaultColorsForEvent,
     hasNonBackgroundProperties,
     showExistingPropertiesDialog,
+    // Mode switching support
+    detectCurrentMode,
+    clearColorKitStyling,
+    forceGoogleColorRefresh,
+    getStripeColorForCalendar,
+    getStripeColorForEvent,
+    getCalendarIdForEvent,
   };
 
   console.log('[EventColoring] Feature registered (enhanced)');

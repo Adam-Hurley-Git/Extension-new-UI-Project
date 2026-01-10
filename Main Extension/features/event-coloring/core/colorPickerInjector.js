@@ -51,6 +51,21 @@ function getSchemeEquivalent(hex) {
   return GOOGLE_COLOR_SCHEME_MAP[hex.toLowerCase()] || null;
 }
 
+// ColorKit's own 11 default colors (matching Google's palette but under our control)
+const COLORKIT_DEFAULT_COLORS = [
+  { hex: '#d50000', name: 'Tomato' },
+  { hex: '#e67c73', name: 'Flamingo' },
+  { hex: '#f4511e', name: 'Tangerine' },
+  { hex: '#f6bf26', name: 'Banana' },
+  { hex: '#33b679', name: 'Sage' },
+  { hex: '#0b8043', name: 'Basil' },
+  { hex: '#039be5', name: 'Peacock' },
+  { hex: '#3f51b5', name: 'Blueberry' },
+  { hex: '#7986cb', name: 'Lavender' },
+  { hex: '#8e24aa', name: 'Grape' },
+  { hex: '#616161', name: 'Graphite' },
+];
+
 /**
  * ColorPickerInjector - Handles injection of custom colors into Google Calendar
  */
@@ -271,6 +286,298 @@ export class ColorPickerInjector {
         background: #e8f0fe;
         color: #1a73e8;
         transform: scale(1.1);
+      }
+
+      /* Mode Toggle Styles */
+      .cf-mode-section {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e0e0e0;
+      }
+      .cf-mode-section:last-child {
+        border-bottom: none;
+      }
+      .cf-toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .cf-toggle-content {
+        flex: 1;
+        min-width: 0;
+      }
+      .cf-toggle-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: #202124;
+        margin-bottom: 2px;
+      }
+      .cf-toggle-desc {
+        font-size: 11px;
+        color: #5f6368;
+        line-height: 1.3;
+      }
+      .cf-switch {
+        position: relative;
+        width: 36px;
+        height: 20px;
+        background: #dadce0;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+        flex-shrink: 0;
+      }
+      .cf-switch.active {
+        background: #1a73e8;
+      }
+      .cf-switch::after {
+        content: '';
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        background: white;
+        border-radius: 50%;
+        top: 2px;
+        left: 2px;
+        transition: left 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      }
+      .cf-switch.active::after {
+        left: 18px;
+      }
+      .cf-section-disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      .cf-section-disabled .cf-switch {
+        pointer-events: auto;
+        opacity: 1;
+      }
+
+      /* Pro Badge */
+      .cf-pro-badge {
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-left: 6px;
+        display: inline-block;
+      }
+
+      /* Section Label */
+      .cf-section-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #5f6368;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin: 12px 0 8px 0;
+      }
+
+      /* Delete Row */
+      .cf-delete-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+        border-radius: 6px;
+        margin: 0 4px;
+      }
+      .cf-delete-row:hover {
+        background: #fce8e6;
+      }
+      .cf-delete-icon {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #5f6368;
+      }
+      .cf-delete-text {
+        font-size: 13px;
+        color: #5f6368;
+      }
+
+      /* Full Custom Coloring Row */
+      .cf-full-custom-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        background: #f8f9fa;
+        border: 1px solid #e8eaed;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        margin-top: 8px;
+      }
+      .cf-full-custom-row:hover {
+        background: #e8f0fe;
+        border-color: #1a73e8;
+      }
+      .cf-full-custom-icon {
+        width: 32px;
+        height: 32px;
+        background: #e8eaed;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        color: #5f6368;
+      }
+      .cf-full-custom-content {
+        flex: 1;
+      }
+      .cf-full-custom-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: #202124;
+      }
+      .cf-full-custom-desc {
+        font-size: 11px;
+        color: #5f6368;
+        margin-top: 2px;
+      }
+
+      /* Confirmation Modal */
+      .cf-confirm-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: 100000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .cf-confirm-backdrop.active {
+        opacity: 1;
+      }
+      .cf-confirm-modal {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 360px;
+        width: 90%;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        transform: scale(0.95);
+        transition: transform 0.2s ease;
+      }
+      .cf-confirm-backdrop.active .cf-confirm-modal {
+        transform: scale(1);
+      }
+      .cf-confirm-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #202124;
+        margin: 0 0 12px 0;
+      }
+      .cf-confirm-message {
+        font-size: 14px;
+        color: #5f6368;
+        line-height: 1.5;
+        margin: 0 0 16px 0;
+      }
+      .cf-confirm-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 20px;
+        cursor: pointer;
+      }
+      .cf-confirm-checkbox input {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+      }
+      .cf-confirm-checkbox label {
+        font-size: 13px;
+        color: #5f6368;
+        cursor: pointer;
+      }
+      .cf-confirm-buttons {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      .cf-confirm-btn {
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .cf-confirm-btn-cancel {
+        background: transparent;
+        border: 1px solid #dadce0;
+        color: #5f6368;
+      }
+      .cf-confirm-btn-cancel:hover {
+        background: #f8f9fa;
+      }
+      .cf-confirm-btn-confirm {
+        background: #1a73e8;
+        border: none;
+        color: white;
+      }
+      .cf-confirm-btn-confirm:hover {
+        background: #1557b0;
+      }
+      .cf-confirm-btn-danger {
+        background: #d93025;
+      }
+      .cf-confirm-btn-danger:hover {
+        background: #b3261e;
+      }
+
+      /* Templates Section */
+      .cf-templates-section {
+        margin-top: 12px;
+      }
+      .cf-templates-label {
+        display: flex;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 600;
+        color: #5f6368;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+      }
+      .cf-template-item {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 16px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        margin: 2px;
+        border: 2px solid transparent;
+      }
+      .cf-template-item:hover {
+        transform: scale(1.05);
+      }
+      .cf-template-item.selected {
+        border-color: #1a73e8;
+      }
+
+      /* Default Colors Grid */
+      .cf-default-colors-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
       }
     `;
     document.head.appendChild(style);
@@ -564,9 +871,10 @@ export class ColorPickerInjector {
 
   /**
    * Inject color categories into the color picker
+   * Redesigned with binary ownership model: Google Mode vs ColorKit Mode
    */
-  injectColorCategories(categories) {
-    console.log('[CF] Injecting categories:', categories.length);
+  async injectColorCategories(categories) {
+    console.log('[CF] Injecting categories (redesigned):', categories.length);
 
     const scenario = ScenarioDetector.findColorPickerScenario();
     if (scenario !== Scenario.EVENTEDIT && scenario !== Scenario.LISTVIEW) {
@@ -588,11 +896,32 @@ export class ColorPickerInjector {
       return;
     }
 
-    // Find the built-in color group
-    const builtInColorGroup = container.querySelector(
-      COLOR_PICKER_SELECTORS.BUILT_IN_COLOR_GROUP
-    );
-    console.log('[CF] Found built-in color group:', !!builtInColorGroup);
+    // Get event ID
+    const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+    if (!eventId) {
+      console.log('[CF] No event ID found');
+      return;
+    }
+
+    // Detect current mode (google or colorkit)
+    let currentMode = 'google';
+    if (window.cfEventColoring?.detectCurrentMode) {
+      currentMode = await window.cfEventColoring.detectCurrentMode(eventId);
+    } else {
+      // Fallback: check if we have ColorKit colors
+      const colorData = await this.storageService.findEventColorFull?.(eventId);
+      if (colorData && !colorData.useGoogleColors) {
+        currentMode = 'colorkit';
+      }
+    }
+    console.log('[CF] Current mode:', currentMode);
+
+    // Get current color for this event
+    let currentColor = null;
+    const colorData = await this.storageService.findEventColorFull?.(eventId);
+    if (colorData) {
+      currentColor = colorData.background || colorData.hex;
+    }
 
     // Find the scrollable wrapper
     const wrapper = container.querySelector('div');
@@ -601,15 +930,16 @@ export class ColorPickerInjector {
       return;
     }
 
-    // Style the wrapper for scrolling
+    // Hide Google's built-in color group - we'll provide our own UI
     const innerGroup = wrapper.querySelector(COLOR_PICKER_SELECTORS.BUILT_IN_COLOR_GROUP);
     if (innerGroup) {
-      innerGroup.style.marginBottom = '8px';
+      innerGroup.style.display = 'none';
     }
 
+    // Style the wrapper for scrolling
     wrapper.style.cssText = `
       max-height: ${scenario === Scenario.EVENTEDIT ? '600px' : '500px'} !important;
-      max-width: ${scenario === Scenario.EVENTEDIT ? '200px' : '300px'} !important;
+      max-width: ${scenario === Scenario.EVENTEDIT ? '240px' : '300px'} !important;
       overflow-y: auto !important;
       overflow-x: hidden !important;
       padding-bottom: 12px !important;
@@ -617,27 +947,273 @@ export class ColorPickerInjector {
       -ms-overflow-style: none !important;
     `;
 
-    // Add separator
-    const separator = this.createSeparator();
-    separator.classList.add(COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.SEPARATOR);
-    wrapper.appendChild(separator);
+    // Create our redesigned UI container
+    const cfContainer = document.createElement('div');
+    cfContainer.className = 'cf-picker-container';
 
-    // Add each category
-    categories.forEach((category) => {
-      const categorySection = this.createCategorySection(category, container, scenario);
-      if (categorySection) {
-        wrapper.appendChild(categorySection);
-      }
+    // ========================================
+    // 1. DELETE ROW (at top)
+    // ========================================
+    const deleteRow = this.createDeleteRow(container, scenario);
+    cfContainer.appendChild(deleteRow);
+
+    // Add separator
+    cfContainer.appendChild(this.createSeparator());
+
+    // ========================================
+    // 2. GOOGLE'S OWN COLORS TOGGLE SECTION
+    // ========================================
+    const googleSection = this.createToggleSection({
+      title: "Googles own colors",
+      description: "Use Google's built-in colors. Syncs across devices.",
+      isActive: currentMode === 'google',
+      onChange: (isActive) => {
+        if (isActive && currentMode !== 'google') {
+          this.handleModeSwitch('google', eventId, container);
+        }
+      },
     });
 
-    // Add "Custom Color" section with "+" button
-    const customColorSection = this.createCustomColorSection(container, scenario);
-    if (customColorSection) {
-      wrapper.appendChild(customColorSection);
+    // Add Google's 11 color buttons below the toggle (visible when in Google mode)
+    const googleColorsContent = document.createElement('div');
+    googleColorsContent.className = 'cf-google-colors-content';
+    googleColorsContent.style.cssText = 'padding: 12px 16px 0; display: flex; flex-wrap: wrap; gap: 6px;';
+
+    // Create Google color buttons
+    COLORKIT_DEFAULT_COLORS.forEach((colorObj) => {
+      const button = this.createColorButton(colorObj, container, scenario);
+      button.style.width = '22px';
+      button.style.height = '22px';
+      googleColorsContent.appendChild(button);
+    });
+
+    googleSection.appendChild(googleColorsContent);
+    cfContainer.appendChild(googleSection);
+
+    // ========================================
+    // 3. COLORKIT LIST COLOR TOGGLE SECTION
+    // ========================================
+    const calendarId = this.getCalendarIdForEvent(eventId);
+    const calendarDefaults = await this.storageService.getEventCalendarColor?.(calendarId);
+    const hasListColor = !!(calendarDefaults?.background || calendarDefaults?.text || calendarDefaults?.border);
+
+    const listColorSection = this.createToggleSection({
+      title: "ColorKit List Color",
+      description: "Choose to use calendar default or completely custom coloring below",
+      isActive: hasListColor && currentMode === 'colorkit',
+      disabled: currentMode !== 'colorkit',
+      proBadge: true,
+      onChange: async (isActive) => {
+        if (isActive && hasListColor) {
+          // Apply list color
+          await this.handleResetToListDefaults(eventId);
+        }
+      },
+    });
+
+    // Add calendar preview if available
+    if (calendarId) {
+      const previewContainer = document.createElement('div');
+      previewContainer.style.cssText = 'padding: 8px 16px; display: flex; align-items: center; gap: 8px;';
+
+      const stripeColor = window.cfEventColoring?.getStripeColorForCalendar?.(calendarId) || '#039be5';
+      const stripePreview = document.createElement('div');
+      stripePreview.style.cssText = `width: 4px; height: 24px; background: ${stripeColor}; border-radius: 2px;`;
+
+      const calendarLabel = document.createElement('span');
+      calendarLabel.style.cssText = 'font-size: 12px; color: #5f6368;';
+      calendarLabel.textContent = calendarId.split('@')[0] || 'Google Calendar';
+
+      previewContainer.appendChild(stripePreview);
+      previewContainer.appendChild(calendarLabel);
+      listColorSection.appendChild(previewContainer);
     }
 
-    // Update checkmarks
-    this.hideCheckmarkAndModifyBuiltInColors();
+    cfContainer.appendChild(listColorSection);
+
+    // ========================================
+    // 4. COLORKITS COLORS TOGGLE SECTION
+    // ========================================
+    const colorKitSection = this.createToggleSection({
+      title: "ColorKits Colors",
+      description: "Use custom colors with text & border options.",
+      isActive: currentMode === 'colorkit',
+      onChange: (isActive) => {
+        if (isActive && currentMode !== 'colorkit') {
+          this.handleModeSwitch('colorkit', eventId, container);
+        }
+      },
+    });
+
+    // ColorKit content container (visible when ColorKit mode is active)
+    const colorKitContent = document.createElement('div');
+    colorKitContent.className = 'cf-colorkit-content';
+    colorKitContent.style.cssText = 'padding: 8px 16px;';
+
+    // Full Custom Coloring row
+    const fullCustomRow = this.createFullCustomRow(container, scenario);
+    colorKitContent.appendChild(fullCustomRow);
+
+    colorKitSection.appendChild(colorKitContent);
+    cfContainer.appendChild(colorKitSection);
+
+    // Add separator
+    cfContainer.appendChild(this.createSeparator());
+
+    // ========================================
+    // 5. BACKGROUND COLORS SECTION
+    // ========================================
+    const bgColorsSection = document.createElement('div');
+    bgColorsSection.className = 'cf-bg-colors-section cf-mode-section';
+    bgColorsSection.style.padding = '12px 16px';
+
+    // "Googles Default Colors" label
+    const defaultColorsLabel = document.createElement('div');
+    defaultColorsLabel.className = 'cf-section-label';
+    defaultColorsLabel.textContent = 'Googles Default Colors';
+    bgColorsSection.appendChild(defaultColorsLabel);
+
+    // Default colors grid
+    const defaultColorsGrid = this.createDefaultColorsGrid(container, scenario, currentColor);
+    bgColorsSection.appendChild(defaultColorsGrid);
+
+    // Add user categories
+    if (categories.length > 0) {
+      categories.forEach((category) => {
+        const categorySection = this.createCategorySection(category, container, scenario);
+        if (categorySection) {
+          categorySection.style.marginTop = '16px';
+          bgColorsSection.appendChild(categorySection);
+        }
+      });
+    }
+
+    // Templates section
+    const templates = await this.storageService.getEventColorTemplates?.();
+    const templatesList = templates ? Object.values(templates) : [];
+
+    if (templatesList.length > 0) {
+      const templatesSection = document.createElement('div');
+      templatesSection.className = 'cf-templates-section';
+
+      const templatesLabel = document.createElement('div');
+      templatesLabel.className = 'cf-templates-label';
+      templatesLabel.innerHTML = `<span>TEMPLATES</span><span class="cf-pro-badge">PRO</span>`;
+      templatesSection.appendChild(templatesLabel);
+
+      const templatesGrid = document.createElement('div');
+      templatesGrid.style.cssText = 'display: flex; flex-wrap: wrap; gap: 4px;';
+
+      templatesList.forEach((template) => {
+        const templateBtn = document.createElement('div');
+        templateBtn.className = 'cf-template-item';
+        templateBtn.style.cssText = `
+          background: ${template.background || '#e8eaed'};
+          color: ${template.text || this.getContrastColor(template.background || '#e8eaed')};
+          ${template.border ? `border: 2px solid ${template.border};` : ''}
+        `;
+        templateBtn.textContent = template.name;
+        templateBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await this.handleTemplateClick(eventId, template);
+        });
+        templatesGrid.appendChild(templateBtn);
+      });
+
+      templatesSection.appendChild(templatesGrid);
+      bgColorsSection.appendChild(templatesSection);
+    }
+
+    cfContainer.appendChild(bgColorsSection);
+
+    // Add our container to the wrapper
+    wrapper.appendChild(cfContainer);
+
+    // ========================================
+    // 6. UPDATE SECTION STATES
+    // ========================================
+    this.updateSectionStates(currentMode, {
+      googleSection,
+      colorKitSection,
+      listColorSection,
+    });
+
+    // Apply disabled state to background colors when in Google mode
+    if (currentMode === 'google') {
+      bgColorsSection.classList.add('cf-section-disabled');
+    }
+
+    // Update Google color labels
+    await this.modifyGoogleColorLabels();
+  }
+
+  /**
+   * Handle template click
+   * @param {string} eventId - Event ID
+   * @param {Object} template - Template object
+   */
+  async handleTemplateClick(eventId, template) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    // Check for premium features
+    const hasPremiumFeatures = template.text || template.border;
+    if (hasPremiumFeatures && window.cc3FeatureAccess?.usesPremiumEventColorFeatures) {
+      const canUse = await window.cc3FeatureAccess.usesPremiumEventColorFeatures();
+      if (!canUse) {
+        // Show upgrade modal
+        if (window.cc3FeatureAccess?.showUpgradeModal) {
+          window.cc3FeatureAccess.showUpgradeModal('event-coloring-templates');
+        }
+        return;
+      }
+    }
+
+    // Get stripe color
+    let stripeColor = '#039be5';
+    if (window.cfEventColoring?.getStripeColorForEvent) {
+      stripeColor = window.cfEventColoring.getStripeColorForEvent(eventId);
+    }
+
+    const colors = {
+      background: template.background,
+      text: template.text || null,
+      border: template.border || null,
+      borderWidth: template.borderWidth || 2,
+      stripeColor,
+    };
+
+    if (parsed.isRecurring) {
+      showRecurringEventDialog({
+        eventId,
+        color: colors.background,
+        onConfirm: async (applyToAll) => {
+          await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+          this.closeMenus();
+          this.triggerColorUpdate();
+        },
+        onClose: () => {},
+      });
+    } else {
+      await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      this.closeMenus();
+      this.triggerColorUpdate();
+    }
+  }
+
+  /**
+   * Get contrasting text color for a background
+   * @param {string} bgColor - Background hex color
+   * @returns {string} - Black or white hex color
+   */
+  getContrastColor(bgColor) {
+    if (!bgColor) return '#000000';
+    const hex = bgColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000000' : '#ffffff';
   }
 
   /**
@@ -1720,8 +2296,419 @@ export class ColorPickerInjector {
     window.dispatchEvent(new CustomEvent('cf-event-color-changed'));
   }
 
+  // ========================================
+  // MODE TOGGLE UI COMPONENTS
+  // ========================================
+
+  /**
+   * Create a toggle section with title, description, and switch
+   * @param {Object} options - { title, description, isActive, onChange }
+   * @returns {HTMLElement} The toggle section element
+   */
+  createToggleSection(options) {
+    const { title, description, isActive, onChange, disabled = false, proBadge = false } = options;
+
+    const section = document.createElement('div');
+    section.className = `cf-mode-section${disabled ? ' cf-section-disabled' : ''}`;
+
+    const row = document.createElement('div');
+    row.className = 'cf-toggle-row';
+
+    const content = document.createElement('div');
+    content.className = 'cf-toggle-content';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cf-toggle-title';
+    titleEl.textContent = title;
+    if (proBadge) {
+      const badge = document.createElement('span');
+      badge.className = 'cf-pro-badge';
+      badge.textContent = 'PRO';
+      titleEl.appendChild(badge);
+    }
+
+    const descEl = document.createElement('div');
+    descEl.className = 'cf-toggle-desc';
+    descEl.textContent = description;
+
+    content.appendChild(titleEl);
+    content.appendChild(descEl);
+
+    const toggle = document.createElement('div');
+    toggle.className = `cf-switch${isActive ? ' active' : ''}`;
+    toggle.setAttribute('role', 'switch');
+    toggle.setAttribute('aria-checked', isActive ? 'true' : 'false');
+    toggle.setAttribute('tabindex', '0');
+
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newState = !toggle.classList.contains('active');
+      toggle.classList.toggle('active', newState);
+      toggle.setAttribute('aria-checked', newState ? 'true' : 'false');
+      if (onChange) onChange(newState);
+    });
+
+    toggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle.click();
+      }
+    });
+
+    row.appendChild(content);
+    row.appendChild(toggle);
+    section.appendChild(row);
+
+    // Store reference to the toggle for external control
+    section._toggle = toggle;
+    section._setDisabled = (isDisabled) => {
+      section.classList.toggle('cf-section-disabled', isDisabled);
+    };
+
+    return section;
+  }
+
+  /**
+   * Show mode switch confirmation modal
+   * @param {Object} options - { type: 'google'|'colorkit', eventId, isRecurring, onConfirm, onCancel }
+   */
+  async showModeSwitchConfirmation(options) {
+    const { type, eventId, isRecurring, onConfirm, onCancel } = options;
+
+    // Check if user has disabled this warning
+    const hideWarning = type === 'google'
+      ? await this.storageService.getHideGoogleSwitchWarning?.()
+      : await this.storageService.getHideColorKitSwitchWarning?.();
+
+    if (hideWarning) {
+      // Skip confirmation and proceed
+      if (onConfirm) onConfirm(false);
+      return;
+    }
+
+    // Build modal content based on type
+    const config = type === 'google' ? {
+      title: 'Switch to Google Colors',
+      message: 'This will remove all ColorKit styling from this event. Google Calendar will control the event color.',
+      confirmText: 'Switch to Google',
+      isDanger: true,
+    } : {
+      title: 'Switch to ColorKit',
+      message: 'ColorKit will now control this event\'s colors. You can customize the background, text, and border.',
+      confirmText: 'Use ColorKit',
+      isDanger: false,
+    };
+
+    // Remove existing modals
+    document.querySelectorAll('.cf-confirm-backdrop').forEach(el => el.remove());
+
+    // Create modal
+    const backdrop = document.createElement('div');
+    backdrop.className = 'cf-confirm-backdrop';
+
+    const modal = document.createElement('div');
+    modal.className = 'cf-confirm-modal';
+
+    const title = document.createElement('h3');
+    title.className = 'cf-confirm-title';
+    title.textContent = config.title;
+
+    const message = document.createElement('p');
+    message.className = 'cf-confirm-message';
+    message.textContent = config.message;
+
+    // Don't show again checkbox
+    const checkboxContainer = document.createElement('div');
+    checkboxContainer.className = 'cf-confirm-checkbox';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = 'cf-dont-show-again';
+
+    const checkboxLabel = document.createElement('label');
+    checkboxLabel.htmlFor = 'cf-dont-show-again';
+    checkboxLabel.textContent = "Don't show this again";
+
+    checkboxContainer.appendChild(checkbox);
+    checkboxContainer.appendChild(checkboxLabel);
+
+    // Buttons
+    const buttons = document.createElement('div');
+    buttons.className = 'cf-confirm-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cf-confirm-btn cf-confirm-btn-cancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => {
+      backdrop.classList.remove('active');
+      setTimeout(() => backdrop.remove(), 200);
+      if (onCancel) onCancel();
+    });
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = `cf-confirm-btn cf-confirm-btn-confirm${config.isDanger ? ' cf-confirm-btn-danger' : ''}`;
+    confirmBtn.textContent = config.confirmText;
+    confirmBtn.addEventListener('click', async () => {
+      // Save preference if checkbox is checked
+      if (checkbox.checked) {
+        if (type === 'google') {
+          await this.storageService.setHideGoogleSwitchWarning?.(true);
+        } else {
+          await this.storageService.setHideColorKitSwitchWarning?.(true);
+        }
+      }
+      backdrop.classList.remove('active');
+      setTimeout(() => backdrop.remove(), 200);
+      if (onConfirm) onConfirm(checkbox.checked);
+    });
+
+    buttons.appendChild(cancelBtn);
+    buttons.appendChild(confirmBtn);
+
+    modal.appendChild(title);
+    modal.appendChild(message);
+    modal.appendChild(checkboxContainer);
+    modal.appendChild(buttons);
+    backdrop.appendChild(modal);
+
+    // Handle escape key
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        cancelBtn.click();
+        document.removeEventListener('keydown', handleEscape);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+
+    // Handle backdrop click
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        cancelBtn.click();
+      }
+    });
+
+    document.body.appendChild(backdrop);
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+      backdrop.classList.add('active');
+    });
+  }
+
+  /**
+   * Handle mode switch between Google and ColorKit
+   * @param {string} newMode - 'google' or 'colorkit'
+   * @param {string} eventId - Event ID
+   * @param {HTMLElement} container - Color picker container
+   */
+  async handleModeSwitch(newMode, eventId, container) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+
+    if (newMode === 'google') {
+      // Switch to Google mode - remove ColorKit colors
+      this.showModeSwitchConfirmation({
+        type: 'google',
+        eventId,
+        isRecurring: parsed.isRecurring,
+        onConfirm: async () => {
+          if (parsed.isRecurring) {
+            if (this.storageService.markRecurringEventForGoogleColors) {
+              await this.storageService.markRecurringEventForGoogleColors(eventId);
+            } else {
+              await this.storageService.markEventForGoogleColors(eventId);
+            }
+          } else {
+            await this.storageService.markEventForGoogleColors(eventId);
+          }
+
+          // Clear ColorKit styling from DOM
+          if (window.cfEventColoring?.clearColorKitStyling) {
+            window.cfEventColoring.clearColorKitStyling(eventId);
+          }
+
+          this.closeMenus();
+          // Force refresh to show Google's colors
+          window.location.reload();
+        },
+      });
+    } else {
+      // Switch to ColorKit mode - apply default ColorKit color
+      this.showModeSwitchConfirmation({
+        type: 'colorkit',
+        eventId,
+        isRecurring: parsed.isRecurring,
+        onConfirm: async () => {
+          // Get stripe color for this event's calendar
+          let stripeColor = '#039be5';
+          if (window.cfEventColoring?.getStripeColorForEvent) {
+            stripeColor = window.cfEventColoring.getStripeColorForEvent(eventId);
+          }
+
+          // Apply default ColorKit color (Peacock blue as default)
+          const defaultColor = {
+            background: '#039be5',
+            text: null,
+            border: null,
+            borderWidth: 2,
+            stripeColor,
+          };
+
+          if (parsed.isRecurring) {
+            showRecurringEventDialog({
+              eventId,
+              color: defaultColor.background,
+              onConfirm: async (applyToAll) => {
+                await this.storageService.saveEventColorsFullAdvanced(eventId, defaultColor, { applyToAll });
+                this.closeMenus();
+                this.triggerColorUpdate();
+              },
+              onClose: () => {},
+            });
+          } else {
+            await this.storageService.saveEventColorsFullAdvanced(eventId, defaultColor, { applyToAll: false });
+            this.closeMenus();
+            this.triggerColorUpdate();
+          }
+        },
+      });
+    }
+  }
+
+  /**
+   * Update section visual states based on current mode
+   * @param {string} mode - 'google' or 'colorkit'
+   * @param {Object} sections - { googleSection, colorKitSection, listColorSection }
+   */
+  updateSectionStates(mode, sections) {
+    if (sections.googleSection) {
+      const isGoogle = mode === 'google';
+      sections.googleSection.classList.toggle('cf-section-disabled', !isGoogle);
+      if (sections.googleSection._toggle) {
+        sections.googleSection._toggle.classList.toggle('active', isGoogle);
+        sections.googleSection._toggle.setAttribute('aria-checked', isGoogle ? 'true' : 'false');
+      }
+    }
+
+    if (sections.colorKitSection) {
+      const isColorKit = mode === 'colorkit';
+      sections.colorKitSection.classList.toggle('cf-section-disabled', !isColorKit);
+      if (sections.colorKitSection._toggle) {
+        sections.colorKitSection._toggle.classList.toggle('active', isColorKit);
+        sections.colorKitSection._toggle.setAttribute('aria-checked', isColorKit ? 'true' : 'false');
+      }
+    }
+
+    if (sections.listColorSection) {
+      // List color section is only enabled when in ColorKit mode
+      sections.listColorSection.classList.toggle('cf-section-disabled', mode !== 'colorkit');
+    }
+  }
+
+  /**
+   * Create the delete row (trash icon + "Delete" text)
+   * @param {HTMLElement} container - Color picker container
+   * @param {string} scenario - Current scenario
+   * @returns {HTMLElement} The delete row element
+   */
+  createDeleteRow(container, scenario) {
+    const row = document.createElement('div');
+    row.className = 'cf-delete-row';
+
+    const icon = document.createElement('div');
+    icon.className = 'cf-delete-icon';
+    icon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+
+    const text = document.createElement('span');
+    text.className = 'cf-delete-text';
+    text.textContent = 'Delete';
+
+    row.appendChild(icon);
+    row.appendChild(text);
+
+    row.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+      if (!eventId) return;
+
+      await this.handleRemoveAllColoring(eventId);
+    });
+
+    return row;
+  }
+
+  /**
+   * Create the "Full Custom Coloring" row
+   * @param {HTMLElement} container - Color picker container
+   * @param {string} scenario - Current scenario
+   * @returns {HTMLElement} The full custom row element
+   */
+  createFullCustomRow(container, scenario) {
+    const row = document.createElement('div');
+    row.className = 'cf-full-custom-row';
+
+    const icon = document.createElement('div');
+    icon.className = 'cf-full-custom-icon';
+    icon.textContent = '+';
+
+    const content = document.createElement('div');
+    content.className = 'cf-full-custom-content';
+
+    const title = document.createElement('div');
+    title.className = 'cf-full-custom-title';
+    title.textContent = 'Full Custom Coloring';
+
+    const desc = document.createElement('div');
+    desc.className = 'cf-full-custom-desc';
+    desc.textContent = 'Full picker - Any color for your background, Text and Border';
+
+    content.appendChild(title);
+    content.appendChild(desc);
+    row.appendChild(icon);
+    row.appendChild(content);
+
+    row.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+      if (!eventId) return;
+
+      this.closeMenus();
+      this.openCustomColorModal(eventId);
+    });
+
+    return row;
+  }
+
+  /**
+   * Create default colors grid (ColorKit's 11 Google-equivalent colors)
+   * @param {HTMLElement} container - Color picker container
+   * @param {string} scenario - Current scenario
+   * @param {string|null} currentColor - Currently selected color
+   * @returns {HTMLElement} The colors grid element
+   */
+  createDefaultColorsGrid(container, scenario, currentColor) {
+    const grid = document.createElement('div');
+    grid.className = 'cf-default-colors-grid';
+
+    COLORKIT_DEFAULT_COLORS.forEach((colorObj) => {
+      const button = this.createColorButton(colorObj, container, scenario);
+      if (currentColor && colorObj.hex.toLowerCase() === currentColor.toLowerCase()) {
+        this.toggleCheckmark(button, true);
+      }
+      grid.appendChild(button);
+    });
+
+    return grid;
+  }
+
   /**
    * Hide checkmarks on Google colors and show on custom when appropriate
+   * NOTE: With the redesign, we hide Google's built-in color group and use our own UI,
+   * so we no longer intercept Google button clicks. This method now just updates
+   * checkmarks on our custom color buttons.
    */
   async hideCheckmarkAndModifyBuiltInColors() {
     const listContainer = document.querySelector(
@@ -1741,39 +2728,24 @@ export class ColorPickerInjector {
 
     // Get the current color for this event
     let currentColor = null;
-    if (this.storageService.findEventColor) {
+    if (this.storageService.findEventColorFull) {
+      const colorData = await this.storageService.findEventColorFull(eventId);
+      currentColor = colorData?.background || colorData?.hex;
+    } else if (this.storageService.findEventColor) {
       const colorData = await this.storageService.findEventColor(eventId);
       currentColor = colorData?.hex;
-    } else if (this.storageService.getEventColor) {
-      const colorData = await this.storageService.getEventColor(eventId);
-      currentColor = typeof colorData === 'string' ? colorData : colorData?.hex;
     }
 
-    // Add click handlers to Google color buttons
-    const googleButtons = document.querySelectorAll(
-      COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
-    );
+    // NOTE: With the redesign, we hide Google's built-in colors and provide our own UI.
+    // We no longer need to intercept Google button clicks since Google's color group is hidden.
+    // The binary ownership model means:
+    // - Google Mode: We don't touch Google's colors at all
+    // - ColorKit Mode: Our buttons handle everything
 
-    googleButtons.forEach((button) => {
-      // Only add handler once
-      if (!button.hasAttribute('data-cf-handler')) {
-        button.setAttribute('data-cf-handler', 'true');
-
-        button.addEventListener('click', async () => {
-          const clickedEventId = ScenarioDetector.findEventIdByScenario(button, scenario);
-          if (clickedEventId) {
-            // When clicking a Google color, remove custom color
-            await this.storageService.removeEventColor(clickedEventId);
-            this.triggerColorUpdate();
-          }
-        });
-      }
-    });
-
-    // Update checkmarks
+    // Update checkmarks on our custom color buttons
     this.updateCheckmarks(currentColor);
 
-    // Modify Google color labels
+    // Modify Google color labels (still useful if Google's colors are shown elsewhere)
     await this.modifyGoogleColorLabels();
   }
 
