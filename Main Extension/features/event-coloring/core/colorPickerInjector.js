@@ -839,7 +839,8 @@ export class ColorPickerInjector {
         return;
       }
 
-      // Check if already injected
+      // Check if already injected (check for new redesigned container first)
+      const existingPickerContainer = document.querySelector('.cf-picker-container');
       const existingCustomSection = document.querySelector(
         '.' + COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.COLOR_DIV_GROUP
       );
@@ -848,7 +849,7 @@ export class ColorPickerInjector {
       );
       const existingCustomColorSection = document.querySelector('.cf-custom-color-section');
 
-      if (existingCustomSection || existingSeparator || existingCustomColorSection) {
+      if (existingPickerContainer || existingCustomSection || existingSeparator || existingCustomColorSection) {
         this.isInjecting = false;
         return;
       }
@@ -858,7 +859,8 @@ export class ColorPickerInjector {
       const categoryList = categories ? Object.values(categories) : [];
 
       // Inject categories (even if empty, we still inject the "+" button)
-      this.injectColorCategories(categoryList);
+      // NOTE: Must await since injectColorCategories is now async
+      await this.injectColorCategories(categoryList);
 
       // Update checkmarks and Google color labels
       await this.hideCheckmarkAndModifyBuiltInColors();
