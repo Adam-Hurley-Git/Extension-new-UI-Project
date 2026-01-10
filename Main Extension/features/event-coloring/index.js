@@ -35,6 +35,7 @@
   let isInjecting = false;
   let eventClickCaptureSetup = false; // Prevent duplicate listener registration
   let colorChangeListenerSetup = false; // Prevent duplicate window listener
+  let colorPickerInjector = null; // New ColorPickerInjector instance
 
   // ========================================
   // GOOGLE COLOR SCHEME MAPPING
@@ -1029,6 +1030,13 @@
     categories = settings.categories || {};
     templates = settings.templates || {};
 
+    // Initialize the new ColorPickerInjector if available
+    if (window.cfColorPickerInjector && !colorPickerInjector) {
+      colorPickerInjector = window.cfColorPickerInjector.createColorPickerInjector(window.cc3Storage);
+      colorPickerInjector.init();
+      console.log('[EventColoring] New ColorPickerInjector initialized');
+    }
+
     console.log('[EventColoring] Initializing (enhanced)...', {
       isEnabled,
       categoriesCount: Object.keys(categories).length,
@@ -1110,7 +1118,24 @@
                 : node.querySelector('[role="menu"]');
               if (colorPicker && isColorPicker(colorPicker) && !colorPicker.dataset.cfEventColorModified) {
                 console.log('[EventColoring] Color picker detected');
-                injectCustomCategories(colorPicker);
+
+                // Skip injection for task elements
+                if (lastClickedIsTask) {
+                  console.log('[EventColoring] Skipping color picker injection for task');
+                  return;
+                }
+
+                // Use new ColorPickerInjector if available, otherwise fall back to old method
+                if (colorPickerInjector) {
+                  // Mark as modified to prevent double injection
+                  colorPicker.dataset.cfEventColorModified = 'true';
+                  // Convert categories object to array and call new injector
+                  const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
+                  colorPickerInjector.injectColorCategories(categoriesArray);
+                } else {
+                  // Fall back to old injection method
+                  injectCustomCategories(colorPicker);
+                }
               }
             }
           });
@@ -3897,6 +3922,7 @@
     getCalendarDefaultColorsForEvent,
     hasNonBackgroundProperties,
     showExistingPropertiesDialog,
+    showRecurringEventDialog,
     // Mode switching support
     detectCurrentMode,
     clearColorKitStyling,

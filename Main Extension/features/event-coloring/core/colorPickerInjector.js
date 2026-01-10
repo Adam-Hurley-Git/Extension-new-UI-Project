@@ -1,17 +1,109 @@
 // features/event-coloring/core/colorPickerInjector.js
 // Injects custom color picker UI into Google Calendar's color menus
+// NOTE: This file is loaded as a content script, NOT as an ES6 module
+// All dependencies are accessed via window globals set by other content scripts
 
-import {
-  COLOR_PICKER_SELECTORS,
-  DATA_ATTRIBUTES,
-  EVENT_SELECTORS,
-  Scenario,
-} from '../selectors.js';
-import EventIdUtils from '../utils/eventIdUtils.js';
-import ScenarioDetector from '../utils/scenarioDetector.js';
-import { showRecurringEventDialog } from '../components/RecurringEventDialog.js';
-import { ColorSwatchModal, COLOR_PALETTES } from '../../../shared/components/ColorSwatchModal.js';
-import { EventColorModal, createEventColorModal } from '../../../shared/components/EventColorModal.js';
+// ========================================
+// SELECTORS (inline definitions for content script use)
+// ========================================
+const COLOR_PICKER_SELECTORS = {
+  COLOR_PICKER_CONTROLLERS: {
+    EDITOR: '[jscontroller="kFFfqb"]',
+    LIST: '[jscontroller="d5OhJe"]',
+    CALENDARLIST: '.tB5Jxf-xl07Ob-XxIAqe',
+    NEW_EVENT: '.tB5Jxf-xl07Ob-XxIAqe.GemzMd.KjAqB',
+  },
+  BUILT_IN_COLOR_GROUP: '.vbVGZb',
+  GOOGLE_COLOR_BUTTON: 'div[jsname="Ly0WL"]',
+  ALL_COLOR_BUTTONS: '[jsname="Ly0WL"]',
+  MENU_DIALOG: '[role="menu"], [role="dialog"]',
+  CHECKMARK_SELECTOR: 'i.google-material-icons',
+  LABEL_ELEMENT: '.oMnJrf',
+  CUSTOM_CLASSES: {
+    SEPARATOR: 'cf-custom-separator',
+    COLOR_DIV_GROUP: 'cf-colorDivGroup',
+    CUSTOM_COLOR_BUTTON: 'cf-custom-color-button',
+    CATEGORY_SECTION: 'cf-category-section',
+    RECURRING_DIALOG: 'cf-recurring-dialog-container',
+  },
+  CONTEXT_MENU: {
+    CONTAINER: '.ztKZ3d',
+  },
+};
+
+const DATA_ATTRIBUTES = {
+  EVENT_ID: 'data-eventid',
+  COLOR_MODIFIED: 'data-cf-color-modified',
+  CF_COLORED: 'data-cf-event-colored',
+};
+
+const EVENT_SELECTORS = {
+  EVENT_CONTAINER: '[data-eventid]',
+  TEXT: '.I0UMhf, .EWOIrf, .KcY3wb',
+  TIME: '.lhydbb.gVNoLb.EiZ8Dd',
+  EDITOR: {
+    COLOR_SELECTOR: 'div[jsname="QPiGnd"].A1wrjc.kQuqUe',
+    TITLE_INPUT: '[aria-label*="Event title"], input[aria-label*="Add title"]',
+  },
+  VIEWER: {
+    DIALOG: '#xDetDlg',
+    COLOR_INDICATOR: '.xnWuge',
+  },
+  CALENDAR_ROOT: 'div[jsname="KL7Kx"]',
+  STYLE_PROPERTIES: {
+    COLORS: ['backgroundColor', 'borderColor', 'borderLeftColor', 'borderRightColor'],
+  },
+  CHIP: {
+    CONTAINER: '[data-eventchip]',
+    DRAGGABLE: '[data-draggable-id]',
+    VISUAL: '.FAxxKc',
+  },
+};
+
+const Scenario = {
+  EVENTEDIT: 'EVENTEDIT',
+  LISTVIEW: 'LISTVIEW',
+  EVENTVIEW: 'EVENTVIEW',
+  NEWEVENT: 'NEWEVENT',
+  CALENDARLIST: 'CALENDARLIST',
+};
+
+// Helper to get window dependencies
+function getEventIdUtils() {
+  return window.cfEventColoring?.EventIdUtils || window.EventIdUtils;
+}
+
+function getScenarioDetector() {
+  return window.cfEventColoring?.ScenarioDetector || window.ScenarioDetector;
+}
+
+function getColorSwatchModal() {
+  return window.ColorSwatchModal;
+}
+
+function getEventColorModal() {
+  return window.EventColorModal;
+}
+
+function getColorPalettes() {
+  return window.COLOR_PALETTES || [];
+}
+
+function showRecurringEventDialog(options) {
+  // Use the window global if available, otherwise provide inline implementation
+  if (window.cfEventColoring?.showRecurringEventDialog) {
+    return window.cfEventColoring.showRecurringEventDialog(options);
+  }
+  if (window.cfRecurringEventDialog?.showRecurringEventDialog) {
+    return window.cfRecurringEventDialog.showRecurringEventDialog(options);
+  }
+  // Fallback: just apply to this event only
+  console.warn('[CF] showRecurringEventDialog not available, applying to single event');
+  if (options.onApplyOne) {
+    options.onApplyOne();
+  }
+  return Promise.resolve();
+}
 
 // ========================================
 // GOOGLE COLOR SCHEME MAPPING
@@ -66,10 +158,23 @@ const COLORKIT_DEFAULT_COLORS = [
   { hex: '#616161', name: 'Graphite' },
 ];
 
+// Lazy-loaded references to other modules (set when first used)
+let ScenarioDetector = null;
+let EventIdUtils = null;
+
+function ensureDependencies() {
+  if (!ScenarioDetector) {
+    ScenarioDetector = getScenarioDetector();
+  }
+  if (!EventIdUtils) {
+    EventIdUtils = getEventIdUtils();
+  }
+}
+
 /**
  * ColorPickerInjector - Handles injection of custom colors into Google Calendar
  */
-export class ColorPickerInjector {
+class ColorPickerInjector {
   constructor(storageService) {
     this.storageService = storageService;
     this.observerId = 'colorPickerInjector';
@@ -83,6 +188,7 @@ export class ColorPickerInjector {
    */
   init() {
     console.log('[CF] ColorPickerInjector initialized');
+    ensureDependencies();
     this.injectModalCSS();
   }
 
@@ -2860,16 +2966,15 @@ export class ColorPickerInjector {
 /**
  * Factory function
  */
-export function createColorPickerInjector(storageService) {
+function createColorPickerInjector(storageService) {
   return new ColorPickerInjector(storageService);
 }
 
-// Make available globally
+// Make available globally for content scripts
 if (typeof window !== 'undefined') {
   window.cfColorPickerInjector = {
     ColorPickerInjector,
     createColorPickerInjector,
   };
+  console.log('[CF] ColorPickerInjector available at window.cfColorPickerInjector');
 }
-
-export default ColorPickerInjector;
