@@ -1022,33 +1022,41 @@ class ColorPickerInjector {
       return false;
     }
 
-    // Get event ID
+    // Get event ID - optional, will be fetched lazily when needed
     console.log('[CF] Finding event ID...');
-    const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
-    console.log('[CF] Event ID:', eventId ? eventId.slice(0, 30) + '...' : null);
-    if (!eventId) {
-      console.log('[CF] No event ID found');
-      return false;
+    let eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+
+    // Try alternative method to get event ID from last clicked event
+    if (!eventId && window.cfEventColoring?.getLastClickedEventId) {
+      eventId = window.cfEventColoring.getLastClickedEventId();
+      console.log('[CF] Got event ID from lastClickedEventId:', eventId ? eventId.slice(0, 30) + '...' : null);
     }
 
-    // Detect current mode (google or colorkit)
+    // Event ID is optional for UI injection - colors can be applied later
+    console.log('[CF] Event ID:', eventId ? eventId.slice(0, 30) + '...' : 'null (will use defaults)');
+
+    // Detect current mode (google or colorkit) - default to google if no eventId
     let currentMode = 'google';
-    if (window.cfEventColoring?.detectCurrentMode) {
-      currentMode = await window.cfEventColoring.detectCurrentMode(eventId);
-    } else {
-      // Fallback: check if we have ColorKit colors
-      const colorData = await this.storageService.findEventColorFull?.(eventId);
-      if (colorData && !colorData.useGoogleColors) {
-        currentMode = 'colorkit';
+    if (eventId) {
+      if (window.cfEventColoring?.detectCurrentMode) {
+        currentMode = await window.cfEventColoring.detectCurrentMode(eventId);
+      } else {
+        // Fallback: check if we have ColorKit colors
+        const colorData = await this.storageService.findEventColorFull?.(eventId);
+        if (colorData && !colorData.useGoogleColors) {
+          currentMode = 'colorkit';
+        }
       }
     }
     console.log('[CF] Current mode:', currentMode);
 
-    // Get current color for this event
+    // Get current color for this event (if eventId available)
     let currentColor = null;
-    const colorData = await this.storageService.findEventColorFull?.(eventId);
-    if (colorData) {
-      currentColor = colorData.background || colorData.hex;
+    if (eventId) {
+      const colorData = await this.storageService.findEventColorFull?.(eventId);
+      if (colorData) {
+        currentColor = colorData.background || colorData.hex;
+      }
     }
 
     // Find the scrollable wrapper
