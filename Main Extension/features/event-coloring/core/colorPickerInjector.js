@@ -163,11 +163,14 @@ let ScenarioDetector = null;
 let EventIdUtils = null;
 
 function ensureDependencies() {
+  console.log('[CF] ensureDependencies called, cfEventColoring exists:', !!window.cfEventColoring);
   if (!ScenarioDetector) {
     ScenarioDetector = getScenarioDetector();
+    console.log('[CF] ScenarioDetector loaded:', !!ScenarioDetector);
   }
   if (!EventIdUtils) {
     EventIdUtils = getEventIdUtils();
+    console.log('[CF] EventIdUtils loaded:', !!EventIdUtils);
   }
 }
 
@@ -993,19 +996,24 @@ class ColorPickerInjector {
     }
 
     try {
+      console.log('[CF] Finding scenario...');
       const scenario = ScenarioDetector.findColorPickerScenario();
+      console.log('[CF] Scenario found:', scenario);
+
     if (scenario !== Scenario.EVENTEDIT && scenario !== Scenario.LISTVIEW) {
       console.log('[CF] Not injecting for scenario:', scenario);
       return;
     }
 
     // Find the color picker container
+    console.log('[CF] Looking for color picker container...');
     const editorContainer = document.querySelector(
       COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR
     );
     const listContainer = document.querySelector(
       COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
     );
+    console.log('[CF] Editor container:', !!editorContainer, 'List container:', !!listContainer);
     const container = listContainer || editorContainer;
 
     if (!container) {
@@ -1014,7 +1022,9 @@ class ColorPickerInjector {
     }
 
     // Get event ID
+    console.log('[CF] Finding event ID...');
     const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+    console.log('[CF] Event ID:', eventId ? eventId.slice(0, 30) + '...' : null);
     if (!eventId) {
       console.log('[CF] No event ID found');
       return;
