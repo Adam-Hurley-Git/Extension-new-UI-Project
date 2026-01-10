@@ -1,0 +1,3034 @@
+we need to make large changes to the event coloring system. I need you to be an expert and do full analysis of the code all the paths, storage, merges, coloring, selectors, previews, logics everything that makes each unique part of the event coloring work so we can redesign a part of it effectively and properly
+
+I'll conduct a comprehensive analysis of the event coloring system. This is a complex system that requires thorough exploration of all components. Let me launch multiple specialized exploration agents to analyze different aspects in parallel.
+
+Task
+Analyze event color storage
+Task
+Analyze color merge logic
+Task
+Analyze color selector UI
+Task
+Analyze event detection
+Task
+Analyze data flow/state
+Task
+Analyze color definitions
+Used 148 tools
+I've completed a comprehensive analysis of the entire event coloring system. Let me synthesize all the findings into a complete expert report.
+
+Event Coloring System - Complete Architecture Analysis
+Executive Summary
+The event coloring system is a sophisticated multi-layered feature that handles color selection, storage, merging, and rendering for Google Calendar events. It spans ~15+ files with ~8,000+ lines of code.
+
+1. System Architecture Overview
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           STORAGE LAYER                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Chrome Sync Storage              │  Chrome Local Storage                    │
+│  ─────────────────────            │  ────────────────────                    │
+│  • settings.eventColoring         │  • cf.eventColors (per-event colors)     │
+│    - categories                   │  • cf.calendarDOMColors (cache)          │
+│    - templates                    │                                          │
+│    - calendarColors (defaults)    │                                          │
+│    - googleColorLabels            │                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           IN-MEMORY CACHE                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  eventColors{}        │  calendarDefaultColors{}  │  calendarColors{}        │
+│  (manual colors)      │  (per-calendar defaults)  │  (Google API colors)     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           MERGE LOGIC                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  mergeEventColors(manualColors, calendarDefaults)                           │
+│  Priority: useGoogleColors → overrideDefaults → manual → calendar → null    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           DOM RENDERING                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  applyColorsToElement() → background (gradient) + text + border (outline)   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+2. Key Files Reference
+File	Purpose	Key Lines
+/Main Extension/lib/storage.js	All storage CRUD operations	483-898 (event colors), 1053-1282 (calendar colors)
+/Main Extension/features/event-coloring/index.js	Main feature logic	3404-3442 (merge), 3318-3395 (apply), 918-982 (init)
+/Main Extension/features/event-coloring/core/colorPickerInjector.js	Inject UI into Google Calendar	340-800 (injection), 22-52 (color scheme map)
+/Main Extension/features/event-coloring/core/colorRenderer.js	DOM color application	14-37 (task detection), 261+ (apply colors)
+/Main Extension/features/event-coloring/utils/eventIdUtils.js	Event ID parsing	20-74 (decode), 100-106 (matching)
+/Main Extension/shared/components/EventColorModal.js	Advanced color picker	76-1165 (full modal)
+/Main Extension/shared/components/ColorSwatchModal.js	Simple color picker	131-488 (modal)
+/Main Extension/shared/utils/colorUtils.js	Color conversion utilities	14-232 (all utilities)
+3. Data Structures
+3.1 Event Color Storage (cf.eventColors)
+{
+  "encodedEventId": {
+    // NEW FORMAT (current)
+    "background": "#ff0000",        // Event background
+    "text": "#ffffff",              // Text color (Pro)
+    "border": "#cc0000",            // Border color (Pro)
+    "borderWidth": 2,               // 1-6 pixels
+    
+    // LEGACY (backward compat)
+    "hex": "#ff0000",               // Old single-color format
+    
+    // CONTROL FLAGS
+    "isRecurring": false,           // Stored under base ID for series
+    "overrideDefaults": false,      // Ignore calendar defaults
+    "useGoogleColors": false,       // Force Google's native colors
+    "appliedAt": 1704326400000      // Timestamp
+  }
+}
+
+3.2 Calendar Default Colors (settings.eventColoring.calendarColors)
+{
+  "calendar@email.com": {
+    "background": "#ff0000",
+    "text": "#ffffff",
+    "border": "#cc0000",
+    "borderWidth": 2
+  }
+}
+
+3.3 Parsed Event ID Structure
+{
+  type: 'calendar',
+  encodedId: "base64string",
+  decodedId: "event-base-id",           // Without instance date
+  instanceDate: "_20231215T100000Z",    // null for single events
+  isRecurring: true,                    // Has instance date suffix
+  emailSuffix: "user@gmail.com",        // Calendar identifier
+  fullDecoded: "event-id user@gmail.com"
+}
+
+4. Color Priority & Merge Logic
+Location: index.js:3404-3442
+
+Priority Order (Highest to Lowest):
+useGoogleColors=true → Returns null (use Google's native colors)
+overrideDefaults=true → Returns manual colors only (ignores calendar defaults)
+Manual event colors → Takes precedence for each property
+Calendar default colors → Fills gaps where manual is null
+No colors → Returns null (Google's default rendering)
+Property-Level Merge:
+{
+  background: manual.background || calendar.background || null,
+  text: manual.text || calendar.text || null,
+  border: manual.border || calendar.border || null,
+  borderWidth: manual.borderWidth ?? calendar.borderWidth ?? 2
+}
+
+5. Event Detection System
+5.1 Event Identification
+Primary selector: [data-eventid]
+New UI chips: [data-eventchip], [data-draggable-id]
+Event ID format: Base64 encoded "eventId calendarEmail"
+5.2 Task vs Event Detection (colorRenderer.js:14-37)
+function isTaskElement(element) {
+  // OLD UI: Check for tasks. or tasks_ prefix
+  // NEW UI: Check for [aria-label="Mark complete"] button
+  // FALLBACK: Check jsname="nWuQKb" attribute
+}
+
+5.3 Recurring Event Detection (eventIdUtils.js:49-55)
+// Pattern: baseId_YYYYMMDDTHHMMSSZ
+const recurringMatch = eventPart.match(/^(.+?)(_\d{8}T\d{6}Z)?$/);
+const isRecurring = !!recurringMatch[2];
+
+6. Color Application Flow
+Complete Data Flow:
+1. USER CLICKS EVENT
+   └→ lastClickedEventId = eventId (index.js:3629-3656)
+
+2. COLOR PICKER OPENS
+   └→ MutationObserver detects (index.js:993-1016)
+   └→ injectCustomCategories() adds custom UI (colorPickerInjector.js)
+
+3. USER SELECTS COLOR
+   └→ Check if recurring → Show RecurringEventDialog
+   └→ saveFullColorsWithRecurringSupport() (index.js:2512-2570)
+
+4. SAVE TO STORAGE
+   └→ Update local cache FIRST (immediate)
+   └→ saveEventColorsFullAdvanced() → chrome.storage.local
+
+5. APPLY TO DOM
+   └→ applyStoredColors() queries all [data-eventid] elements
+   └→ For each: findColorForEvent() → mergeEventColors() → applyColorsToElement()
+
+6. DOM STYLING (index.js:3484-3560)
+   └→ Background: CSS gradient (preserves 4px calendar stripe)
+   └→ Text: Auto-contrast or manual override
+   └→ Border: outline with outlineOffset
+
+7. Color Picker UI Components
+7.1 EventColorModal (Advanced - 3 properties)
+Location: /shared/components/EventColorModal.js
+
+Property tabs: Background | Text (Pro) | Border (Pro)
+Palettes: Vibrant (29), Pastel (45), Dark (41), Custom
+Border width: 1-6px buttons
+Live preview: Shows real-time color combination
+Hex input: With validation
+7.2 ColorSwatchModal (Simple - single color)
+Location: /shared/components/ColorSwatchModal.js
+
+4 tabs: Vibrant, Pastel, Dark, Custom
+Quick selection: Click or keyboard (Enter/Space)
+Hex input: Manual color entry
+7.3 ColorPickerInjector (Google Calendar integration)
+Location: /features/event-coloring/core/colorPickerInjector.js
+
+Injects custom colors below Google's 11 colors
+Handles both Modern and Classic color schemes
+Reset actions: "Remove all coloring", "Reset to list defaults"
+8. Special Control Flags
+Flag	Purpose	Effect	Set When
+useGoogleColors	Force Google's native colors	mergeEventColors() returns null	User clicks "Remove all coloring"
+overrideDefaults	Bypass calendar defaults	Only manual colors apply	User clicks "Replace all styling"
+isRecurring	Color applies to all instances	Stored under base ID	User selects "All events in series"
+9. Observer Patterns
+9.1 Color Picker Observer (index.js:993-1016)
+colorPickerObserver = new MutationObserver((mutations) => {
+  // Watches for Google's color picker appearing
+  // Triggers custom color injection
+});
+
+9.2 Color Render Observer (index.js:1027-1043)
+colorRenderObserver = new MutationObserver(() => {
+  // Watches for DOM changes (navigation, new events)
+  // Debounced 100ms applyStoredColors()
+});
+
+9.3 Event Click Capture (index.js:3620-3666)
+Captures click, contextmenu, mousedown events
+Stores lastClickedEventId for 10 seconds
+Filters out task elements
+10. Color Utilities
+Location: /shared/utils/colorUtils.js
+
+Function	Purpose
+getReadableTextColor(hex)	Returns #000 or #fff based on luminance
+hexToRgb(hex)	Hex → {r, g, b}
+rgbToHex(r, g, b)	RGB → Hex
+hexToHsl(hex)	Hex → {h, s, l}
+lightenColor(hex, %)	Lighten by percentage
+darkenColor(hex, %)	Darken by percentage
+applyOpacity(hex, opacity)	Blend with white
+isValidHex(hex)	Validate hex format
+11. Google Color Scheme Mapping
+Location: colorPickerInjector.js:22-52
+
+Google Calendar has two color schemes (Modern vs Classic). The system maps between them:
+
+Modern (Saturated)	Classic (Pastel)	Name
+#d50000	#dc2127	Tomato
+#e67c73	#ff887c	Flamingo
+#f4511e	#ffb878	Tangerine
+#f6bf26	#fbd75b	Banana
+#33b679	#7ae7bf	Sage
+#0b8043	#51b749	Basil
+#039be5	#46d6db	Peacock
+#3f51b5	#5484ed	Blueberry
+#7986cb	#a4bdfc	Lavender
+#8e24aa	#dbadff	Grape
+#616161	#e1e1e1	Graphite
+12. Backward Compatibility
+Location: storage.js:818-856
+
+The system handles three data formats:
+
+Very Old (String): "#ff0000" → Normalized to full object
+Old (Hex Only): { hex: "#ff0000" } → Background filled from hex
+New (Full): { background, text, border, borderWidth } → Used directly
+Normalization happens on-the-fly during retrieval via normalizeEventColorData().
+
+13. Key Architectural Patterns
+Pattern 1: Local Cache First
+// Update local cache FIRST for immediate effect
+eventColors[eventId] = colorData;
+// Then save to storage (async)
+await storage.saveEventColorsFullAdvanced(eventId, colors);
+
+Pattern 2: Smart Recurring Lookup
+// Try direct match, then check recurring base ID
+let colors = singleEventColors.get(eventId);
+if (!colors) {
+  const parsed = EventIdUtils.fromEncoded(eventId);
+  colors = recurringEventColors.get(parsed.decodedId);
+}
+
+Pattern 3: Deep Merge with REPLACE_KEYS
+// For specific keys (categories, templates, calendarColors)
+// Do hard replace instead of recursive merge
+// Ensures deletions work when syncing
+
+Pattern 4: Stripe Preservation
+// Preserve Google's 4px calendar stripe with CSS gradient
+const gradient = `linear-gradient(to right, ${originalColor} 4px, ${customColor} 4px)`;
+
+Summary
+This is a mature, well-architected system with:
+
+Clear separation of concerns (storage, rendering, UI, utilities)
+Multiple color sources with defined priority
+Backward compatibility for data migrations
+Recurring event support with cleanup logic
+Control flags for user preferences
+Observer-based reactivity for DOM changes
+What specific part of the system would you like to redesign? I can provide more detailed analysis on any component.
+
+Uploaded image
+We currently have issues. we have designed the system to try and mix google coloring and our coloring together and paint ourselves using googles coloring by bypassing and hacking their color picker. this was a mistake and has caused issues. we will need to change this and the picker ui.
+
+see image, I think the best approach will be to decide if we use google or we use our coloring, never merging or trying to take ownership away from a google color. instead user will be able to decide to use google coloring or to use any method of our coloring, one or the other, never merged or mixed, this would be unique per each event, while making this change we would also add a small section to the injected ui to show the list coloring for the calendar the event belongs to and allow user to return back to list coloring if they have used any manual/template/google coloring
+we would also have our own version of googles 12 colors that do not fire googles color logic just match the colors google give us. this way a user can have sage color chosen in google, go to custom plus button that sage will show and if user adds border/text it can still merge and look correct but it is no longer using googles coloring, instead our one.
+
+Most logic/choices/modals/flows will all be same for user with the big change being in how we handle google and our color ownership with clear separation and ux for the user
+
+Does this make sense to you? the image is just a mockup, I do not want you to match it exactly just use as inspiration to the change im trying to make. I'd like you before we continue or plan, to simply reply with your understanding of my problem, why it is a problem, what it causes, how i think we could adress and fix it, finally reasoning from your own logic how you would suggest we continue and fix it. this is not the plan itself, it is our brainstorming exercise prior to planning.
+
+merge/custom colors/modals/keep colors only background everything
+
+Show more
+My Understanding
+The Problem
+You've built a system that tries to coexist with and augment Google's coloring - intercepting their color picker, preserving their stripe, merging your colors on top of theirs. This "hacking" approach means you're fighting against Google's system rather than replacing it cleanly.
+
+Why It's a Problem
+Ownership Ambiguity: When a user picks a color, who "owns" it? If Google fires its color logic, then Google owns it. Your system then tries to paint over it, leading to a fragile layered approach.
+
+Merge Complexity: The mergeEventColors() logic with useGoogleColors, overrideDefaults, and property-by-property fallbacks creates edge cases. The recent race condition fix in your git history (84e1c26) is evidence of this complexity causing real bugs.
+
+Inconsistent State: An event can be partially Google-colored and partially yours (e.g., Google background + your border). This hybrid state is hard to reason about and harder to maintain.
+
+Google Can Break You: Any time Google changes their color picker DOM, classes, or behavior, your injection code breaks because you're dependent on their internal implementation.
+
+UX Confusion: Users don't know if clicking a Google color will "work" with your text/border features. The mental model is unclear.
+
+Your Proposed Solution
+Binary ownership model: Each event is either:
+
+Google-colored (Google handles everything, your system doesn't touch it), OR
+ColorKit-colored (your system handles everything, Google's logic never fires)
+Key elements:
+
+Mirror Google's 12 colors in your own palette - same visual appearance, but clicking them saves to YOUR storage, not Google's
+No merging - if user wants "Sage" with a border, they pick YOUR Sage (not Google's), and you fully control it
+List coloring awareness - show the calendar's default color and let users "return to list coloring"
+Clear UI separation - toggles/sections that make ownership obvious
+What This Solves
+If user picks Google Sage → Google owns it, you don't touch it
+If user picks YOUR Sage → You own it, can add text/border, no merge needed
+If user wants to reset → Clear option to return to list/calendar default
+No more stripe preservation hacks, no more gradient overlays, no merge logic
+My Reasoning & Suggestions
+I think your approach is correct. Here's how I'd refine it:
+
+1. State Model Simplification
+Instead of the current complex flags, each event has ONE state:
+
+eventColorState = 'google' | 'colorkit' | 'list-default' | null
+
+'google' = User explicitly chose a Google color, don't touch
+'colorkit' = User chose our color (stores background/text/border/width)
+'list-default' = Use calendar's list color (your system applies it)
+null = No override, Google's default behavior
+2. Your Own Google-Equivalent Palette
+Create a "Default Colors" section with the exact 11 Google colors. When clicked:
+
+Does NOT trigger Google's color picker logic
+Saves to YOUR cf.eventColors storage
+Fully supports text/border because YOU own it
+3. "Return to List Coloring" Feature
+Show the calendar's color in the UI (like your mockup). Clicking it:
+
+Clears any manual/template color
+Applies your calendar-default color (from calendarColors)
+You still own it (can add text/border later)
+4. Google Section as "Opt-Out"
+The "Google's own colors" toggle/section is essentially saying: "I want Google to handle this event, ColorKit hands off." When enabled:
+
+Remove your color from storage for this event
+Let Google's native rendering take over
+Your system ignores this event during applyStoredColors()
+5. Eliminate Merge Logic
+The mergeEventColors() function becomes unnecessary. Instead:
+
+If eventColorState === 'colorkit' → apply stored colors directly
+If eventColorState === 'list-default' → apply calendar default directly
+If eventColorState === 'google' or null → don't touch the element
+6. DOM Strategy
+Stop trying to preserve Google's stripe with gradients. Either:
+
+You paint the whole element (your colors), OR
+You don't touch it at all (Google's colors)
+Summary
+Your instinct is right: clean separation beats clever merging. The current system is technically impressive but architecturally fragile. Moving to a binary ownership model will:
+
+Simplify the codebase significantly
+Eliminate race conditions and edge cases
+Make the UX crystal clear to users
+Make you independent of Google's internal implementation
+Shall I proceed with creating a detailed implementation plan for this redesign?
+
+I believe your understanding is wrong. We will still have merge logic and modal asking to keep properties or just apply bg when a user chooses a color from our pickers so we can still have clever merge and choice modal when eg they have list coloring or custom coloring and then select just bg color, but we would not have the same behaviour for googles own colors.
+I still want to also preserve stripes, this not something i want removed. it serves to show users what calendar the event belongs to, we will own this feature not using googles but coloring ourselves, stripe is visually important, but we need to change so we dont conflict with google and remove the issues.
+
+retry and send new corrected understanding
+
+Corrected Understanding
+The Problem
+You're currently intercepting Google's color picker and trying to merge your coloring on top of Google's. When a user picks a Google color, Google's logic fires AND your system tries to paint over/alongside it. This dual-ownership creates conflicts, race conditions, and unpredictable behavior.
+
+Why It's a Problem
+Two systems fighting: Google fires its color logic, then you try to overlay yours - they conflict
+Unpredictable state: Sometimes Google wins, sometimes you win, sometimes partial states
+Race conditions: The recent fixes in git history show this causing real bugs
+Fragile hacking: You're dependent on Google's internal DOM/behavior which can change
+Your Proposed Solution
+Separation of ownership, NOT elimination of features:
+
+What STAYS the same:
+Merge logic - Modal asking "keep text/border or just apply background" when user has existing properties
+Stripe preservation - Still show calendar stripe, but YOU paint it (not relying on Google's)
+All modals/flows - Same UX for choosing colors, recurring events, etc.
+Text/border/width features - All still work within your system
+What CHANGES:
+Google's colors = hands off: If user picks from Google's actual color picker, your system doesn't touch that event. Google owns it entirely.
+
+Your own Google-equivalent palette: You have your own "Default Colors" that visually match Google's 12 colors. When user picks YOUR Sage, it's YOUR color - Google's logic never fires.
+
+You own the stripe: When using ColorKit colors, YOU paint the stripe based on which calendar the event belongs to. You're not preserving Google's stripe - you're painting your own.
+
+Clear return path: User can see their list/calendar color and return to it if they've applied manual coloring.
+
+The Key Insight
+The problem isn't merge logic or stripes - those are valuable features. The problem is trying to own something Google also owns.
+
+The fix: If it's Google's color, it's Google's. If it's your color, it's yours entirely.
+
+User picks Google Sage → Google handles everything, you ignore this event
+User picks YOUR Sage (identical visually) → You handle everything: background, text, border, AND stripe
+User has YOUR color with text/border, picks new background → Merge modal appears (keep properties?)
+Flow Example
+Event currently has Google's Sage color (Google owns it)
+User opens your picker, clicks "Custom Coloring"
+User picks YOUR Sage from "Default Colors"
+Now YOU own it - you paint background AND stripe (based on calendar)
+User later adds border → works because you own the color
+Merge modal can still appear when changing backgrounds with existing properties
+Summary
+Remove: Conflict with Google (no more intercepting/overlaying Google's colors)
+Keep: Merge logic, stripe, modals, all your color features
+Add: Your own Google-equivalent colors, clear "return to list" option
+Result: Clean ownership - Google OR ColorKit, never both fighting
+Is this understanding correct?
+
+yes, your understanding is now correct. I want you to create a bulletproof plan that does not recreate or make new parts of the system that already work, you are implementing this safely ensuring everything will work correctly, no missed code, everything should be addressed correctly. make a plan that will 100% acheive the new experience correctly
+
+I'll create a comprehensive plan. First, let me do targeted exploration to ensure the plan addresses every piece of code that needs to change.
+
+Task
+Analyze colorPickerInjector changes
+Task
+Analyze applyStoredColors logic
+Task
+Analyze storage flags and state
+Used 33 tools
+Now I have all the information needed. Let me create a comprehensive, bulletproof implementation plan.
+
+Update Todos
+ Creating bulletproof implementation plan
+Bulletproof Implementation Plan: Event Coloring Redesign
+Overview
+Goal: Separate Google color ownership from ColorKit color ownership while preserving all existing ColorKit features (merge modal, stripe, text/border).
+
+Principle: Each event is either Google-owned (we don't touch) OR ColorKit-owned (we handle everything including stripe).
+
+Phase 1: Storage & Data Model Changes
+1.1 Add New Ownership Field to Storage
+File: /Main Extension/lib/storage.js
+
+Change: Add colorOwner field to event color data structure
+
+Location: Lines 759-772 in saveEventColorsFullAdvanced()
+
+// CURRENT (lines 759-772):
+const colorData = {
+  background: colors.background || null,
+  text: colors.text || null,
+  border: colors.border || null,
+  borderWidth: colors.borderWidth ?? 2,
+  hex: colors.background || null,
+  isRecurring: false,
+  appliedAt: Date.now(),
+  overrideDefaults: colors.overrideDefaults || false,
+  useGoogleColors: colors.useGoogleColors || false,
+};
+
+// NEW:
+const colorData = {
+  background: colors.background || null,
+  text: colors.text || null,
+  border: colors.border || null,
+  borderWidth: colors.borderWidth ?? 2,
+  hex: colors.background || null,
+  isRecurring: false,
+  appliedAt: Date.now(),
+  overrideDefaults: colors.overrideDefaults || false,
+  useGoogleColors: colors.useGoogleColors || false,
+  stripeColor: colors.stripeColor || null,  // NEW: Calendar stripe color we paint
+};
+
+1.2 Update normalizeEventColorData()
+File: /Main Extension/lib/storage.js
+Location: Lines 818-856
+
+Add: Include stripeColor in normalization with default null
+
+1.3 Remove useGoogleColors Flag Usage
+Rationale: This flag was for "return to Google" - but now if user wants Google colors, we simply DELETE their ColorKit color entry. No flag needed.
+
+Files to update:
+
+storage.js: Remove markEventForGoogleColors() (lines 600-618)
+storage.js: Remove markRecurringEventForGoogleColors() (lines 626-667)
+index.js: Remove checks for useGoogleColors in mergeEventColors() (lines 3407-3410)
+Phase 2: Stop Intercepting Google's Colors
+2.1 Remove Google Button Click Listeners
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: Lines 1757-1770 in hideCheckmarkAndModifyBuiltInColors()
+
+Action: DELETE this entire block:
+
+// DELETE LINES 1757-1770:
+googleButtons.forEach((button) => {
+  if (!button.hasAttribute('data-cf-handler')) {
+    button.setAttribute('data-cf-handler', 'true');
+    button.addEventListener('click', async () => {
+      const clickedEventId = ScenarioDetector.findEventIdByScenario(button, scenario);
+      if (clickedEventId) {
+        await this.storageService.removeEventColor(clickedEventId);
+        this.triggerColorUpdate();
+      }
+    });
+  }
+});
+
+Result: Clicking Google's colors now ONLY triggers Google's logic. We don't interfere.
+
+2.2 Remove Google Checkmark Suppression
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: Lines 1787-1793 in updateCheckmarks()
+
+Action: DELETE the code that removes checkmarks from Google buttons when custom color is selected. Google's checkmarks are Google's business.
+
+2.3 Keep Google Label Modification (Optional)
+Location: Lines 1838-1875 modifyGoogleColorLabels()
+
+Decision: KEEP this - it adds user's custom labels to Google colors. This is helpful UX and doesn't interfere with ownership.
+
+Phase 3: Add "Default Colors" Section (Our Google-Equivalent Colors)
+3.1 Define Google-Equivalent Color Constants
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: Near top of file (after line 52)
+
+Add:
+
+const COLORKIT_DEFAULT_COLORS = [
+  { hex: '#d50000', name: 'Tomato' },
+  { hex: '#e67c73', name: 'Flamingo' },
+  { hex: '#f4511e', name: 'Tangerine' },
+  { hex: '#f6bf26', name: 'Banana' },
+  { hex: '#33b679', name: 'Sage' },
+  { hex: '#0b8043', name: 'Basil' },
+  { hex: '#039be5', name: 'Peacock' },
+  { hex: '#3f51b5', name: 'Blueberry' },
+  { hex: '#7986cb', name: 'Lavender' },
+  { hex: '#8e24aa', name: 'Grape' },
+  { hex: '#616161', name: 'Graphite' },
+];
+
+3.2 Create Default Colors Section UI
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Add new function after createCategorySection() (~line 1076):
+
+createDefaultColorsSection(container, scenario) {
+  // Creates section with "Default Colors" label
+  // Contains 11 color buttons matching Google's palette
+  // Click handler routes to handleColorSelect() (same as category colors)
+  // This ensures merge modal appears if event has text/border
+}
+
+3.3 Inject Default Colors Section
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: injectColorCategories() lines 626-637
+
+Change: Add default colors section BEFORE custom categories:
+
+// After separator (line 623), add:
+const defaultColorsSection = this.createDefaultColorsSection(container, scenario);
+wrapper.appendChild(defaultColorsSection);
+
+// Then existing category loop continues
+categories.forEach((category) => { ... });
+
+Phase 4: Add "List Coloring" Section
+4.1 Create List Coloring Section UI
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Add new function:
+
+async createListColoringSection(container, scenario, eventId) {
+  // 1. Get calendar ID from eventId
+  const calendarId = getCalendarIdForEvent(eventId);
+  
+  // 2. Get calendar's color from:
+  //    a) User-defined calendar defaults (calendarDefaultColors)
+  //    b) OR Google API colors (calendarColors)
+  
+  // 3. Create UI showing:
+  //    - "List Color" label
+  //    - Color swatch preview
+  //    - Calendar name (truncated)
+  //    - Click to apply list color (removes manual color, applies calendar default)
+  
+  // 4. Click handler:
+  //    - Saves calendar default as the event's color
+  //    - Sets stripeColor to match
+  //    - ColorKit now owns this event with list coloring
+}
+
+4.2 Inject List Coloring Section
+Location: injectColorCategories()
+
+Change: Add list coloring section at TOP (before Google colors):
+
+// At start of wrapper content, before separator
+const listColorSection = await this.createListColoringSection(container, scenario, eventId);
+if (listColorSection) {
+  wrapper.insertBefore(listColorSection, wrapper.firstChild);
+}
+
+Phase 5: Stripe Handling - We Paint It
+5.1 Modify applyColorsToElement() to Paint Stripe
+File: /Main Extension/features/event-coloring/index.js
+
+Location: Lines 3484-3560
+
+Current Logic: Preserves Google's stripe via gradient
+New Logic: We paint the stripe ourselves using stripeColor from storage
+
+function applyColorsToElement(element, colors) {
+  const { background, text, border, borderWidth = 2, stripeColor } = colors;
+  
+  if (!background) return;
+  
+  // Paint stripe ourselves (stripeColor from storage, or fetch from calendar)
+  const stripe = stripeColor || getCalendarStripeColor(element);
+  
+  if (stripe) {
+    const gradient = `linear-gradient(to right, ${stripe} 4px, ${background} 4px)`;
+    element.style.setProperty('background', gradient, 'important');
+  } else {
+    element.style.setProperty('background-color', background, 'important');
+  }
+  
+  // Rest of text/border logic stays same...
+}
+
+5.2 Store Stripe Color When Saving Event Color
+File: /Main Extension/features/event-coloring/index.js
+
+Location: saveFullColors() and saveFullColorsWithRecurringSupport() (lines 2473-2570)
+
+Change: When saving, capture and store the stripe color:
+
+async function saveFullColors(eventId, colors) {
+  // Get stripe color from calendar
+  const stripeColor = await getStripeColorForEvent(eventId);
+  
+  // Include in save
+  const colorsWithStripe = {
+    ...colors,
+    stripeColor: stripeColor,
+  };
+  
+  await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colorsWithStripe);
+}
+
+5.3 Add getStripeColorForEvent() Helper
+File: /Main Extension/features/event-coloring/index.js
+
+Add new function:
+
+function getStripeColorForEvent(eventId) {
+  // Priority:
+  // 1. User-defined calendar default background (calendarDefaultColors)
+  // 2. Google API calendar color (calendarColors)
+  // 3. Read from DOM element if available
+  
+  const calendarId = getCalendarIdForEvent(eventId);
+  
+  // Check user-defined calendar defaults first
+  const userDefault = calendarDefaultColors[calendarId];
+  if (userDefault?.background) {
+    return userDefault.background;
+  }
+  
+  // Fall back to Google API color
+  const googleColor = calendarColors[calendarId];
+  if (googleColor?.backgroundColor) {
+    return googleColor.backgroundColor;
+  }
+  
+  return null;
+}
+
+Phase 6: Simplify Merge Logic
+6.1 Update mergeEventColors()
+File: /Main Extension/features/event-coloring/index.js
+
+Location: Lines 3404-3442
+
+Current: Merges manual colors with calendar defaults, handles useGoogleColors flag
+New: Simpler - just merge within ColorKit's own color sources
+
+function mergeEventColors(manualColors, calendarDefaults) {
+  // If no manual colors, return calendar defaults (for list coloring)
+  if (!manualColors) return calendarDefaults;
+  
+  // If no calendar defaults, return manual colors
+  if (!calendarDefaults) return manualColors;
+  
+  // If overrideDefaults, use only manual (no merge)
+  if (manualColors.overrideDefaults) {
+    return {
+      background: manualColors.background || null,
+      text: null,
+      border: null,
+      borderWidth: manualColors.borderWidth ?? 2,
+      stripeColor: manualColors.stripeColor || calendarDefaults.background,
+      isRecurring: manualColors.isRecurring || false,
+    };
+  }
+  
+  // Normal merge: manual takes precedence per-property
+  return {
+    background: manualColors.background || calendarDefaults.background || null,
+    text: manualColors.text || calendarDefaults.text || null,
+    border: manualColors.border || calendarDefaults.border || null,
+    borderWidth: manualColors.borderWidth ?? calendarDefaults.borderWidth ?? 2,
+    stripeColor: manualColors.stripeColor || calendarDefaults.background || null,
+    isRecurring: manualColors.isRecurring || false,
+  };
+}
+
+6.2 Keep Property Merge Modal (handleColorSelect)
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: handleColorSelect() lines 1195-1253
+
+NO CHANGE - This stays exactly the same. When user has text/border and picks new background, modal asks "keep properties or just background".
+
+Phase 7: Update applyStoredColors() - Only Color ColorKit Events
+7.1 Modify Event Filtering
+File: /Main Extension/features/event-coloring/index.js
+
+Location: Lines 3353-3394
+
+Current: Colors ALL events that have stored colors
+New: Same behavior - if event has entry in cf.eventColors, we color it. If not, we don't touch it.
+
+Key insight: No change needed here! The logic already works:
+
+Event has ColorKit color → we apply it
+Event has no ColorKit color → we don't touch it (Google handles it)
+The separation happens at the COLOR PICKER level, not at the APPLY level.
+
+Phase 8: Handle "Return to Google Colors"
+8.1 Update Reset Actions Section
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: createResetActionsSection() lines 691-745
+
+Change "Remove all coloring" button behavior:
+
+Current: Sets useGoogleColors: true flag
+New: Simply DELETE the event's color entry from storage
+
+// In "Remove all coloring" click handler:
+removeAllColoringButton.addEventListener('click', async () => {
+  const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+  
+  if (isRecurring) {
+    await this.storageService.removeRecurringEventColors(eventId);
+  } else {
+    await this.storageService.removeEventColor(eventId);
+  }
+  
+  this.triggerColorUpdate();
+  this.closeMenus();
+});
+
+Result: Event no longer has ColorKit color → we don't touch it → Google's color shows.
+
+Phase 9: Update UI Injection Order
+9.1 New Picker Structure
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: injectColorCategories() lines 568-641
+
+New injection order:
+
+Google's Color Picker
+├── [Google's 11 colors - UNTOUCHED, we don't intercept]
+│
+├── ─────────── Separator ───────────
+│
+├── List Color Section (NEW)
+│   └── [Calendar color swatch + name + "Return to list"]
+│
+├── Default Colors (NEW - our Google-equivalent)
+│   └── [11 color buttons matching Google's palette]
+│
+├── [User Categories - existing]
+│   ├── Category 1
+│   ├── Category 2
+│   └── ...
+│
+├── Custom Coloring (existing)
+│   └── [+ button → opens EventColorModal]
+│
+└── Reset Actions (existing, modified)
+    ├── "Remove all coloring" (delete ColorKit color)
+    └── "Reset to list defaults" (apply calendar default)
+
+Phase 10: Checkmark/Selection State
+10.1 Update Checkmark Logic
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: updateCheckmarks() lines 1783-1822
+
+Changes:
+
+Don't touch Google's checkmarks - Remove lines that hide Google checkmarks
+Show checkmark on our buttons - Keep logic for Default Colors + Categories
+Show checkmark on List Color - If event is using list coloring
+updateCheckmarks(selectedColor, isListColor = false) {
+  // 1. Clear checkmarks from all OUR buttons (Default Colors + Categories)
+  const ourButtons = document.querySelectorAll('.cf-custom-color-button, .cf-default-color-button');
+  ourButtons.forEach(btn => this.toggleCheckmark(btn, false));
+  
+  // 2. Clear list color selection
+  const listColorBtn = document.querySelector('.cf-list-color-button');
+  if (listColorBtn) {
+    listColorBtn.classList.remove('selected');
+  }
+  
+  // 3. Show checkmark on selected
+  if (isListColor && listColorBtn) {
+    listColorBtn.classList.add('selected');
+  } else if (selectedColor) {
+    ourButtons.forEach(btn => {
+      const btnColor = btn.getAttribute('data-color');
+      if (btnColor?.toLowerCase() === selectedColor.toLowerCase()) {
+        this.toggleCheckmark(btn, true);
+      }
+    });
+  }
+  
+  // 4. DO NOT touch Google's buttons - their checkmarks are theirs
+}
+
+Phase 11: Testing Checklist
+11.1 Scenarios to Test
+Scenario	Expected Behavior
+Click Google color	Google handles it, we don't touch event
+Click our Default Color (e.g., Sage)	ColorKit owns it, we paint bg + stripe
+Click category color	ColorKit owns it, same as above
+Click "+" custom color	EventColorModal opens, full control
+Event has text+border, pick new bg	Merge modal appears: "Keep or replace?"
+Click "Remove all coloring"	Delete from storage, Google color shows
+Click "Return to list color"	Apply calendar default, we own it
+Recurring event color change	Recurring dialog appears as before
+Navigate calendar	ColorKit events stay colored, Google events untouched
+11.2 Edge Cases
+Edge Case	Expected Behavior
+Event has Google color, user picks our Sage	We take over, paint identical color + stripe
+Event has our color, user picks Google color	We delete our color, Google takes over
+Calendar has default color set	List Color section shows it
+Calendar has no default	List Color shows Google API color
+Event is recurring, different instances	Recurring dialog handles all
+Implementation Order
+Recommended Sequence:
+Phase 1 - Storage changes (add stripeColor, keep backward compat)
+Phase 2 - Stop intercepting Google (remove listeners)
+Phase 5 - Stripe handling (we paint it)
+Phase 3 - Default Colors section
+Phase 4 - List Coloring section
+Phase 6 - Simplify merge logic
+Phase 8 - Update reset actions
+Phase 9 - UI injection order
+Phase 10 - Checkmark logic
+Phase 11 - Testing
+Files Modified Summary
+File	Changes
+/lib/storage.js	Add stripeColor, remove useGoogleColors functions
+/features/event-coloring/index.js	Update mergeEventColors(), applyColorsToElement(), add stripe helpers
+/features/event-coloring/core/colorPickerInjector.js	Remove Google interception, add Default Colors, add List Color, update checkmarks
+What STAYS Unchanged
+✅ EventColorModal component
+✅ ColorSwatchModal component
+✅ RecurringEventDialog component
+✅ Event ID parsing utilities
+✅ Color conversion utilities
+✅ Storage CRUD operations (mostly)
+✅ MutationObservers for picker detection
+✅ Scenario detection
+✅ All existing modals/flows
+Does this plan look complete and correct? I can begin implementation once you approve.
+
+great, to add to this, check stripe color getting logic, the color we currently show inside the extensions popup in the list coloring ui with the name of calendar and the stipe on preview is correct, whichever way we get this color is the correct color to use for the events stripe.
+
+add modals for are you sure you want to switch, explain what change means to user, have dont show mesage again checkbox for clear ux of switiching between google and colorkit.
+
+yes, keep google labels feature as is.
+
+ensure that when we switch to google coloring, the event visually does go back to google color not blank/white or force refresh if we have to
+
+all ui sections of injected ui including googles should have lables and descriptions including custom button that clearly explains what they do for good ux
+
+recreate plan to include these clarifications
+
+Let me first find exactly how the popup gets the correct stripe color for the list coloring UI.
+
+Task
+Find popup stripe color logic
+Used 20 tools
+Now I have the complete picture. Let me recreate the plan with all your clarifications.
+
+Update Todos
+ Creating updated bulletproof implementation plan
+Bulletproof Implementation Plan v2: Event Coloring Redesign
+Overview
+Goal: Separate Google color ownership from ColorKit color ownership with clear UX, confirmation modals, and proper stripe handling.
+
+Principle: Each event is either Google-owned (we don't touch) OR ColorKit-owned (we handle everything including stripe). Clear communication to users about what each choice means.
+
+Phase 1: Storage & Data Model Changes
+1.1 Add New Fields to Storage
+File: /Main Extension/lib/storage.js
+
+Location: Lines 759-772 in saveEventColorsFullAdvanced()
+
+Changes:
+
+const colorData = {
+  background: colors.background || null,
+  text: colors.text || null,
+  border: colors.border || null,
+  borderWidth: colors.borderWidth ?? 2,
+  hex: colors.background || null,
+  isRecurring: false,
+  appliedAt: Date.now(),
+  overrideDefaults: colors.overrideDefaults || false,
+  // REMOVED: useGoogleColors (no longer needed - we just delete the entry)
+  stripeColor: colors.stripeColor || null,  // NEW: Calendar stripe color we paint
+};
+
+1.2 Add "Don't Show Again" Preference Storage
+File: /Main Extension/lib/storage.js
+
+Add to default settings (around line 60-68):
+
+eventColoring: {
+  enabled: true,
+  categories: {},
+  templates: {},
+  googleColorLabels: {},
+  quickAccessColors: [],
+  disableCustomColors: false,
+  calendarColors: {},
+  // NEW: Modal preferences
+  hideGoogleSwitchWarning: false,    // Don't show "switching to Google" modal
+  hideColorKitSwitchWarning: false,  // Don't show "switching to ColorKit" modal
+}
+
+Add getter/setter functions:
+
+async function getHideGoogleSwitchWarning() { ... }
+async function setHideGoogleSwitchWarning(value) { ... }
+async function getHideColorKitSwitchWarning() { ... }
+async function setHideColorKitSwitchWarning(value) { ... }
+
+1.3 Update normalizeEventColorData()
+File: /Main Extension/lib/storage.js
+Location: Lines 818-856
+
+Add: Include stripeColor in normalization with default null
+
+1.4 Remove useGoogleColors Flag Functions
+File: /Main Extension/lib/storage.js
+
+DELETE:
+
+markEventForGoogleColors() (lines 600-618)
+markRecurringEventForGoogleColors() (lines 626-667)
+Rationale: No longer needed - returning to Google means deleting ColorKit entry.
+
+Phase 2: Stripe Color Logic (Use Popup's Proven Logic)
+2.1 Use Existing calendarDOMColors Cache
+Source of truth: chrome.storage.local['cf.calendarDOMColors']
+
+Already populated by: scanAndCacheCalendarDOMColors() in index.js:2129-2203
+
+Logic (same as popup uses at line 8725):
+
+function getStripeColorForCalendar(calendarId) {
+  // Priority order (proven to work in popup):
+  // 1. DOM colors cache (actual displayed color)
+  // 2. Google API colors
+  // 3. Default blue
+  return calendarDOMColors[calendarId] 
+    || calendarColors[calendarId]?.backgroundColor 
+    || '#039be5';
+}
+
+2.2 Load calendarDOMColors in Content Script
+File: /Main Extension/features/event-coloring/index.js
+
+Location: init() function (around line 946)
+
+Add:
+
+// Load DOM colors cache (same source popup uses)
+const domColorsData = await chrome.storage.local.get('cf.calendarDOMColors');
+calendarDOMColors = domColorsData['cf.calendarDOMColors'] || {};
+
+2.3 Store Stripe Color When Saving Event Color
+File: /Main Extension/features/event-coloring/index.js
+
+Location: saveFullColors() and saveFullColorsWithRecurringSupport() (lines 2473-2570)
+
+Change:
+
+async function saveFullColors(eventId, colors) {
+  // Get calendar ID and stripe color using popup's proven logic
+  const calendarId = getCalendarIdForEvent(eventId);
+  const stripeColor = getStripeColorForCalendar(calendarId);
+  
+  const colorsWithStripe = {
+    ...colors,
+    stripeColor: stripeColor,
+  };
+  
+  // Update local cache
+  eventColors[eventId] = colorsWithStripe;
+  
+  // Save to storage
+  await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colorsWithStripe);
+}
+
+2.4 Update applyColorsToElement() to Paint Our Stripe
+File: /Main Extension/features/event-coloring/index.js
+
+Location: Lines 3484-3560
+
+function applyColorsToElement(element, colors) {
+  const { background, text, border, borderWidth = 2, stripeColor } = colors;
+  
+  if (!background) return;
+  
+  // We paint the stripe ourselves using stored stripeColor
+  if (stripeColor) {
+    const gradient = `linear-gradient(to right, ${stripeColor} 4px, ${background} 4px)`;
+    element.style.setProperty('background', gradient, 'important');
+  } else {
+    element.style.setProperty('background-color', background, 'important');
+  }
+  
+  // Text color (auto-contrast if not specified)
+  const textColor = text || getTextColorForBackground(background);
+  if (textColor) {
+    element.style.setProperty('color', textColor, 'important');
+  }
+  
+  // Border as outline
+  if (border) {
+    element.style.setProperty('outline', `${borderWidth}px solid ${border}`, 'important');
+    element.style.setProperty('outline-offset', `-${borderWidth * 0.3}px`, 'important');
+  }
+  
+  // Mark as colored by us
+  element.dataset.cfEventColored = 'true';
+}
+
+Phase 3: Stop Intercepting Google's Colors
+3.1 Remove Google Button Click Listeners
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: Lines 1757-1770 in hideCheckmarkAndModifyBuiltInColors()
+
+DELETE entire block:
+
+// DELETE THIS:
+googleButtons.forEach((button) => {
+  if (!button.hasAttribute('data-cf-handler')) {
+    button.setAttribute('data-cf-handler', 'true');
+    button.addEventListener('click', async () => {
+      const clickedEventId = ScenarioDetector.findEventIdByScenario(button, scenario);
+      if (clickedEventId) {
+        await this.storageService.removeEventColor(clickedEventId);
+        this.triggerColorUpdate();
+      }
+    });
+  }
+});
+
+3.2 Remove Google Checkmark Suppression
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: Lines 1787-1793 in updateCheckmarks()
+
+DELETE code that hides checkmarks from Google buttons.
+
+3.3 KEEP Google Labels Feature
+Location: Lines 1838-1875 modifyGoogleColorLabels()
+
+NO CHANGE - Keep as-is. User can still label Google's colors.
+
+Phase 4: Confirmation Modals for Switching
+4.1 Create Switch Confirmation Modal Component
+File: /Main Extension/features/event-coloring/components/SwitchConfirmationModal.js (NEW)
+
+class SwitchConfirmationModal {
+  constructor(options) {
+    this.type = options.type; // 'toGoogle' or 'toColorKit'
+    this.eventId = options.eventId;
+    this.onConfirm = options.onConfirm;
+    this.onCancel = options.onCancel;
+    this.isRecurring = options.isRecurring;
+  }
+  
+  show() {
+    const title = this.type === 'toGoogle' 
+      ? 'Switch to Google Colors?' 
+      : 'Switch to ColorKit Colors?';
+    
+    const message = this.type === 'toGoogle'
+      ? `This will remove all ColorKit styling (background, text, border) from this event. 
+         The event will use Google Calendar's default colors.
+         
+         You can switch back to ColorKit colors anytime.`
+      : `This will take over color control from Google Calendar.
+         ColorKit will manage this event's background, text, and border colors.
+         
+         The event will keep its current appearance but be managed by ColorKit.`;
+    
+    // Build modal HTML with:
+    // - Title
+    // - Message (explanation)
+    // - "Don't show this again" checkbox
+    // - Cancel button
+    // - Confirm button
+    
+    this.createModalHTML(title, message);
+    this.attachEventListeners();
+    document.body.appendChild(this.container);
+  }
+  
+  async handleConfirm(dontShowAgain) {
+    if (dontShowAgain) {
+      if (this.type === 'toGoogle') {
+        await window.cc3Storage.setHideGoogleSwitchWarning(true);
+      } else {
+        await window.cc3Storage.setHideColorKitSwitchWarning(true);
+      }
+    }
+    
+    this.onConfirm();
+    this.close();
+  }
+}
+
+4.2 Modal HTML Structure
+<div class="cf-switch-modal-backdrop">
+  <div class="cf-switch-modal">
+    <div class="cf-switch-modal-header">
+      <h3>Switch to Google Colors?</h3>
+    </div>
+    
+    <div class="cf-switch-modal-body">
+      <p class="cf-switch-modal-message">
+        This will remove all ColorKit styling (background, text, border) 
+        from this event. The event will use Google Calendar's default colors.
+      </p>
+      <p class="cf-switch-modal-note">
+        You can switch back to ColorKit colors anytime.
+      </p>
+    </div>
+    
+    <div class="cf-switch-modal-checkbox">
+      <label>
+        <input type="checkbox" id="cf-dont-show-again">
+        <span>Don't show this message again</span>
+      </label>
+    </div>
+    
+    <div class="cf-switch-modal-actions">
+      <button class="cf-btn-secondary">Cancel</button>
+      <button class="cf-btn-primary">Switch to Google</button>
+    </div>
+  </div>
+</div>
+
+4.3 Integrate Modal into Color Selection Flow
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+When user clicks a ColorKit color and event currently uses Google:
+
+async handleColorKitColorSelect(eventId, color) {
+  // Check if event currently has NO ColorKit color (using Google)
+  const existingColor = await this.storageService.findEventColorFull(eventId);
+  const isUsingGoogle = !existingColor;
+  
+  // Check "don't show again" preference
+  const hideWarning = await this.storageService.getHideColorKitSwitchWarning();
+  
+  if (isUsingGoogle && !hideWarning) {
+    // Show confirmation modal
+    const modal = new SwitchConfirmationModal({
+      type: 'toColorKit',
+      eventId,
+      onConfirm: () => this.applyColorKitColor(eventId, color),
+      onCancel: () => {},
+    });
+    modal.show();
+  } else {
+    // Apply directly (existing flow with property merge modal)
+    await this.handleColorSelect(eventId, color);
+  }
+}
+
+4.4 "Return to Google" Confirmation
+When user clicks "Use Google Colors" button:
+
+async handleReturnToGoogle(eventId, isRecurring) {
+  const hideWarning = await this.storageService.getHideGoogleSwitchWarning();
+  
+  if (!hideWarning) {
+    const modal = new SwitchConfirmationModal({
+      type: 'toGoogle',
+      eventId,
+      isRecurring,
+      onConfirm: () => this.removeColorKitColor(eventId, isRecurring),
+      onCancel: () => {},
+    });
+    modal.show();
+  } else {
+    await this.removeColorKitColor(eventId, isRecurring);
+  }
+}
+
+async removeColorKitColor(eventId, isRecurring) {
+  if (isRecurring) {
+    await this.storageService.removeRecurringEventColors(eventId);
+  } else {
+    await this.storageService.removeEventColor(eventId);
+  }
+  
+  // Force refresh to ensure Google's color shows
+  this.triggerColorUpdate();
+  this.forceGoogleColorRefresh(eventId);
+}
+
+Phase 5: Ensure Google Color Shows (Not Blank)
+5.1 Remove ColorKit Styling When Returning to Google
+File: /Main Extension/features/event-coloring/index.js
+
+Add function:
+
+function clearColorKitStyling(eventId) {
+  // Find all elements with this eventId
+  const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+  
+  elements.forEach(element => {
+    // Remove all inline styles we applied
+    element.style.removeProperty('background');
+    element.style.removeProperty('background-color');
+    element.style.removeProperty('color');
+    element.style.removeProperty('outline');
+    element.style.removeProperty('outline-offset');
+    
+    // Remove our marker
+    delete element.dataset.cfEventColored;
+    delete element.dataset.cfOriginalColor;
+  });
+}
+
+5.2 Force Google Re-render if Needed
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+forceGoogleColorRefresh(eventId) {
+  // Clear our styling immediately
+  clearColorKitStyling(eventId);
+  
+  // Trigger a minor DOM change to force Google to re-render
+  // This ensures Google's color picker state is reflected
+  const elements = document.querySelectorAll(`[data-eventid="${eventId}"]`);
+  elements.forEach(element => {
+    // Toggle a harmless attribute to trigger Google's observers
+    const current = element.getAttribute('data-cf-refresh');
+    element.setAttribute('data-cf-refresh', current ? '' : '1');
+    element.removeAttribute('data-cf-refresh');
+  });
+  
+  // Close the color picker to let Google refresh
+  this.closeMenus();
+}
+
+5.3 Update applyStoredColors() to Skip Cleared Events
+File: /Main Extension/features/event-coloring/index.js
+
+Location: Lines 3353-3394
+
+Ensure that when an event has no entry in eventColors, we:
+
+DON'T apply any styling
+DON'T try to paint a stripe
+Let Google's native rendering handle it
+allEventElements.forEach((element) => {
+  // Skip dialogs
+  if (element.closest('[role="dialog"]')) return;
+  
+  // Skip tasks
+  if (isTaskElement(element)) return;
+  
+  const eventId = element.getAttribute('data-eventid');
+  
+  // Get ColorKit colors (if any)
+  let colorKitColors = singleEventColors.get(eventId);
+  if (!colorKitColors) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+    if (parsed?.type === 'calendar') {
+      colorKitColors = recurringEventColors.get(parsed.decodedId);
+    }
+  }
+  
+  // NO ColorKit color = Google owns it, DON'T TOUCH
+  if (!colorKitColors) {
+    // Ensure we haven't left any stale styling
+    if (element.dataset.cfEventColored) {
+      clearColorKitStyling(eventId);
+    }
+    return; // Let Google handle it
+  }
+  
+  // Has ColorKit color = we own it, apply our colors
+  applyColorsToElement(element, colorKitColors);
+});
+
+Phase 6: UI Sections with Labels & Descriptions
+6.1 New Picker Structure with Labels
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Complete new structure:
+
+┌─────────────────────────────────────────────────────────────┐
+│  GOOGLE CALENDAR COLORS                                      │
+│  ─────────────────────                                       │
+│  Use Google's built-in colors. Changes sync across devices.  │
+│                                                              │
+│  [🔴] [🟠] [🟡] [🟢] [🔵] [🟣] [⚫] [🟤] [🩷] [🩵] [🟢]     │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  LIST COLOR                                                  │
+│  ──────────                                                  │
+│  Return to this calendar's default color.                    │
+│                                                              │
+│  [█ Calendar Name ▸ Preview]                                │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  COLORKIT COLORS                                             │
+│  ──────────────                                              │
+│  Custom colors with text & border options.                   │
+│                                                              │
+│  Default Colors                                              │
+│  Match Google's palette with ColorKit control.               │
+│  [🔴] [🟠] [🟡] [🟢] [🔵] [🟣] [⚫] [🟤] [🩷] [🩵] [🟢]     │
+│                                                              │
+│  My Category                                                 │
+│  [🔴] [🟠] [🟡]                                              │
+│                                                              │
+│  [+] Custom Coloring                                         │
+│  Full color picker with background, text & border options.   │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  RESET OPTIONS                                               │
+│  ─────────────                                               │
+│  [Use Google Colors] Remove ColorKit styling                 │
+└─────────────────────────────────────────────────────────────┘
+
+6.2 Create Section with Label & Description Helper
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Add function:
+
+createSectionWithLabel(label, description, content) {
+  const section = document.createElement('div');
+  section.className = 'cf-picker-section';
+  
+  // Label
+  const labelEl = document.createElement('div');
+  labelEl.className = 'cf-picker-section-label';
+  labelEl.textContent = label;
+  
+  // Description
+  const descEl = document.createElement('div');
+  descEl.className = 'cf-picker-section-description';
+  descEl.textContent = description;
+  
+  // Content container
+  const contentEl = document.createElement('div');
+  contentEl.className = 'cf-picker-section-content';
+  if (typeof content === 'string') {
+    contentEl.innerHTML = content;
+  } else {
+    contentEl.appendChild(content);
+  }
+  
+  section.appendChild(labelEl);
+  section.appendChild(descEl);
+  section.appendChild(contentEl);
+  
+  return section;
+}
+
+6.3 Google Colors Section (Label Only, No Interception)
+createGoogleColorsLabel() {
+  const label = document.createElement('div');
+  label.className = 'cf-google-colors-label';
+  label.innerHTML = `
+    <div class="cf-section-title">GOOGLE CALENDAR COLORS</div>
+    <div class="cf-section-desc">Use Google's built-in colors. Changes sync across devices.</div>
+  `;
+  return label;
+}
+
+Inject ABOVE Google's colors (not below):
+
+// Find Google's color group
+const googleColorGroup = container.querySelector('.vbVGZb');
+if (googleColorGroup) {
+  // Insert label BEFORE Google's colors
+  googleColorGroup.parentNode.insertBefore(
+    this.createGoogleColorsLabel(),
+    googleColorGroup
+  );
+}
+
+6.4 List Color Section
+async createListColorSection(container, scenario, eventId) {
+  const calendarId = getCalendarIdForEvent(eventId);
+  const calendarName = getCalendarName(calendarId); // May need to fetch
+  const stripeColor = getStripeColorForCalendar(calendarId);
+  
+  const section = document.createElement('div');
+  section.className = 'cf-list-color-section';
+  
+  section.innerHTML = `
+    <div class="cf-section-title">LIST COLOR</div>
+    <div class="cf-section-desc">Return to this calendar's default color.</div>
+    <div class="cf-list-color-button" role="button" tabindex="0">
+      <div class="cf-list-color-preview">
+        <div class="cf-list-color-stripe" style="background-color: ${stripeColor};"></div>
+        <div class="cf-list-color-bg" style="background-color: ${stripeColor};"></div>
+      </div>
+      <span class="cf-list-color-name">${calendarName}</span>
+      <span class="cf-list-color-arrow">›</span>
+    </div>
+  `;
+  
+  // Click handler - applies list coloring (ColorKit owns it)
+  const button = section.querySelector('.cf-list-color-button');
+  button.addEventListener('click', () => this.applyListColor(eventId, stripeColor));
+  
+  return section;
+}
+
+async applyListColor(eventId, stripeColor) {
+  // Apply the calendar's color as ColorKit color (we own it)
+  await this.saveFullColors(eventId, {
+    background: stripeColor,
+    text: null,
+    border: null,
+    borderWidth: 2,
+    stripeColor: stripeColor,
+  });
+  
+  this.triggerColorUpdate();
+  this.closeMenus();
+}
+
+6.5 ColorKit Colors Section with Default Colors
+createColorKitSection(categories, container, scenario) {
+  const section = document.createElement('div');
+  section.className = 'cf-colorkit-section';
+  
+  // Main label
+  section.innerHTML = `
+    <div class="cf-section-title">COLORKIT COLORS</div>
+    <div class="cf-section-desc">Custom colors with text & border options.</div>
+  `;
+  
+  // Default Colors subsection
+  const defaultColors = this.createDefaultColorsSubsection(container, scenario);
+  section.appendChild(defaultColors);
+  
+  // User categories
+  categories.forEach(category => {
+    const catSection = this.createCategorySection(category, container, scenario);
+    section.appendChild(catSection);
+  });
+  
+  // Custom coloring button
+  const customSection = this.createCustomColorSection(container, scenario);
+  section.appendChild(customSection);
+  
+  return section;
+}
+
+6.6 Default Colors Subsection (Our Google-Equivalent)
+const COLORKIT_DEFAULT_COLORS = [
+  { hex: '#d50000', name: 'Tomato' },
+  { hex: '#e67c73', name: 'Flamingo' },
+  { hex: '#f4511e', name: 'Tangerine' },
+  { hex: '#f6bf26', name: 'Banana' },
+  { hex: '#33b679', name: 'Sage' },
+  { hex: '#0b8043', name: 'Basil' },
+  { hex: '#039be5', name: 'Peacock' },
+  { hex: '#3f51b5', name: 'Blueberry' },
+  { hex: '#7986cb', name: 'Lavender' },
+  { hex: '#8e24aa', name: 'Grape' },
+  { hex: '#616161', name: 'Graphite' },
+];
+
+createDefaultColorsSubsection(container, scenario) {
+  const subsection = document.createElement('div');
+  subsection.className = 'cf-default-colors-subsection';
+  
+  subsection.innerHTML = `
+    <div class="cf-subsection-title">Default Colors</div>
+    <div class="cf-subsection-desc">Match Google's palette with ColorKit control.</div>
+  `;
+  
+  const colorsContainer = document.createElement('div');
+  colorsContainer.className = 'cf-default-colors-grid';
+  
+  COLORKIT_DEFAULT_COLORS.forEach(color => {
+    const btn = this.createColorButton(color, container, scenario);
+    btn.classList.add('cf-default-color-button');
+    btn.setAttribute('title', color.name);
+    colorsContainer.appendChild(btn);
+  });
+  
+  subsection.appendChild(colorsContainer);
+  return subsection;
+}
+
+6.7 Custom Coloring Button with Description
+createCustomColorSection(container, scenario) {
+  const section = document.createElement('div');
+  section.className = 'cf-custom-color-section';
+  
+  const buttonRow = document.createElement('div');
+  buttonRow.className = 'cf-custom-color-row';
+  
+  // The "+" button
+  const button = this.createCustomColorButton(container, scenario);
+  
+  // Label next to button
+  const label = document.createElement('div');
+  label.className = 'cf-custom-color-label';
+  label.innerHTML = `
+    <span class="cf-custom-color-title">Custom Coloring</span>
+    <span class="cf-custom-color-desc">Full color picker with background, text & border options.</span>
+  `;
+  
+  buttonRow.appendChild(button);
+  buttonRow.appendChild(label);
+  section.appendChild(buttonRow);
+  
+  return section;
+}
+
+6.8 Reset Options Section
+createResetSection(container, scenario, eventId) {
+  const section = document.createElement('div');
+  section.className = 'cf-reset-section';
+  
+  section.innerHTML = `
+    <div class="cf-section-title">RESET OPTIONS</div>
+  `;
+  
+  // "Use Google Colors" button
+  const googleBtn = document.createElement('button');
+  googleBtn.className = 'cf-reset-button cf-reset-to-google';
+  googleBtn.innerHTML = `
+    <span class="cf-reset-icon">↩</span>
+    <span class="cf-reset-text">
+      <span class="cf-reset-title">Use Google Colors</span>
+      <span class="cf-reset-desc">Remove all ColorKit styling from this event</span>
+    </span>
+  `;
+  
+  googleBtn.addEventListener('click', () => {
+    this.handleReturnToGoogle(eventId, this.isRecurringEvent);
+  });
+  
+  section.appendChild(googleBtn);
+  return section;
+}
+
+Phase 7: CSS Styling for New UI
+7.1 Add CSS for Sections
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: injectModalCSS() (lines 77-279)
+
+Add styles:
+
+/* Section structure */
+.cf-picker-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.cf-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5f6368;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.cf-section-desc {
+  font-size: 12px;
+  color: #80868b;
+  margin-bottom: 10px;
+}
+
+.cf-subsection-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #3c4043;
+  margin-bottom: 2px;
+}
+
+.cf-subsection-desc {
+  font-size: 11px;
+  color: #80868b;
+  margin-bottom: 8px;
+}
+
+/* List color button */
+.cf-list-color-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.cf-list-color-button:hover {
+  background-color: #f1f3f4;
+}
+
+.cf-list-color-preview {
+  width: 32px;
+  height: 24px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+}
+
+.cf-list-color-stripe {
+  width: 4px;
+}
+
+.cf-list-color-bg {
+  flex: 1;
+  opacity: 0.8;
+}
+
+/* Custom color row */
+.cf-custom-color-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cf-custom-color-label {
+  display: flex;
+  flex-direction: column;
+}
+
+.cf-custom-color-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #3c4043;
+}
+
+.cf-custom-color-desc {
+  font-size: 11px;
+  color: #80868b;
+}
+
+/* Reset button */
+.cf-reset-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cf-reset-button:hover {
+  background-color: #fce8e6;
+}
+
+.cf-reset-icon {
+  font-size: 16px;
+}
+
+.cf-reset-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #3c4043;
+  display: block;
+}
+
+.cf-reset-desc {
+  font-size: 11px;
+  color: #80868b;
+  display: block;
+}
+
+/* Confirmation modal */
+.cf-switch-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cf-switch-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.cf-switch-modal-header h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: #202124;
+}
+
+.cf-switch-modal-message {
+  font-size: 14px;
+  color: #5f6368;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.cf-switch-modal-note {
+  font-size: 13px;
+  color: #80868b;
+  margin-bottom: 16px;
+}
+
+.cf-switch-modal-checkbox {
+  margin-bottom: 20px;
+}
+
+.cf-switch-modal-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #5f6368;
+  cursor: pointer;
+}
+
+.cf-switch-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cf-btn-secondary {
+  padding: 8px 16px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: white;
+  color: #5f6368;
+  cursor: pointer;
+}
+
+.cf-btn-primary {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #1a73e8;
+  color: white;
+  cursor: pointer;
+}
+
+Phase 8: Simplify Merge Logic
+8.1 Update mergeEventColors()
+File: /Main Extension/features/event-coloring/index.js
+
+Location: Lines 3404-3442
+
+Simplified version (no more useGoogleColors flag):
+
+function mergeEventColors(manualColors, calendarDefaults) {
+  // No manual colors = use calendar defaults (list coloring)
+  if (!manualColors) return calendarDefaults;
+  
+  // No calendar defaults = use manual only
+  if (!calendarDefaults) return manualColors;
+  
+  // Override mode = manual only (no merge)
+  if (manualColors.overrideDefaults) {
+    return {
+      background: manualColors.background || null,
+      text: null,
+      border: null,
+      borderWidth: manualColors.borderWidth ?? 2,
+      stripeColor: manualColors.stripeColor || calendarDefaults.background,
+      isRecurring: manualColors.isRecurring || false,
+    };
+  }
+  
+  // Normal merge: manual takes precedence per-property
+  return {
+    background: manualColors.background || calendarDefaults.background || null,
+    text: manualColors.text || calendarDefaults.text || null,
+    border: manualColors.border || calendarDefaults.border || null,
+    borderWidth: manualColors.borderWidth ?? calendarDefaults.borderWidth ?? 2,
+    stripeColor: manualColors.stripeColor || calendarDefaults.background || null,
+    isRecurring: manualColors.isRecurring || false,
+  };
+}
+
+8.2 Keep Property Merge Modal
+NO CHANGE to handleColorSelect() (lines 1195-1253)
+
+When user has text/border and picks new background, modal asks "keep properties?" - this stays exactly the same.
+
+Phase 9: Update Checkmark Logic
+9.1 Checkmarks for Our Buttons Only
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: updateCheckmarks() lines 1783-1822
+
+updateCheckmarks(selectedColor, selectedType = null) {
+  // 1. Clear all OUR button checkmarks
+  const ourButtons = document.querySelectorAll(
+    '.cf-default-color-button, .cf-custom-color-button'
+  );
+  ourButtons.forEach(btn => this.toggleCheckmark(btn, false));
+  
+  // 2. Clear list color selection
+  const listColorBtn = document.querySelector('.cf-list-color-button');
+  if (listColorBtn) {
+    listColorBtn.classList.remove('cf-selected');
+  }
+  
+  // 3. Show selection based on type
+  if (selectedType === 'list' && listColorBtn) {
+    listColorBtn.classList.add('cf-selected');
+  } else if (selectedColor) {
+    ourButtons.forEach(btn => {
+      const btnColor = btn.getAttribute('data-color');
+      if (btnColor?.toLowerCase() === selectedColor.toLowerCase()) {
+        this.toggleCheckmark(btn, true);
+      }
+    });
+  }
+  
+  // 4. DO NOT touch Google's checkmarks - they manage their own
+}
+
+Phase 10: Update Injection Flow
+10.1 New injectColorCategories() Flow
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+Location: Lines 568-641
+
+async injectColorCategories(categories) {
+  // Find Google's color picker container
+  const container = document.querySelector(
+    COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR
+  ) || document.querySelector(
+    COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
+  );
+  
+  if (!container) return;
+  
+  const scenario = ScenarioDetector.detectCurrentScenario();
+  const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+  
+  // Find wrapper (Google's color container)
+  const wrapper = container.querySelector('div');
+  if (!wrapper) return;
+  
+  // 1. Add label ABOVE Google's colors
+  const googleLabel = this.createGoogleColorsLabel();
+  const googleColorGroup = wrapper.querySelector('.vbVGZb');
+  if (googleColorGroup) {
+    wrapper.insertBefore(googleLabel, googleColorGroup);
+  }
+  
+  // 2. Add separator after Google's colors
+  const separator = this.createSeparator();
+  wrapper.appendChild(separator);
+  
+  // 3. Add List Color section
+  const listColorSection = await this.createListColorSection(container, scenario, eventId);
+  if (listColorSection) {
+    wrapper.appendChild(listColorSection);
+  }
+  
+  // 4. Add ColorKit section (with Default Colors + Categories)
+  const colorKitSection = this.createColorKitSection(categories, container, scenario);
+  wrapper.appendChild(colorKitSection);
+  
+  // 5. Add Reset section
+  const resetSection = this.createResetSection(container, scenario, eventId);
+  wrapper.appendChild(resetSection);
+  
+  // 6. Set up scrolling for tall content
+  wrapper.style.cssText = `
+    max-height: ${scenario === Scenario.EVENTEDIT ? '600px' : '500px'};
+    overflow-y: auto;
+  `;
+  
+  // 7. Update checkmarks for current selection
+  const currentColor = await this.getCurrentEventColor(eventId);
+  this.updateCheckmarks(currentColor?.background, currentColor?.type);
+  
+  // 8. Keep Google labels feature (custom labels for Google colors)
+  await this.modifyGoogleColorLabels();
+}
+
+Phase 11: Testing Checklist
+11.1 Core Scenarios
+Scenario	Expected Behavior
+Click Google color (no ColorKit color)	Google handles it, event shows Google color
+Click Google color (has ColorKit color)	Confirmation modal appears, explains switching
+Confirm switch to Google	ColorKit color deleted, Google color shows immediately
+Cancel switch to Google	Nothing changes
+Check "Don't show again" + confirm	Preference saved, future switches are instant
+Click Default Color (our Sage)	ColorKit takes over, we paint bg + stripe
+Click category color	Same as Default Color
+Click "+" Custom Coloring	EventColorModal opens
+Has text+border, pick new bg	Property merge modal appears
+Click List Color	Calendar default applied, we own it
+Click "Use Google Colors"	Confirmation modal, then Google takes over
+11.2 Visual Verification
+Check	Expected
+Google color shows after switch	Not blank/white, actual Google color
+Stripe shows correctly	4px left stripe in calendar's color
+Labels are visible	All sections have clear titles + descriptions
+Checkmarks work	Only on our buttons, not interfering with Google's
+11.3 Edge Cases
+Edge Case	Expected
+New event (no color yet)	All options available
+Recurring event	Recurring dialog appears as before
+"Don't show again" persists	Across sessions
+Navigate away and back	Colors persist correctly
+Multiple tabs	Colors sync via storage
+Implementation Order
+Phase 1 - Storage changes (add stripeColor, modal preferences)
+Phase 2 - Stripe color logic (use popup's proven approach)
+Phase 3 - Stop intercepting Google
+Phase 4 - Confirmation modals
+Phase 5 - Ensure Google color shows
+Phase 6 - UI sections with labels
+Phase 7 - CSS styling
+Phase 8 - Simplify merge logic
+Phase 10 - Update injection flow
+Phase 9 - Checkmark logic
+Phase 11 - Testing
+Files Modified Summary
+File	Changes
+/lib/storage.js	Add stripeColor, modal preferences, remove useGoogleColors functions
+/features/event-coloring/index.js	Stripe logic, mergeEventColors(), applyColorsToElement(), clearColorKitStyling()
+/features/event-coloring/core/colorPickerInjector.js	Remove Google interception, add sections with labels, confirmation modals, new injection flow
+/features/event-coloring/components/SwitchConfirmationModal.js	NEW FILE - Confirmation modal component
+What STAYS Unchanged
+✅ EventColorModal component
+✅ ColorSwatchModal component
+✅ RecurringEventDialog component
+✅ Event ID parsing utilities (eventIdUtils.js)
+✅ Color conversion utilities (colorUtils.js)
+✅ scanAndCacheCalendarDOMColors() function
+✅ MutationObservers for picker detection
+✅ Scenario detection
+✅ Property merge modal (keep text/border when changing bg)
+✅ Google labels feature (modifyGoogleColorLabels())
+✅ All existing recurring event handling
+Does this updated plan address all your requirements? Ready to begin implementation when you approve.
+
+last two to validate before plan is ready, in the ui you show above i do not see the templates section, ensure it is still there, as it is also connected to the categories perhaps the section you show does also include it already i want to just check.
+
+ensure when we have previews such as for custom coloring and merge chocie modal etc that they will be accurate to new system.
+
+validate these so we have the completed plan
+
+Let me validate both of these to ensure the plan is complete.
+
+Task
+Find templates UI in picker
+Task
+Find preview logic in modals
+Used 14 tools
+Now I have the complete picture. Let me add the final validations to the plan.
+
+Plan Addendum: Templates & Preview Validation
+Templates Section - CONFIRMED INCLUDED ✓
+Templates are already part of the category system and will be preserved. Here's the updated UI structure:
+
+Updated UI Structure (Phase 6)
+┌─────────────────────────────────────────────────────────────┐
+│  GOOGLE CALENDAR COLORS                                      │
+│  ─────────────────────                                       │
+│  Use Google's built-in colors. Changes sync across devices.  │
+│                                                              │
+│  [🔴] [🟠] [🟡] [🟢] [🔵] [🟣] [⚫] [🟤] [🩷] [🩵] [🟢]     │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  LIST COLOR                                                  │
+│  ──────────                                                  │
+│  Return to this calendar's default color.                    │
+│                                                              │
+│  [█ adam.hurley@gmail.com ▸ Preview]                        │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  COLORKIT COLORS                                             │
+│  ──────────────                                              │
+│  Custom colors with text & border options.                   │
+│                                                              │
+│  Default Colors                                              │
+│  Match Google's palette with ColorKit control.               │
+│  [🔴] [🟠] [🟡] [🟢] [🔵] [🟣] [⚫] [🟤] [🩷] [🩵] [🟢]     │
+│                                                              │
+│  NEW CATEGORY (user category)                                │
+│  [🟤] [🔴] [🟣] [🩷]                                         │
+│  [design work] [1 to 1]  ← TEMPLATES FOR THIS CATEGORY      │
+│                                                              │
+│  GORY (another user category)                                │
+│  [🩵] [🟤] [🔵] [🔵]                                         │
+│  [design work]  ← TEMPLATE FOR THIS CATEGORY                │
+│                                                              │
+│  🔲 TEMPLATES (unassigned templates)                         │
+│  Templates not assigned to any category.                     │
+│  [training] [urgent] [important] [12 lunch] [imp]           │
+│                                                              │
+│  [+] Custom Coloring                                         │
+│  Full color picker with background, text & border options.   │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  RESET OPTIONS                                               │
+│  ─────────────                                               │
+│  [↩ Use Google Colors]                                      │
+│  Remove all ColorKit styling from this event                 │
+└─────────────────────────────────────────────────────────────┘
+
+Templates Handling in New System
+NO CHANGES NEEDED - Templates already work correctly:
+
+Templates within categories (index.js:1379-1390):
+
+Rendered below category color swatches
+Will be included in the ColorKit section automatically
+Unassigned templates section (index.js:1210-1251):
+
+Rendered after all categories
+Has "Templates" label with grid icon
+Will be included in ColorKit section
+Template buttons (index.js:1254-1338):
+
+Already apply full colors (background, text, border, borderWidth)
+Click handler calls handleFullColorSelection() which will work with new system
+Only update needed: Add description under "TEMPLATES" section label:
+
+// In createTemplatesSection() around line 1228
+label.innerHTML = `
+  <svg>...</svg>
+  Templates
+`;
+// ADD description:
+const desc = document.createElement('div');
+desc.className = 'cf-subsection-desc';
+desc.textContent = 'Saved color presets with text & border.';
+section.appendChild(desc);
+
+Preview System - UPDATES NEEDED
+Current Preview Flow
+EventColorModal (EventColorModal.js:156-166):
+
+Shows stripe via: <div class="ecm-preview-stripe" style="background-color: ${this.stripeColor};">
+this.stripeColor comes from options.originalColors?.stripeColor
+Stripe is read from DOM (colorPickerInjector.js:428-442):
+
+getStripeOnlyFromDOM() queries .jSrjCf element
+Converts RGB to hex
+Original colors constructed (colorPickerInjector.js:389-398):
+
+Builds originalColors.stripeColor for modal
+Problem with New System
+Currently, stripe is read from .jSrjCf which is Google's element. In the new system:
+
+We might be painting our own colors over events
+The .jSrjCf may not be reliable for all scenarios
+We need consistency with popup's proven logic
+Solution: Use calendarDOMColors Cache for Previews
+Phase 12: Update Preview Stripe Source
+
+12.1 Update openCustomColorModal() in colorPickerInjector.js
+Location: Lines 389-398
+
+Current:
+
+const originalColors = {
+  background: calendarDefaults?.background || currentEventBackground || currentStripeColor || '#039be5',
+  text: calendarDefaults?.text || currentTextColor || null,
+  border: calendarDefaults?.border || null,
+  stripeColor: currentStripeColor || currentEventBackground || '#039be5',
+};
+
+New:
+
+// Get stripe from calendarDOMColors cache (same as popup uses)
+const calendarId = getCalendarIdForEvent(eventId);
+const cachedStripeColor = calendarDOMColors[calendarId] 
+  || calendarColors[calendarId]?.backgroundColor 
+  || '#039be5';
+
+const originalColors = {
+  background: calendarDefaults?.background || currentEventBackground || cachedStripeColor,
+  text: calendarDefaults?.text || currentTextColor || null,
+  border: calendarDefaults?.border || null,
+  stripeColor: cachedStripeColor,  // Always use cached color for consistency
+};
+
+12.2 Load calendarDOMColors in colorPickerInjector
+Add at class initialization:
+
+constructor(storageService) {
+  this.storageService = storageService;
+  this.calendarDOMColors = {};
+  this.calendarColors = {};
+  this.loadColorCaches();
+}
+
+async loadColorCaches() {
+  // Load DOM colors cache (same source popup uses)
+  const domColorsData = await chrome.storage.local.get('cf.calendarDOMColors');
+  this.calendarDOMColors = domColorsData['cf.calendarDOMColors'] || {};
+  
+  // Load API colors as fallback
+  this.calendarColors = await this.storageService.getCalendarColors?.() || {};
+}
+
+12.3 Update Existing Properties Dialog Preview
+Location: colorPickerInjector.js:1500-1520
+
+Current - doesn't show stripe in preview chips
+
+Add stripe to preview items:
+
+function createPreviewItem(label, bg, textColor, borderColor, borderWidth, stripeColor) {
+  const item = document.createElement('div');
+  
+  const chip = document.createElement('div');
+  chip.style.cssText = `
+    width: 70px; height: 28px;
+    border-radius: 4px;
+    display: flex;
+    overflow: hidden;
+    ${borderColor ? `outline: ${borderWidth || 2}px solid ${borderColor}; outline-offset: -${Math.round((borderWidth || 2) * 0.3)}px;` : ''}
+  `;
+  
+  // Add stripe
+  if (stripeColor) {
+    const stripe = document.createElement('div');
+    stripe.style.cssText = `width: 4px; background-color: ${stripeColor}; flex-shrink: 0;`;
+    chip.appendChild(stripe);
+  }
+  
+  // Add main content
+  const content = document.createElement('div');
+  content.style.cssText = `
+    flex: 1;
+    background-color: ${bg || '#039be5'};
+    color: ${effectiveText};
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 500;
+  `;
+  content.textContent = (eventTitle || 'Event').substring(0, 6);
+  chip.appendChild(content);
+  
+  item.appendChild(labelEl);
+  item.appendChild(chip);
+  return item;
+}
+
+Update calls to include stripeColor:
+
+const stripeColor = this.calendarDOMColors[calendarId] || '#039be5';
+
+// Current preview - shows current state with stripe
+section.appendChild(createPreviewItem('Current', currentBg, currentText, currentBorder, currentBorderWidth, stripeColor));
+
+// Keep preview - shows new bg but keeps text/border, with stripe
+section.appendChild(createPreviewItem('Keep', newBackground, currentText, currentBorder, currentBorderWidth, stripeColor));
+
+// Replace preview - shows new bg only, with stripe
+section.appendChild(createPreviewItem('Replace', newBackground, null, null, 2, stripeColor));
+
+12.4 EventColorModal Already Correct
+No changes needed - EventColorModal already receives stripeColor via options and displays it correctly. We just need to ensure the caller (colorPickerInjector) passes the correct stripe color from the cache.
+
+Final Complete Phase List
+Phase	Description
+1	Storage changes (add stripeColor, modal preferences)
+2	Stripe color logic (use calendarDOMColors cache)
+3	Stop intercepting Google
+4	Confirmation modals
+5	Ensure Google color shows (not blank)
+6	UI sections with labels (includes templates)
+7	CSS styling
+8	Simplify merge logic
+9	Update injection flow
+10	Checkmark logic
+11	Templates section description
+12	Preview stripe updates
+13	Testing
+Files Modified Summary (Updated)
+File	Changes
+/lib/storage.js	Add stripeColor, modal preferences, remove useGoogleColors functions
+/features/event-coloring/index.js	Stripe logic, mergeEventColors(), applyColorsToElement(), clearColorKitStyling(), templates desc
+/features/event-coloring/core/colorPickerInjector.js	Remove Google interception, add sections with labels, confirmation modals, load color caches, update preview stripe source, update existing properties dialog preview
+/shared/components/EventColorModal.js	No changes - already handles stripe correctly
+/features/event-coloring/components/SwitchConfirmationModal.js	NEW FILE
+What STAYS Unchanged (Complete List)
+✅ EventColorModal component (just receives better stripe data)
+✅ ColorSwatchModal component
+✅ RecurringEventDialog component
+✅ Event ID parsing utilities (eventIdUtils.js)
+✅ Color conversion utilities (colorUtils.js)
+✅ scanAndCacheCalendarDOMColors() function
+✅ MutationObservers for picker detection
+✅ Scenario detection
+✅ Property merge modal logic (keep text/border when changing bg)
+✅ Google labels feature (modifyGoogleColorLabels())
+✅ All existing recurring event handling
+✅ Template button creation (createTemplateButton())
+✅ Template section creation (createTemplatesSection())
+✅ Templates within categories logic
+✅ Category creation and rendering
+This completes the plan. All templates are preserved, and all previews will accurately show the stripe using the same proven logic as the popup.
+
+Ready to implement when you approve.
+
+RESET OPTIONS │
+│ ───────────── │
+│ [↩ Use Google Colors] │
+│ Remove all ColorKit styling from this event
+
+last validations
+
+we need to use some method, toggling and greying out as an example so the coloring user is using is obvious and prevents accidental switching, by switching to google coloring this makes a reset button to go to google not make sense. instead this section will be to remove OUR coloring, with a modal option for, remove our coloring but still use our coloring (will show the default google color nd have checked in default color but using ours not googles) or remove our coloring and go to google only coloring (this would switch to google mode ungreying and greying our coloring ui) or go back to list coloring (if set for calendar, option greyed out if not)
+
+we have logic and functionality for business logic of our freemium concept with splitting of features to pro users and free users. we need to also ensure this is fully incorporated with the system with pro sections of the injected ui showing pro badges and ctas to upgrade to pro
+
+Show more
+Good catches! Let me validate both of these by exploring the existing freemium logic and then update the plan.
+
+Task
+Find freemium/pro logic
+Used 30 tools
+Now I have all the information. Let me add these final validations to complete the plan.
+
+Update Todos
+ Finalizing implementation plan with all validations
+Plan Addendum v2: Mode Switching UX & Freemium Integration
+Validation 1: Mode Switching UX - Clear Visual Distinction
+Current Problem
+The plan shows a simple "Use Google Colors" reset button, but this doesn't clearly communicate:
+
+Which mode the user is currently in
+What switching means
+The different reset options available
+Solution: Explicit Mode Toggle with Visual States
+New UI Structure with Mode Indication
+┌─────────────────────────────────────────────────────────────┐
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  COLOR MODE                              [?]        │   │
+│  │  ─────────                                          │   │
+│  │  ○ Google Calendar    ● ColorKit                    │   │
+│  │    (syncs across       (custom text,                │   │
+│  │     devices)            border, stripe)             │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  GOOGLE CALENDAR COLORS                    [ACTIVE/GREYED]  │
+│  ─────────────────────                                      │
+│  Use Google's built-in colors. Changes sync across devices. │
+│                                                             │
+│  [🔴] [🟠] [🟡] [🟢] [🔵] [🟣] [⚫] [🟤] [🩷] [🩵] [🟢]    │
+│  ↑ Clickable when Google mode, greyed when ColorKit mode    │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  LIST COLOR                                [ACTIVE/GREYED]  │
+│  ──────────                                                 │
+│  Use this calendar's default color.                         │
+│                                                             │
+│  [█ adam.hurley@gmail.com ▸ Preview]                       │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  COLORKIT COLORS                           [ACTIVE/GREYED]  │
+│  ──────────────                                             │
+│  Custom colors with text & border options.                  │
+│                                                             │
+│  Default Colors                                             │
+│  [🔴] [🟠] [🟡] [🟢] [🔵] [🟣] [⚫] [🟤] [🩷] [🩵] [🟢]    │
+│                                                             │
+│  [Categories + Templates...]                                │
+│                                                             │
+│  [+] Custom Coloring                                        │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  RESET COLORKIT STYLING                    [Only in CK mode]│
+│  ─────────────────────                                      │
+│  Remove your custom styling from this event.                │
+│                                                             │
+│  [🎨 Use Default Color]                                    │
+│  Remove styling but keep ColorKit control (uses Peacock)    │
+│                                                             │
+│  [📋 Return to List Color]        [greyed if no list color] │
+│  Use calendar's default color with ColorKit control         │
+│                                                             │
+│  [↩ Switch to Google Colors]                               │
+│  Hand control back to Google Calendar                       │
+└─────────────────────────────────────────────────────────────┘
+
+Visual State Logic
+When in Google Mode:
+
+Google colors section: ACTIVE (full opacity, clickable)
+ColorKit section: GREYED OUT (50% opacity, shows "Switch to ColorKit to use")
+List Color: GREYED OUT
+Reset section: HIDDEN (nothing to reset)
+When in ColorKit Mode:
+
+Google colors section: GREYED OUT (50% opacity, shows lock icon)
+ColorKit section: ACTIVE (full opacity, clickable)
+List Color: ACTIVE
+Reset section: VISIBLE
+Implementation: Phase 13 - Mode Toggle System
+13.1 Add Mode State Detection
+
+File: /Main Extension/features/event-coloring/core/colorPickerInjector.js
+
+async detectCurrentMode(eventId) {
+  // Check if event has ColorKit color stored
+  const colorKitColor = await this.storageService.findEventColorFull(eventId);
+  
+  if (colorKitColor && !colorKitColor.useGoogleColors) {
+    return 'colorkit';
+  }
+  return 'google';
+}
+
+13.2 Create Mode Toggle UI
+
+createModeToggle(currentMode, eventId) {
+  const toggle = document.createElement('div');
+  toggle.className = 'cf-mode-toggle';
+  
+  toggle.innerHTML = `
+    <div class="cf-mode-header">
+      <span class="cf-mode-title">COLOR MODE</span>
+      <button class="cf-mode-help" title="Learn about color modes">?</button>
+    </div>
+    <div class="cf-mode-options">
+      <label class="cf-mode-option ${currentMode === 'google' ? 'cf-mode-active' : ''}">
+        <input type="radio" name="colorMode" value="google" ${currentMode === 'google' ? 'checked' : ''}>
+        <span class="cf-mode-radio"></span>
+        <div class="cf-mode-label">
+          <span class="cf-mode-name">Google Calendar</span>
+          <span class="cf-mode-desc">Syncs across devices</span>
+        </div>
+      </label>
+      <label class="cf-mode-option ${currentMode === 'colorkit' ? 'cf-mode-active' : ''}">
+        <input type="radio" name="colorMode" value="colorkit" ${currentMode === 'colorkit' ? 'checked' : ''}>
+        <span class="cf-mode-radio"></span>
+        <div class="cf-mode-label">
+          <span class="cf-mode-name">ColorKit</span>
+          <span class="cf-mode-desc">Text, border & stripe control</span>
+        </div>
+      </label>
+    </div>
+  `;
+  
+  // Mode change handlers
+  toggle.querySelectorAll('input[name="colorMode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => this.handleModeChange(e.target.value, eventId));
+  });
+  
+  return toggle;
+}
+
+13.3 Mode Change Handler with Confirmation
+
+async handleModeChange(newMode, eventId) {
+  const currentMode = await this.detectCurrentMode(eventId);
+  
+  if (newMode === currentMode) return;
+  
+  if (newMode === 'google') {
+    // Switching TO Google - show confirmation
+    await this.handleSwitchToGoogle(eventId);
+  } else {
+    // Switching TO ColorKit - show confirmation
+    await this.handleSwitchToColorKit(eventId);
+  }
+}
+
+13.4 Grey Out Inactive Sections
+
+updateSectionStates(mode) {
+  const googleSection = document.querySelector('.cf-google-colors-section');
+  const colorKitSection = document.querySelector('.cf-colorkit-section');
+  const listSection = document.querySelector('.cf-list-color-section');
+  const resetSection = document.querySelector('.cf-reset-section');
+  
+  if (mode === 'google') {
+    // Google active, ColorKit greyed
+    googleSection?.classList.remove('cf-section-disabled');
+    colorKitSection?.classList.add('cf-section-disabled');
+    listSection?.classList.add('cf-section-disabled');
+    resetSection?.style.display = 'none';
+    
+    // Add overlay message to ColorKit section
+    this.addDisabledOverlay(colorKitSection, 'Switch to ColorKit mode to use custom colors');
+    
+  } else {
+    // ColorKit active, Google greyed
+    googleSection?.classList.add('cf-section-disabled');
+    colorKitSection?.classList.remove('cf-section-disabled');
+    listSection?.classList.remove('cf-section-disabled');
+    resetSection?.style.display = 'block';
+    
+    // Add overlay message to Google section  
+    this.addDisabledOverlay(googleSection, 'Using ColorKit colors');
+  }
+}
+
+13.5 CSS for Disabled State
+
+.cf-section-disabled {
+  position: relative;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.cf-section-disabled::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
+}
+
+.cf-disabled-overlay {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+/* Mode toggle styling */
+.cf-mode-toggle {
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.cf-mode-options {
+  display: flex;
+  gap: 12px;
+}
+
+.cf-mode-option {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cf-mode-option.cf-mode-active {
+  border-color: #1a73e8;
+  background: #e8f0fe;
+}
+
+.cf-mode-radio {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #5f6368;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cf-mode-active .cf-mode-radio {
+  border-color: #1a73e8;
+}
+
+.cf-mode-active .cf-mode-radio::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: #1a73e8;
+  border-radius: 50%;
+}
+
+Reset Section: Three Clear Options
+13.6 Create Reset Section with Options
+
+async createResetSection(eventId, currentMode) {
+  // Only show in ColorKit mode
+  if (currentMode !== 'colorkit') return null;
+  
+  const section = document.createElement('div');
+  section.className = 'cf-reset-section';
+  
+  // Check if calendar has list color set
+  const calendarId = getCalendarIdForEvent(eventId);
+  const hasListColor = !!(this.calendarDefaultColors[calendarId]?.background);
+  
+  section.innerHTML = `
+    <div class="cf-section-title">RESET COLORKIT STYLING</div>
+    <div class="cf-section-desc">Remove your custom styling from this event.</div>
+    
+    <div class="cf-reset-options">
+      <!-- Option 1: Use Default Color (stay in ColorKit) -->
+      <button class="cf-reset-option" data-action="default">
+        <span class="cf-reset-icon">🎨</span>
+        <div class="cf-reset-text">
+          <span class="cf-reset-title">Use Default Color</span>
+          <span class="cf-reset-desc">Remove styling, keep ColorKit control (uses Peacock blue)</span>
+        </div>
+      </button>
+      
+      <!-- Option 2: Return to List Color (if available) -->
+      <button class="cf-reset-option ${!hasListColor ? 'cf-reset-disabled' : ''}" 
+              data-action="list" ${!hasListColor ? 'disabled' : ''}>
+        <span class="cf-reset-icon">📋</span>
+        <div class="cf-reset-text">
+          <span class="cf-reset-title">Return to List Color</span>
+          <span class="cf-reset-desc">${hasListColor 
+            ? 'Use calendar\'s default color with ColorKit control'
+            : 'No list color set for this calendar'}</span>
+        </div>
+      </button>
+      
+      <!-- Option 3: Switch to Google -->
+      <button class="cf-reset-option cf-reset-google" data-action="google">
+        <span class="cf-reset-icon">↩</span>
+        <div class="cf-reset-text">
+          <span class="cf-reset-title">Switch to Google Colors</span>
+          <span class="cf-reset-desc">Hand color control back to Google Calendar</span>
+        </div>
+      </button>
+    </div>
+  `;
+  
+  // Attach handlers
+  section.querySelectorAll('.cf-reset-option').forEach(btn => {
+    if (!btn.disabled) {
+      btn.addEventListener('click', () => this.handleResetOption(btn.dataset.action, eventId));
+    }
+  });
+  
+  return section;
+}
+
+13.7 Reset Option Handlers
+
+async handleResetOption(action, eventId) {
+  switch (action) {
+    case 'default':
+      // Apply our default Peacock blue, stay in ColorKit mode
+      await this.applyDefaultColorKitColor(eventId);
+      break;
+      
+    case 'list':
+      // Apply calendar's list color, stay in ColorKit mode
+      await this.applyListColor(eventId);
+      break;
+      
+    case 'google':
+      // Show confirmation modal, then switch to Google mode
+      await this.handleSwitchToGoogle(eventId);
+      break;
+  }
+}
+
+async applyDefaultColorKitColor(eventId) {
+  const calendarId = getCalendarIdForEvent(eventId);
+  const stripeColor = this.getStripeColorForCalendar(calendarId);
+  
+  // Apply Peacock blue (Google's default) but through ColorKit
+  await this.saveFullColors(eventId, {
+    background: '#039be5',  // Peacock blue
+    text: null,
+    border: null,
+    borderWidth: 2,
+    stripeColor: stripeColor,
+  });
+  
+  this.triggerColorUpdate();
+  this.closeMenus();
+}
+
+13.8 CSS for Reset Options
+
+.cf-reset-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cf-reset-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.cf-reset-option:hover:not(.cf-reset-disabled) {
+  background: #f8f9fa;
+  border-color: #dadce0;
+}
+
+.cf-reset-option.cf-reset-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cf-reset-option.cf-reset-google:hover {
+  background: #fce8e6;
+  border-color: #f28b82;
+}
+
+.cf-reset-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.cf-reset-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #202124;
+  margin-bottom: 2px;
+}
+
+.cf-reset-desc {
+  display: block;
+  font-size: 11px;
+  color: #5f6368;
+}
+
+Validation 2: Freemium/Pro Integration
+Existing Pro Features (from featureAccess.js)
+eventColoring.textColor - Text Color
+eventColoring.borderColor - Border Color
+eventColoring.borderWidth - Border Thickness
+eventColoring.templates - Color Templates
+eventColoring.calendarColors - Calendar Default Colors
+Where Pro Badges/Gating Already Exists
+EventColorModal - Text tab badge (line 147), Border tab badge (line 152), Apply button gating (lines 606-656)
+Popup - Templates gating (lines 8539-8568), Calendar colors gating (lines 9032-9051)
+What Needs to be Added for Injected Picker UI
+Phase 14: Freemium Integration in Injected Picker
+14.1 Add Pro Badges to ColorKit Section Header
+
+createColorKitSectionHeader() {
+  const header = document.createElement('div');
+  header.className = 'cf-colorkit-header';
+  
+  header.innerHTML = `
+    <div class="cf-section-title">
+      COLORKIT COLORS
+      <span class="cf-pro-features-badge" title="Text, border & advanced features require Pro">
+        <span class="cf-pro-badge-small">Pro</span> features available
+      </span>
+    </div>
+    <div class="cf-section-desc">Custom colors with text & border options.</div>
+  `;
+  
+  return header;
+}
+
+14.2 Add Pro Badge to Custom Coloring Button
+
+createCustomColorSection(container, scenario) {
+  const section = document.createElement('div');
+  section.className = 'cf-custom-color-section';
+  
+  const buttonRow = document.createElement('div');
+  buttonRow.className = 'cf-custom-color-row';
+  
+  const button = this.createCustomColorButton(container, scenario);
+  
+  const label = document.createElement('div');
+  label.className = 'cf-custom-color-label';
+  label.innerHTML = `
+    <span class="cf-custom-color-title">
+      Custom Coloring
+      <span class="cf-pro-badge-inline">Pro</span>
+    </span>
+    <span class="cf-custom-color-desc">Full picker with background, text & border options.</span>
+  `;
+  
+  buttonRow.appendChild(button);
+  buttonRow.appendChild(label);
+  section.appendChild(buttonRow);
+  
+  return section;
+}
+
+14.3 Add Pro Badge to Templates Section
+
+createTemplatesSection(templatesArray, pickerElement, scenario) {
+  const section = document.createElement('div');
+  section.className = 'cf-templates-section';
+  
+  const label = document.createElement('div');
+  label.className = 'cf-subsection-label';
+  label.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24">...</svg>
+    Templates
+    <span class="cf-pro-badge-inline">Pro</span>
+  `;
+  
+  const desc = document.createElement('div');
+  desc.className = 'cf-subsection-desc';
+  desc.textContent = 'Saved color presets with text & border.';
+  
+  // ... rest of template buttons
+}
+
+14.4 Pro Badge CSS (reuse from PremiumComponents.js)
+
+.cf-pro-badge-small {
+  display: inline-block;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.cf-pro-badge-inline {
+  display: inline-block;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.cf-pro-features-badge {
+  font-size: 11px;
+  color: #7c3aed;
+  font-weight: 400;
+  margin-left: 8px;
+}
+
+14.5 Gating When Clicking Templates (Free Users)
+
+async handleTemplateClick(template, eventId) {
+  const colors = {
+    background: template.background,
+    text: template.text,
+    border: template.border,
+    borderWidth: template.borderWidth,
+  };
+  
+  // Check if template uses premium features
+  const usesPremium = window.cc3FeatureAccess?.usesPremiumEventColorFeatures?.(colors);
+  
+  if (usesPremium) {
+    const isPremium = await window.cc3FeatureAccess?.isPremium?.();
+    
+    if (!isPremium) {
+      // Store pending action
+      await window.cc3FeatureAccess?.storePendingAction?.({
+        type: 'eventColoring.template',
+        data: { eventId, colors, templateName: template.name }
+      });
+      
+      // Show upgrade modal
+      window.cc3PremiumComponents?.showUpgradeModal?.({
+        feature: 'Color Templates',
+        featureKey: 'eventColoring.templates',
+        description: 'Save and apply color presets with text and border styling.',
+      });
+      
+      return;
+    }
+  }
+  
+  // Apply template colors
+  await this.handleFullColorSelection(eventId, colors);
+}
+
+14.6 Free User CTA in Custom Coloring Flow
+
+The existing EventColorModal already handles this at lines 606-656. When a free user tries to apply text/border colors, it shows the upgrade modal.
+
+14.7 Add "Upgrade to Pro" CTA in ColorKit Section (for free users)
+
+async createProUpgradeCTA() {
+  const isPremium = await window.cc3FeatureAccess?.isPremium?.();
+  if (isPremium) return null;
+  
+  const cta = document.createElement('div');
+  cta.className = 'cf-pro-upgrade-cta';
+  
+  cta.innerHTML = `
+    <div class="cf-pro-cta-content">
+      <span class="cf-pro-cta-icon">✨</span>
+      <div class="cf-pro-cta-text">
+        <span class="cf-pro-cta-title">Unlock Pro Features</span>
+        <span class="cf-pro-cta-desc">Text colors, borders, templates & more</span>
+      </div>
+    </div>
+    <button class="cf-pro-cta-btn">Upgrade</button>
+  `;
+  
+  cta.querySelector('.cf-pro-cta-btn').addEventListener('click', () => {
+    window.cc3FeatureAccess?.openUpgradePage?.();
+  });
+  
+  return cta;
+}
+
+14.8 Pro CTA CSS
+
+.cf-pro-upgrade-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+  border: 1px solid #c4b5fd;
+  border-radius: 8px;
+}
+
+.cf-pro-cta-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cf-pro-cta-icon {
+  font-size: 20px;
+}
+
+.cf-pro-cta-title {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b21b6;
+}
+
+.cf-pro-cta-desc {
+  display: block;
+  font-size: 10px;
+  color: #7c3aed;
+}
+
+.cf-pro-cta-btn {
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.cf-pro-cta-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+}
+
+Final Complete Phase List
+Phase	Description
+1	Storage changes (add stripeColor, modal preferences)
+2	Stripe color logic (use calendarDOMColors cache)
+3	Stop intercepting Google
+4	Confirmation modals (SwitchConfirmationModal)
+5	Ensure Google color shows (clearColorKitStyling, force refresh)
+6	UI sections with labels (includes templates)
+7	CSS styling for all new components
+8	Simplify merge logic
+9	Update injection flow
+10	Checkmark logic
+11	Templates section with description & Pro badge
+12	Preview stripe updates
+13	Mode toggle system (Google vs ColorKit)
+14	Freemium integration (Pro badges, CTAs, gating)
+15	Testing
+Final Files Modified Summary
+File	Changes
+/lib/storage.js	Add stripeColor, modal preferences, remove useGoogleColors functions
+/features/event-coloring/index.js	Stripe logic, merge, apply, clear styling, mode detection
+/features/event-coloring/core/colorPickerInjector.js	Mode toggle, sections with labels, reset options, Pro badges, freemium gating, preview updates
+/features/event-coloring/components/SwitchConfirmationModal.js	NEW FILE - Mode switch confirmation
+/shared/components/EventColorModal.js	No changes (already handles freemium)
+/lib/featureAccess.js	No changes (already has all needed functions)
+/shared/components/PremiumComponents.js	No changes (already has badge/modal factories)
+Complete UI Structure (Final)
+┌─────────────────────────────────────────────────────────────┐
+│  COLOR MODE                                    [?]          │
+│  ○ Google Calendar        ● ColorKit                        │
+├─────────────────────────────────────────────────────────────┤
+│  GOOGLE CALENDAR COLORS              [greyed when ColorKit] │
+│  Use Google's built-in colors. Syncs across devices.        │
+│  [🔴] [🟠] [🟡] [🟢] [🔵] [🟣] [⚫] [🟤] [🩷] [🩵] [🟢]    │
+├─────────────────────────────────────────────────────────────┤
+│  LIST COLOR                          [greyed when Google]   │
+│  Use this calendar's default color.                         │
+│  [█ Calendar Name ▸ Preview]                               │
+├─────────────────────────────────────────────────────────────┤
+│  COLORKIT COLORS           [Pro] features  [greyed when G]  │
+│  Custom colors with text & border options.                  │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ ✨ Unlock Pro Features              [Upgrade]       │   │
+│  │    Text colors, borders, templates & more           │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  Default Colors                                             │
+│  Match Google's palette with ColorKit control.              │
+│  [🔴] [🟠] [🟡] [🟢] [🔵] [🟣] [⚫] [🟤] [🩷] [🩵] [🟢]    │
+│                                                             │
+│  MY CATEGORY                                                │
+│  [🔴] [🟣] [🔵]                                             │
+│  [template1] [template2]                                    │
+│                                                             │
+│  🔲 TEMPLATES [Pro]                                        │
+│  Saved color presets with text & border.                    │
+│  [urgent] [important] [meeting]                             │
+│                                                             │
+│  [+] Custom Coloring [Pro]                                 │
+│  Full picker with background, text & border options.        │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  RESET COLORKIT STYLING              [only in ColorKit mode]│
+│  Remove your custom styling from this event.                │
+│                                                             │
+│  [🎨 Use Default Color]                                    │
+│  Remove styling, keep ColorKit control (uses Peacock)       │
+│                                                             │
+│  [📋 Return to List Color]           [greyed if no list]   │
+│  Use calendar's default with ColorKit control               │
+│                                                             │
+│  [↩ Switch to Google Colors]                               │
+│  Hand control back to Google Calendar                       │
+└─────────────────────────────────────────────────────────────┘
+
+Update Todos
+ Create final complete plan with mode switching and freemium validation
+Plan Status: COMPLETE ✓
+The plan now includes:
+
+✅ Storage & stripe color logic - Using popup's proven calendarDOMColors approach
+✅ Stop intercepting Google - Remove click listeners on Google buttons
+✅ Confirmation modals - With "Don't show again" checkbox
+✅ Google color visual guarantee - Clear styling + force refresh
+✅ Labels & descriptions - All sections explained clearly
+✅ Templates preserved - Within categories + standalone section with Pro badge
+✅ Preview stripe accuracy - Using cached stripe colors
+✅ Mode toggle system - Clear Google vs ColorKit distinction with greying
+✅ Reset options - Three clear choices (default color, list color, switch to Google)
+✅ Freemium integration - Pro badges on templates, custom coloring, upgrade CTA
+Ready to begin implementation when you approve.
