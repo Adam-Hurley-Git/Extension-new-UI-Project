@@ -3356,8 +3356,47 @@
 
       if (mergedColors) {
         applyColorsToElement(element, mergedColors);
+      } else if (manualColors && manualColors.useGoogleColors) {
+        // Event is marked to use Google colors - remove any ColorKit styling
+        removeColorKitStyling(element);
       }
     });
+  }
+
+  /**
+   * Remove all ColorKit styling from an element
+   * Called when user switches to Google colors
+   */
+  function removeColorKitStyling(element) {
+    if (!element) return;
+
+    // Only clean up if we previously colored this element
+    if (!element.dataset.cfEventColored) return;
+
+    console.log('[EventColoring] Removing ColorKit styling from element');
+
+    // Remove background styling
+    element.style.removeProperty('background');
+    element.style.removeProperty('background-color');
+    element.style.removeProperty('border-color');
+
+    // Remove text color
+    element.style.removeProperty('color');
+
+    // Remove border (outline)
+    element.style.removeProperty('outline');
+    element.style.removeProperty('outline-offset');
+
+    // Remove text color from child elements
+    element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
+      if (child instanceof HTMLElement) {
+        child.style.removeProperty('color');
+      }
+    });
+
+    // Remove our marker attribute
+    delete element.dataset.cfEventColored;
+    delete element.dataset.cfOriginalColor;
   }
 
   /**
