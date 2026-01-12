@@ -1140,9 +1140,6 @@
       calendarName = calendarSelect.selectedOptions[0].textContent;
     }
 
-    // Hide Google's built-in color group
-    builtInColorGroup.style.display = 'none';
-
     // Style parent for scrolling
     parentContainer.style.cssText = `
       max-height: ${scenario === Scenario.EVENTEDIT ? '500px' : '400px'} !important;
@@ -1151,7 +1148,58 @@
       scrollbar-width: thin !important;
     `;
 
-    // Build and inject the redesigned UI
+    // Wrap Google's built-in color group in our section container (instead of hiding it)
+    const googleSection = document.createElement('div');
+    googleSection.className = 'cf-section cf-section-google';
+    googleSection.dataset.section = 'google';
+    // Apply inline styles since the CSS is loaded after this element
+    // Don't use disabled class as it sets pointer-events: none which blocks toggle clicks
+    googleSection.style.cssText = `
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      transition: opacity 0.2s;
+      background: ${isGoogleMode ? 'linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%)' : '#f8f9fa'};
+      border: 1px solid ${isGoogleMode ? '#1a73e8' : '#e8eaed'};
+    `;
+    googleSection.innerHTML = `
+      <style>
+        .cf-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; pointer-events: auto; }
+        .cf-section-title { font-size: 12px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
+        .cf-section-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
+        .cf-toggle { width: 36px; height: 20px; background: #dadce0; border-radius: 10px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; pointer-events: auto !important; }
+        .cf-toggle.active { background: #1a73e8; }
+        .cf-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: white; border-radius: 50%; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .cf-toggle.active::after { left: 18px; }
+      </style>
+      <div class="cf-section-header">
+        <div>
+          <div class="cf-section-title">Google's own colors</div>
+          <div class="cf-section-desc">Use Google's built-in colors. Syncs across devices.</div>
+        </div>
+        <div class="cf-toggle ${isGoogleMode ? 'active' : ''}" data-toggle="google"></div>
+      </div>
+      <div class="cf-google-colors-container"></div>
+    `;
+
+    // Insert the wrapper before the original Google colors
+    parentContainer.insertBefore(googleSection, builtInColorGroup);
+
+    // Move Google's original colors into our container
+    const googleColorsContainer = googleSection.querySelector('.cf-google-colors-container');
+    googleColorsContainer.appendChild(builtInColorGroup);
+
+    // Show Google's colors (don't hide them) but style them for grey-out effect when not in Google mode
+    builtInColorGroup.style.display = '';
+    if (!isGoogleMode) {
+      builtInColorGroup.style.opacity = '0.5';
+      builtInColorGroup.style.pointerEvents = 'none';
+    } else {
+      builtInColorGroup.style.opacity = '1';
+      builtInColorGroup.style.pointerEvents = 'auto';
+    }
+
+    // Build and inject the rest of the redesigned UI (without Google's section)
     const panel = document.createElement('div');
     panel.className = 'cf-injected-panel';
     panel.innerHTML = buildRedesignedPanelHTML({
@@ -1163,18 +1211,29 @@
       calendarDefaults,
       categories: Object.values(categories),
       templates: Object.values(templates),
+      skipGoogleSection: true, // Don't render duplicate Google section
     });
 
-    // Insert at the beginning
-    parentContainer.insertBefore(panel, parentContainer.firstChild);
+    // Insert after the Google section
+    googleSection.insertAdjacentElement('afterend', panel);
 
-    // Attach event listeners
+    // Attach event listeners to the panel (ColorKit sections)
     attachRedesignedPanelListeners(panel, colorPickerElement, scenario, eventId, {
       isGoogleMode,
       hasListColoring,
       listColorEnabled,
       builtInColorGroup,
     });
+
+    // Also attach the Google toggle listener to the googleSection
+    const googleToggle = googleSection.querySelector('.cf-toggle[data-toggle="google"]');
+    if (googleToggle) {
+      googleToggle.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await handleSwitchToGoogleModeRedesigned(eventId);
+      });
+    }
 
     isInjecting = false;
   }
@@ -1192,6 +1251,7 @@
       calendarDefaults,
       categories: categoriesArray,
       templates: templatesArray,
+      skipGoogleSection = false,
     } = data;
 
     const listBgColor = calendarDefaults?.background || '#039be5';
@@ -1247,6 +1307,7 @@
         .cf-section-colorkit { background: ${isColorKitMode ? 'linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%)' : '#f8f9fa'}; border: 1px solid ${isColorKitMode ? '#8b5cf6' : '#e8eaed'}; }
       </style>
 
+      ${skipGoogleSection ? '' : `
       <!-- Google's Own Colors Section -->
       <div class="cf-section cf-section-google ${isGoogleMode ? '' : 'disabled'}" data-section="google">
         <div class="cf-section-header">
@@ -1260,6 +1321,7 @@
           ${googleColors.map(c => `<div class="cf-color-swatch cf-google-color" style="background:${c}" data-color="${c}" data-type="google"></div>`).join('')}
         </div>
       </div>
+      `}
 
       <!-- ColorKit List Color Section -->
       <div class="cf-section cf-section-list ${isColorKitMode ? '' : 'disabled'}" data-section="list">
