@@ -1119,10 +1119,10 @@
       return;
     }
 
-    // Get current event colors and calendar defaults
+    // Get current event colors and calendar defaults (ColorKit list coloring)
     const currentEventColors = eventColors[eventId] || null;
     const calendarId = getCalendarIdForEvent(eventId);
-    const calendarDefaults = calendarId ? calendarColors[calendarId] : null;
+    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
 
     // Determine current mode
     const isGoogleMode = currentEventColors?.useGoogleColors ||
@@ -1309,8 +1309,9 @@
       <style>
         .cf-injected-panel { padding: 8px 0; font-family: 'Google Sans', Roboto, sans-serif; }
         .cf-section { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; transition: opacity 0.2s; }
-        .cf-section.disabled { opacity: 0.45; pointer-events: none; }
-        .cf-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .cf-section.disabled { opacity: 0.45; }
+        .cf-section.disabled > *:not(.cf-section-header) { pointer-events: none; }
+        .cf-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; pointer-events: auto; }
         .cf-section-title { font-size: 12px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
         .cf-section-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
         .cf-toggle { width: 36px; height: 20px; background: #dadce0; border-radius: 10px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
