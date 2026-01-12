@@ -1721,7 +1721,9 @@ export class ColorPickerInjector {
   }
 
   /**
-   * Hide checkmarks on Google colors and show on custom when appropriate
+   * Update checkmarks and modify Google color labels
+   * NOTE: We no longer intercept Google color buttons or hide their checkmarks.
+   * Google colors are entirely handled by Google - we don't interfere.
    */
   async hideCheckmarkAndModifyBuiltInColors() {
     const listContainer = document.querySelector(
@@ -1749,49 +1751,26 @@ export class ColorPickerInjector {
       currentColor = typeof colorData === 'string' ? colorData : colorData?.hex;
     }
 
-    // Add click handlers to Google color buttons
-    const googleButtons = document.querySelectorAll(
-      COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
-    );
+    // NOTE: We no longer add click handlers to Google color buttons.
+    // When a user clicks a Google color, Google handles it entirely.
+    // This separation prevents conflicts between Google colors and our custom colors.
 
-    googleButtons.forEach((button) => {
-      // Only add handler once
-      if (!button.hasAttribute('data-cf-handler')) {
-        button.setAttribute('data-cf-handler', 'true');
-
-        button.addEventListener('click', async () => {
-          const clickedEventId = ScenarioDetector.findEventIdByScenario(button, scenario);
-          if (clickedEventId) {
-            // When clicking a Google color, remove custom color
-            await this.storageService.removeEventColor(clickedEventId);
-            this.triggerColorUpdate();
-          }
-        });
-      }
-    });
-
-    // Update checkmarks
+    // Update checkmarks (only for our custom buttons, not Google's)
     this.updateCheckmarks(currentColor);
 
-    // Modify Google color labels
+    // Modify Google color labels (this is safe - just changes display names)
     await this.modifyGoogleColorLabels();
   }
 
   /**
    * Update checkmark visibility based on selected color
+   * NOTE: We only manage checkmarks on OUR custom buttons, not Google's.
    */
   updateCheckmarks(selectedColor) {
     // Wait a bit for DOM to settle
     setTimeout(() => {
-      // Remove checkmarks from Google colors if we have a custom color
-      if (selectedColor) {
-        const googleButtons = document.querySelectorAll(
-          COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
-        );
-        googleButtons.forEach((button) => {
-          this.toggleCheckmark(button, false);
-        });
-      }
+      // NOTE: We no longer hide Google's checkmarks.
+      // Google manages their own checkmarks - we only manage ours.
 
       // Update custom color button checkmarks
       const customButtons = document.querySelectorAll(

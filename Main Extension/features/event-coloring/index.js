@@ -1177,8 +1177,8 @@
       parentContainer.appendChild(customColorSection);
     }
 
-    // Add click handlers to Google color buttons (to clear custom colors)
-    setupGoogleColorButtonHandlers(colorPickerElement);
+    // NOTE: We no longer intercept Google color buttons.
+    // If user clicks a Google color, Google handles it entirely - we don't interfere.
 
     isInjecting = false;
   }
@@ -2827,93 +2827,10 @@
     console.log('[EventColoring] Modal CSS injected');
   }
 
-  function setupGoogleColorButtonHandlers(pickerElement) {
-    const googleButtons = pickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
-
-    googleButtons.forEach((button) => {
-      if (button.hasAttribute('data-cf-handler')) return;
-      button.setAttribute('data-cf-handler', 'true');
-
-      button.addEventListener('click', async (e) => {
-        const scenario = ScenarioDetector.findColorPickerScenario();
-        const eventId = ScenarioDetector.findEventIdByScenario(button, scenario) ||
-                       lastClickedEventId ||
-                       getEventIdFromContext();
-
-        if (!eventId) return;
-
-        // Get the Google color from the button
-        const googleColor = button.getAttribute('data-color');
-        console.log('[EventColoring] Google color clicked:', googleColor, 'for event:', eventId);
-
-        // Get existing colors and calendar defaults
-        const existingColors = findColorForEvent(eventId) || {};
-        const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
-
-        console.log('[EventColoring] Google color - Existing colors:', JSON.stringify(existingColors));
-        console.log('[EventColoring] Google color - Calendar defaults:', JSON.stringify(calendarDefaults));
-
-        // Check if event has non-background properties that would be lost
-        const hasExistingProps = hasNonBackgroundProperties(existingColors, calendarDefaults);
-        console.log('[EventColoring] Google color - Has non-background properties:', hasExistingProps);
-
-        if (hasExistingProps && googleColor) {
-          // Prevent default to stop Google's color from being applied immediately
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Get event title for preview
-          const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
-          const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
-
-          console.log('[EventColoring] Google color - showing dialog');
-
-          // Show existing properties dialog
-          showExistingPropertiesDialog({
-            eventId,
-            newBackground: googleColor,
-            existingColors,
-            calendarDefaults,
-            eventTitle,
-            onKeepExisting: async () => {
-              // Merge: keep existing properties with the Google color as background
-              const mergedColors = {
-                background: googleColor,
-                text: existingColors.text || calendarDefaults.text || null,
-                border: existingColors.border || calendarDefaults.border || null,
-                borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
-              };
-              console.log('[EventColoring] Google color - Keeping existing, merged colors:', mergedColors);
-
-              // Save the merged colors (this will override Google's native color)
-              await handleFullColorSelection(eventId, mergedColors);
-              closeColorPicker();
-            },
-            onReplaceAll: async () => {
-              // Replace: apply only the Google background color, clear other properties
-              console.log('[EventColoring] Google color - Replacing all with background only');
-              await applyBackgroundOnly(eventId, googleColor);
-            },
-            onOpenFullModal: () => {
-              // Open full modal prefilled with Google color + existing properties
-              console.log('[EventColoring] Google color - Opening full modal');
-              closeColorPicker();
-              openCustomColorModalPrefilled(eventId, googleColor, existingColors, calendarDefaults);
-            },
-            onClose: () => {
-              console.log('[EventColoring] Google color - Dialog closed');
-            },
-          });
-        } else if (googleColor) {
-          // No other properties to preserve - apply the Google color directly
-          console.log('[EventColoring] Google color - No properties to preserve, applying directly:', googleColor);
-          e.preventDefault();
-          e.stopPropagation();
-          await applyBackgroundOnly(eventId, googleColor);
-        }
-      });
-    });
-  }
+  // REMOVED: setupGoogleColorButtonHandlers
+  // We no longer intercept Google's color buttons. When a user clicks a Google color,
+  // Google handles it entirely - we don't interfere with their color selection.
+  // This separation ensures Google colors and our custom colors don't conflict.
 
   function updateGoogleColorLabels(pickerElement) {
     const customLabels = settings.googleColorLabels || {};
@@ -2956,16 +2873,8 @@
     const colorData = findColorForEvent(eventId);
     const selectedColor = colorData?.hex;
 
-    // Clear Google checkmarks if we have custom color
-    if (selectedColor) {
-      const googleButtons = pickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
-      googleButtons.forEach((button) => {
-        const checkmark = button.querySelector(COLOR_PICKER_SELECTORS.CHECKMARK_SELECTOR);
-        if (checkmark) {
-          checkmark.style.display = 'none';
-        }
-      });
-    }
+    // NOTE: We no longer hide Google's checkmarks.
+    // Google manages their own checkmarks - we only manage ours.
 
     // Update custom color button checkmarks
     const customButtons = pickerElement.querySelectorAll(
