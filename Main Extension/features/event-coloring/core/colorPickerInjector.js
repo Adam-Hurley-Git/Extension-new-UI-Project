@@ -1763,9 +1763,15 @@ export class ColorPickerInjector {
   }
 
   /**
-   * Setup handlers on Google color buttons to remove ColorKit colors when clicked.
+   * Setup handlers on Google color buttons to mark events for Google colors when clicked.
    * IMPORTANT: This does NOT prevent default or stop propagation.
-   * Google's click handler still fires normally - we just clean up our data.
+   * Google's click handler still fires normally - we just mark the event.
+   *
+   * Uses markEventForGoogleColors() which sets useGoogleColors: true.
+   * This tells mergeEventColors() to return null, bypassing:
+   * - Individual event colors
+   * - Calendar default colors (list coloring)
+   * - Recurring series colors
    */
   setupGoogleColorCleanupHandlers(container, scenario, eventId) {
     const googleButtons = container.querySelectorAll(
@@ -1783,12 +1789,19 @@ export class ColorPickerInjector {
 
         if (!currentEventId) return;
 
-        console.log('[CF] Google color clicked - removing ColorKit color for event:', currentEventId);
+        console.log('[CF] Google color clicked - marking event for Google colors:', currentEventId);
 
-        // Remove our color so Google's color takes over completely
-        await this.storageService.removeEventColor(currentEventId);
+        // Mark the event to use Google colors - this sets useGoogleColors: true
+        // which bypasses BOTH individual colors AND calendar defaults (list coloring)
+        if (this.storageService.markEventForGoogleColors) {
+          await this.storageService.markEventForGoogleColors(currentEventId);
+        } else {
+          // Fallback to removeEventColor if markEventForGoogleColors not available
+          console.warn('[CF] markEventForGoogleColors not available, falling back to removeEventColor');
+          await this.storageService.removeEventColor(currentEventId);
+        }
 
-        // Trigger re-render so our color overlay is removed
+        // Trigger re-render - mergeEventColors will return null for this event
         this.triggerColorUpdate();
       });
     });

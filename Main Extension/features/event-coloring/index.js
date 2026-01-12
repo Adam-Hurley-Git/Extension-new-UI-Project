@@ -1185,9 +1185,15 @@
   }
 
   /**
-   * Setup handlers on Google color buttons to remove ColorKit colors when clicked.
+   * Setup handlers on Google color buttons to mark events for Google colors when clicked.
    * IMPORTANT: This does NOT prevent default or stop propagation.
-   * Google's click handler still fires normally - we just clean up our data.
+   * Google's click handler still fires normally - we just mark the event.
+   *
+   * Uses markEventForGoogleColors() which sets useGoogleColors: true.
+   * This tells mergeEventColors() to return null, bypassing:
+   * - Individual event colors
+   * - Calendar default colors (list coloring)
+   * - Recurring series colors
    */
   function setupGoogleColorCleanupHandlers(pickerElement, scenario) {
     const googleButtons = pickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
@@ -1210,23 +1216,25 @@
 
         if (!eventId) return;
 
-        console.log('[EventColoring] Google color clicked - removing ColorKit color for event:', eventId);
+        console.log('[EventColoring] Google color clicked - marking event for Google colors:', eventId);
 
-        // Remove our color so Google's color takes over completely
+        // Mark the event to use Google colors - this sets useGoogleColors: true
+        // which bypasses BOTH individual colors AND calendar defaults (list coloring)
         const parsed = EventIdUtils.fromEncoded(eventId);
 
         if (parsed.isRecurring) {
-          // For recurring events, remove both the specific instance and the series color
-          await window.cc3Storage.removeEventColor(eventId);
-          await window.cc3Storage.removeEventColor(parsed.decodedId);
-          delete eventColors[eventId];
-          delete eventColors[parsed.decodedId];
+          // For recurring events, mark the entire series
+          await window.cc3Storage.markRecurringEventForGoogleColors(eventId);
+          // Update local cache
+          eventColors[eventId] = { useGoogleColors: true, isRecurring: true, appliedAt: Date.now() };
         } else {
-          await window.cc3Storage.removeEventColor(eventId);
-          delete eventColors[eventId];
+          // For single events
+          await window.cc3Storage.markEventForGoogleColors(eventId);
+          // Update local cache
+          eventColors[eventId] = { useGoogleColors: true, appliedAt: Date.now() };
         }
 
-        // Trigger re-render so our color overlay is removed
+        // Trigger re-render - mergeEventColors will return null for this event
         applyStoredColors();
       });
     });
