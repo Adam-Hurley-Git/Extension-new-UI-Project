@@ -1563,15 +1563,21 @@
           } else {
             await window.cc3Storage.removeEventColor(eventId);
           }
+          // Clear from local cache so list coloring takes effect immediately
+          delete eventColors[eventId];
           closeColorPicker();
-          applyStoredColors();
+          // Refresh colors from storage and re-apply
+          await refreshColors();
         },
         onClose: () => {}
       });
     } else {
       await window.cc3Storage.removeEventColor(eventId);
+      // Clear from local cache so list coloring takes effect immediately
+      delete eventColors[eventId];
       closeColorPicker();
-      applyStoredColors();
+      // Refresh colors from storage and re-apply
+      await refreshColors();
     }
   }
 
