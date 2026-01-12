@@ -1177,10 +1177,59 @@
       parentContainer.appendChild(customColorSection);
     }
 
-    // NOTE: We no longer intercept Google color buttons.
-    // If user clicks a Google color, Google handles it entirely - we don't interfere.
+    // When user clicks a Google color, remove any ColorKit color so Google takes over completely.
+    // This does NOT intercept or prevent Google's behavior - it just cleans up our data.
+    setupGoogleColorCleanupHandlers(colorPickerElement, scenario);
 
     isInjecting = false;
+  }
+
+  /**
+   * Setup handlers on Google color buttons to remove ColorKit colors when clicked.
+   * IMPORTANT: This does NOT prevent default or stop propagation.
+   * Google's click handler still fires normally - we just clean up our data.
+   */
+  function setupGoogleColorCleanupHandlers(pickerElement, scenario) {
+    const googleButtons = pickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
+
+    googleButtons.forEach((button) => {
+      // Only add handler once
+      if (button.hasAttribute('data-cf-cleanup-handler')) return;
+      button.setAttribute('data-cf-cleanup-handler', 'true');
+
+      button.addEventListener('click', async () => {
+        // Find the event ID
+        const container = pickerElement.closest(
+          COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR + ', ' +
+          COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
+        ) || pickerElement;
+
+        const eventId = ScenarioDetector.findEventIdByScenario(container, scenario) ||
+                       lastClickedEventId ||
+                       getEventIdFromContext();
+
+        if (!eventId) return;
+
+        console.log('[EventColoring] Google color clicked - removing ColorKit color for event:', eventId);
+
+        // Remove our color so Google's color takes over completely
+        const parsed = EventIdUtils.fromEncoded(eventId);
+
+        if (parsed.isRecurring) {
+          // For recurring events, remove both the specific instance and the series color
+          await window.cc3Storage.removeEventColor(eventId);
+          await window.cc3Storage.removeEventColor(parsed.decodedId);
+          delete eventColors[eventId];
+          delete eventColors[parsed.decodedId];
+        } else {
+          await window.cc3Storage.removeEventColor(eventId);
+          delete eventColors[eventId];
+        }
+
+        // Trigger re-render so our color overlay is removed
+        applyStoredColors();
+      });
+    });
   }
 
   function findBuiltInColorGroup(pickerElement) {
@@ -2827,10 +2876,10 @@
     console.log('[EventColoring] Modal CSS injected');
   }
 
-  // REMOVED: setupGoogleColorButtonHandlers
-  // We no longer intercept Google's color buttons. When a user clicks a Google color,
-  // Google handles it entirely - we don't interfere with their color selection.
-  // This separation ensures Google colors and our custom colors don't conflict.
+  // NOTE: setupGoogleColorCleanupHandlers (above) replaced the old setupGoogleColorButtonHandlers.
+  // The old function intercepted Google clicks (preventDefault/stopPropagation) and applied our colors.
+  // The new function does NOT intercept - it just removes our ColorKit color when Google color is clicked,
+  // so Google's color takes over completely. This ensures clean separation of ownership.
 
   function updateGoogleColorLabels(pickerElement) {
     const customLabels = settings.googleColorLabels || {};

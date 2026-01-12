@@ -1751,15 +1751,47 @@ export class ColorPickerInjector {
       currentColor = typeof colorData === 'string' ? colorData : colorData?.hex;
     }
 
-    // NOTE: We no longer add click handlers to Google color buttons.
-    // When a user clicks a Google color, Google handles it entirely.
-    // This separation prevents conflicts between Google colors and our custom colors.
+    // Setup cleanup handlers: when user clicks Google color, remove our ColorKit color
+    // This does NOT intercept Google's behavior - just cleans up our data
+    this.setupGoogleColorCleanupHandlers(container, scenario, eventId);
 
     // Update checkmarks (only for our custom buttons, not Google's)
     this.updateCheckmarks(currentColor);
 
     // Modify Google color labels (this is safe - just changes display names)
     await this.modifyGoogleColorLabels();
+  }
+
+  /**
+   * Setup handlers on Google color buttons to remove ColorKit colors when clicked.
+   * IMPORTANT: This does NOT prevent default or stop propagation.
+   * Google's click handler still fires normally - we just clean up our data.
+   */
+  setupGoogleColorCleanupHandlers(container, scenario, eventId) {
+    const googleButtons = container.querySelectorAll(
+      COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
+    );
+
+    googleButtons.forEach((button) => {
+      // Only add handler once
+      if (button.hasAttribute('data-cf-cleanup-handler')) return;
+      button.setAttribute('data-cf-cleanup-handler', 'true');
+
+      button.addEventListener('click', async () => {
+        // Re-find event ID in case it changed
+        const currentEventId = ScenarioDetector.findEventIdByScenario(container, scenario) || eventId;
+
+        if (!currentEventId) return;
+
+        console.log('[CF] Google color clicked - removing ColorKit color for event:', currentEventId);
+
+        // Remove our color so Google's color takes over completely
+        await this.storageService.removeEventColor(currentEventId);
+
+        // Trigger re-render so our color overlay is removed
+        this.triggerColorUpdate();
+      });
+    });
   }
 
   /**
