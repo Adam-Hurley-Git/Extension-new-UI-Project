@@ -1079,11 +1079,10 @@
 
     isInjecting = true;
     colorPickerElement.dataset.cfEventColorModified = 'true';
-    console.log('[EventColoring] Injecting custom categories');
+    console.log('[EventColoring] Injecting redesigned color picker UI');
 
     // Always update Google color labels first
     updateGoogleColorLabels(colorPickerElement);
-    updateCheckmarks(colorPickerElement);
 
     // Check if custom colors are disabled
     if (settings.disableCustomColors) {
@@ -1109,85 +1108,447 @@
     // Detect scenario for proper sizing
     const scenario = ScenarioDetector.findColorPickerScenario();
 
+    // Find event ID
+    const eventId = ScenarioDetector.findEventIdByScenario(colorPickerElement, scenario) ||
+                   lastClickedEventId ||
+                   getEventIdFromContext();
+
+    if (!eventId) {
+      console.warn('[EventColoring] Could not find event ID');
+      isInjecting = false;
+      return;
+    }
+
+    // Get current event colors and calendar defaults
+    const currentEventColors = eventColors[eventId] || null;
+    const calendarId = getCalendarIdForEvent(eventId);
+    const calendarDefaults = calendarId ? calendarColors[calendarId] : null;
+
+    // Determine current mode
+    const isGoogleMode = currentEventColors?.useGoogleColors ||
+      (!currentEventColors?.background && !currentEventColors?.text && !currentEventColors?.border &&
+       !calendarDefaults?.background && !calendarDefaults?.text && !calendarDefaults?.border);
+
+    const isColorKitMode = !isGoogleMode;
+    const hasListColoring = !!(calendarDefaults?.background || calendarDefaults?.text || calendarDefaults?.border);
+    const listColorEnabled = hasListColoring && !currentEventColors?.overrideDefaults && !currentEventColors?.useGoogleColors;
+
+    // Get calendar name
+    let calendarName = calendarId || 'Calendar';
+    const calendarSelect = document.querySelector('[data-key="calendar"] select');
+    if (calendarSelect?.selectedOptions?.[0]) {
+      calendarName = calendarSelect.selectedOptions[0].textContent;
+    }
+
+    // Hide Google's built-in color group
+    builtInColorGroup.style.display = 'none';
+
     // Style parent for scrolling
     parentContainer.style.cssText = `
-      max-height: ${scenario === Scenario.EVENTEDIT ? '600px' : '500px'} !important;
-      max-width: ${scenario === Scenario.EVENTEDIT ? '200px' : '300px'} !important;
+      max-height: ${scenario === Scenario.EVENTEDIT ? '500px' : '400px'} !important;
       overflow-y: auto !important;
       overflow-x: hidden !important;
-      padding-bottom: 12px !important;
       scrollbar-width: thin !important;
     `;
 
-    builtInColorGroup.style.marginBottom = '8px';
+    // Build and inject the redesigned UI
+    const panel = document.createElement('div');
+    panel.className = 'cf-injected-panel';
+    panel.innerHTML = buildRedesignedPanelHTML({
+      isGoogleMode,
+      isColorKitMode,
+      hasListColoring,
+      listColorEnabled,
+      calendarName,
+      calendarDefaults,
+      categories: Object.values(categories),
+      templates: Object.values(templates),
+    });
 
-    // Add separator
-    const separator = document.createElement('div');
-    separator.style.cssText = 'border-top: 1px solid #dadce0; margin: 8px 12px;';
-    separator.className = COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.SEPARATOR;
-    parentContainer.appendChild(separator);
+    // Insert at the beginning
+    parentContainer.insertBefore(panel, parentContainer.firstChild);
 
-    // Add categories
-    const categoriesArray = Object.values(categories).sort((a, b) => (a.order || 0) - (b.order || 0));
-
-    // Get templates assigned to each category
-    const getTemplatesForCategory = (categoryId) => {
-      return Object.values(templates)
-        .filter(t => t.categoryId === categoryId)
-        .sort((a, b) => (a.order || 0) - (b.order || 0));
-    };
-
-    // Get unassigned templates (not assigned to any category)
-    const unassignedTemplates = Object.values(templates)
-      .filter(t => !t.categoryId)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-    const hasContent = categoriesArray.length > 0 || unassignedTemplates.length > 0;
-
-    if (!hasContent) {
-      const emptyState = document.createElement('div');
-      emptyState.style.cssText = `
-        padding: 20px;
-        text-align: center;
-        color: #64748b;
-        font-size: 12px;
-        line-height: 1.5;
-      `;
-      emptyState.innerHTML = `
-        <div style="font-weight: 600; margin-bottom: 4px;">No Custom Colors Yet</div>
-        <div>Open the extension popup to create color categories or templates</div>
-      `;
-      parentContainer.appendChild(emptyState);
-    } else {
-      // Add categories first
-      categoriesArray.forEach((category) => {
-        const categoryTemplates = getTemplatesForCategory(category.id);
-        const section = createCategorySection(category, categoryTemplates, colorPickerElement, scenario);
-        if (section) {
-          parentContainer.appendChild(section);
-        }
-      });
-
-      // Add unassigned templates section at the bottom (after categories)
-      if (unassignedTemplates.length > 0) {
-        const templatesSection = createTemplatesSection(unassignedTemplates, colorPickerElement, scenario);
-        if (templatesSection) {
-          parentContainer.appendChild(templatesSection);
-        }
-      }
-    }
-
-    // Add "Custom Color" section with "+" button for full color picker
-    const customColorSection = createCustomColorSection(colorPickerElement, scenario);
-    if (customColorSection) {
-      parentContainer.appendChild(customColorSection);
-    }
-
-    // When user clicks a Google color, remove any ColorKit color so Google takes over completely.
-    // This does NOT intercept or prevent Google's behavior - it just cleans up our data.
-    setupGoogleColorCleanupHandlers(colorPickerElement, scenario);
+    // Attach event listeners
+    attachRedesignedPanelListeners(panel, colorPickerElement, scenario, eventId, {
+      isGoogleMode,
+      hasListColoring,
+      listColorEnabled,
+      builtInColorGroup,
+    });
 
     isInjecting = false;
+  }
+
+  /**
+   * Build HTML for the redesigned color picker panel
+   */
+  function buildRedesignedPanelHTML(data) {
+    const {
+      isGoogleMode,
+      isColorKitMode,
+      hasListColoring,
+      listColorEnabled,
+      calendarName,
+      calendarDefaults,
+      categories: categoriesArray,
+      templates: templatesArray,
+    } = data;
+
+    const listBgColor = calendarDefaults?.background || '#039be5';
+
+    // Google's 12 default colors
+    const googleColors = [
+      '#d50000', '#e67c73', '#f4511e', '#f6bf26', '#33b679', '#0b8043',
+      '#039be5', '#3f51b5', '#7986cb', '#8e24aa', '#616161', '#a79b8e'
+    ];
+
+    // Helper for contrast color
+    const getContrastColor = (hex) => {
+      if (!hex) return '#ffffff';
+      const cleanHex = hex.replace('#', '');
+      const r = parseInt(cleanHex.substr(0, 2), 16);
+      const g = parseInt(cleanHex.substr(2, 2), 16);
+      const b = parseInt(cleanHex.substr(4, 2), 16);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.5 ? '#000000' : '#ffffff';
+    };
+
+    return `
+      <style>
+        .cf-injected-panel { padding: 8px 0; font-family: 'Google Sans', Roboto, sans-serif; }
+        .cf-section { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; transition: opacity 0.2s; }
+        .cf-section.disabled { opacity: 0.45; pointer-events: none; }
+        .cf-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .cf-section-title { font-size: 12px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
+        .cf-section-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
+        .cf-toggle { width: 36px; height: 20px; background: #dadce0; border-radius: 10px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+        .cf-toggle.active { background: #1a73e8; }
+        .cf-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: white; border-radius: 50%; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .cf-toggle.active::after { left: 18px; }
+        .cf-pro-badge { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; padding: 1px 5px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; }
+        .cf-color-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .cf-color-swatch { width: 24px; height: 24px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .cf-color-swatch:hover { transform: scale(1.15); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .cf-list-info { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 8px; background: #f8f9fa; border-radius: 6px; }
+        .cf-list-color { width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0; }
+        .cf-list-name { font-size: 11px; color: #202124; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cf-full-custom-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px; background: #f8f9fa; border: 1.5px dashed #dadce0; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
+        .cf-full-custom-btn:hover { background: #e8f0fe; border-color: #1a73e8; }
+        .cf-full-custom-icon { width: 24px; height: 24px; background: #e8eaed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #5f6368; }
+        .cf-divider { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; font-size: 10px; font-weight: 600; color: #5f6368; text-transform: uppercase; }
+        .cf-divider::before, .cf-divider::after { content: ''; flex: 1; height: 1px; background: #e8eaed; }
+        .cf-category-section { margin-bottom: 10px; }
+        .cf-category-label { font-size: 10px; font-weight: 600; color: #5f6368; text-transform: uppercase; margin-bottom: 6px; }
+        .cf-templates-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        .cf-template-chip { padding: 4px 10px; border-radius: 12px; border: none; font-size: 11px; font-weight: 500; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+        .cf-template-chip:hover { transform: scale(1.05); box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+        .cf-section-google { background: ${isGoogleMode ? 'linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%)' : '#f8f9fa'}; border: 1px solid ${isGoogleMode ? '#1a73e8' : '#e8eaed'}; }
+        .cf-section-list { background: ${listColorEnabled ? 'linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%)' : '#f8f9fa'}; border: 1px solid ${listColorEnabled ? '#1a73e8' : '#e8eaed'}; }
+        .cf-section-colorkit { background: ${isColorKitMode ? 'linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%)' : '#f8f9fa'}; border: 1px solid ${isColorKitMode ? '#8b5cf6' : '#e8eaed'}; }
+      </style>
+
+      <!-- Google's Own Colors Section -->
+      <div class="cf-section cf-section-google ${isGoogleMode ? '' : 'disabled'}" data-section="google">
+        <div class="cf-section-header">
+          <div>
+            <div class="cf-section-title">Google's own colors</div>
+            <div class="cf-section-desc">Use Google's built-in colors. Syncs across devices.</div>
+          </div>
+          <div class="cf-toggle ${isGoogleMode ? 'active' : ''}" data-toggle="google"></div>
+        </div>
+        <div class="cf-color-grid">
+          ${googleColors.map(c => `<div class="cf-color-swatch cf-google-color" style="background:${c}" data-color="${c}" data-type="google"></div>`).join('')}
+        </div>
+      </div>
+
+      <!-- ColorKit List Color Section -->
+      <div class="cf-section cf-section-list ${isColorKitMode ? '' : 'disabled'}" data-section="list">
+        <div class="cf-section-header">
+          <div>
+            <div class="cf-section-title">ColorKit List Color <span class="cf-pro-badge">PRO</span></div>
+            <div class="cf-section-desc">Apply calendar's default color</div>
+          </div>
+          <div class="cf-toggle ${listColorEnabled ? 'active' : ''}" data-toggle="list"></div>
+        </div>
+        ${hasListColoring ? `
+          <div class="cf-list-info">
+            <div class="cf-list-color" style="background:${listBgColor}"></div>
+            <div class="cf-list-name">${calendarName}</div>
+          </div>
+        ` : `
+          <div class="cf-section-desc" style="margin-top:6px;font-style:italic;">No list color set for this calendar</div>
+        `}
+      </div>
+
+      <!-- ColorKit's Colors Section -->
+      <div class="cf-section cf-section-colorkit ${isColorKitMode ? '' : 'disabled'}" data-section="colorkit">
+        <div class="cf-section-header">
+          <div>
+            <div class="cf-section-title">ColorKit's Colors</div>
+            <div class="cf-section-desc">Use custom colors with text & border options.</div>
+          </div>
+          <div class="cf-toggle ${isColorKitMode ? 'active' : ''}" data-toggle="colorkit"></div>
+        </div>
+        <button class="cf-full-custom-btn" data-action="full-custom">
+          <div class="cf-full-custom-icon">+</div>
+          <div>
+            <div style="font-size:12px;font-weight:500;color:#202124;">Full Custom Coloring</div>
+            <div style="font-size:10px;color:#5f6368;">Background, Text and Border</div>
+          </div>
+        </button>
+      </div>
+
+      <!-- Background Colors Divider -->
+      <div class="cf-divider">Background Colors</div>
+
+      <!-- Google's Default Colors for Quick Pick -->
+      <div class="cf-category-section ${isColorKitMode ? '' : 'disabled'}">
+        <div class="cf-category-label">Google's Default Colors</div>
+        <div class="cf-color-grid">
+          ${googleColors.map(c => `<div class="cf-color-swatch" style="background:${c}" data-color="${c}" data-type="colorkit"></div>`).join('')}
+        </div>
+      </div>
+
+      <!-- Custom Categories -->
+      ${categoriesArray.map(cat => `
+        <div class="cf-category-section ${isColorKitMode ? '' : 'disabled'}">
+          <div class="cf-category-label">${cat.name || 'Category'}</div>
+          <div class="cf-color-grid">
+            ${(cat.colors || []).map(colorObj => {
+              const hex = typeof colorObj === 'string' ? colorObj : colorObj.hex;
+              return `<div class="cf-color-swatch" style="background:${hex}" data-color="${hex}" data-type="colorkit"></div>`;
+            }).join('')}
+          </div>
+        </div>
+      `).join('')}
+
+      <!-- Templates -->
+      ${templatesArray.length > 0 ? `
+        <div class="cf-category-section ${isColorKitMode ? '' : 'disabled'}">
+          <div class="cf-category-label">
+            <span style="display:inline-flex;align-items:center;gap:4px;">Templates <span class="cf-pro-badge">PRO</span></span>
+          </div>
+          <div class="cf-templates-grid">
+            ${templatesArray.map(t => `
+              <button class="cf-template-chip" data-template="${t.id}" style="
+                background:${t.background || '#039be5'};
+                color:${t.text || getContrastColor(t.background || '#039be5')};
+                ${t.border ? `outline:2px solid ${t.border};outline-offset:-1px;` : ''}
+              ">${t.name || 'Template'}</button>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+    `;
+  }
+
+  /**
+   * Attach event listeners to the redesigned panel
+   */
+  function attachRedesignedPanelListeners(panel, colorPickerElement, scenario, eventId, state) {
+    const { isGoogleMode, hasListColoring, listColorEnabled, builtInColorGroup } = state;
+
+    // Toggle handlers
+    panel.querySelectorAll('.cf-toggle').forEach(toggle => {
+      toggle.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const toggleType = toggle.dataset.toggle;
+
+        if (toggleType === 'google') {
+          await handleSwitchToGoogleModeRedesigned(eventId);
+        } else if (toggleType === 'colorkit') {
+          await handleSwitchToColorKitModeRedesigned(eventId, hasListColoring);
+        } else if (toggleType === 'list') {
+          if (listColorEnabled) {
+            showDisableListColorPromptRedesigned(eventId);
+          } else if (hasListColoring) {
+            await handleEnableListColoringRedesigned(eventId);
+          }
+        }
+      });
+    });
+
+    // Full custom button
+    panel.querySelector('[data-action="full-custom"]')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeColorPicker();
+      openCustomColorModal(eventId);
+    });
+
+    // Google color swatches (in Google section)
+    panel.querySelectorAll('.cf-google-color').forEach(swatch => {
+      swatch.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const color = swatch.dataset.color;
+        // Find and click Google's actual button
+        const googleBtn = builtInColorGroup?.querySelector(`[data-color="${color}"]`);
+        if (googleBtn) {
+          googleBtn.click();
+        }
+      });
+    });
+
+    // ColorKit color swatches
+    panel.querySelectorAll('.cf-color-swatch[data-type="colorkit"]').forEach(swatch => {
+      swatch.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const color = swatch.dataset.color;
+        await handleColorKitColorSelect(eventId, color);
+        closeColorPicker();
+      });
+    });
+
+    // Template chips
+    panel.querySelectorAll('.cf-template-chip').forEach(chip => {
+      chip.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const templateId = chip.dataset.template;
+        await handleTemplateSelectRedesigned(eventId, templateId);
+        closeColorPicker();
+      });
+    });
+  }
+
+  // Helper functions for redesigned panel
+  async function handleSwitchToGoogleModeRedesigned(eventId) {
+    if (!confirm('Switch to Google Colors?\n\nThis will remove any ColorKit styling and use Google\'s native colors.')) {
+      return;
+    }
+    const parsed = EventIdUtils.fromEncoded(eventId);
+    if (parsed.isRecurring) {
+      showRecurringEventDialog({
+        eventId,
+        color: null,
+        showColorPreview: false,
+        dialogTitle: 'Switch to Google Colors',
+        dialogMessage: 'Apply to:',
+        onConfirm: async (applyToAll) => {
+          if (applyToAll) {
+            await window.cc3Storage.markRecurringEventForGoogleColors(eventId);
+          } else {
+            await window.cc3Storage.markEventForGoogleColors(eventId);
+          }
+          closeColorPicker();
+          window.location.reload();
+        },
+        onClose: () => {}
+      });
+    } else {
+      await window.cc3Storage.markEventForGoogleColors(eventId);
+      closeColorPicker();
+      window.location.reload();
+    }
+  }
+
+  async function handleSwitchToColorKitModeRedesigned(eventId, hasListColoring) {
+    if (hasListColoring) {
+      await handleEnableListColoringRedesigned(eventId);
+    } else {
+      closeColorPicker();
+      openCustomColorModal(eventId);
+    }
+  }
+
+  async function handleEnableListColoringRedesigned(eventId) {
+    const parsed = EventIdUtils.fromEncoded(eventId);
+    if (parsed.isRecurring) {
+      showRecurringEventDialog({
+        eventId,
+        color: null,
+        dialogTitle: 'Apply List Color',
+        dialogMessage: 'Apply calendar default to:',
+        onConfirm: async (applyToAll) => {
+          if (applyToAll) {
+            await window.cc3Storage.removeRecurringEventColors(eventId);
+          } else {
+            await window.cc3Storage.removeEventColor(eventId);
+          }
+          closeColorPicker();
+          applyStoredColors();
+        },
+        onClose: () => {}
+      });
+    } else {
+      await window.cc3Storage.removeEventColor(eventId);
+      closeColorPicker();
+      applyStoredColors();
+    }
+  }
+
+  function showDisableListColorPromptRedesigned(eventId) {
+    const choice = confirm('Disable List Color?\n\nClick OK to use Google colors, or Cancel to set up custom coloring.');
+    if (choice) {
+      handleSwitchToGoogleModeRedesigned(eventId);
+    } else {
+      closeColorPicker();
+      openCustomColorModal(eventId);
+    }
+  }
+
+  async function handleColorKitColorSelect(eventId, color) {
+    const colors = {
+      background: color,
+      text: null,
+      border: null,
+      borderWidth: 2,
+      overrideDefaults: true,
+    };
+    const parsed = EventIdUtils.fromEncoded(eventId);
+    if (parsed.isRecurring) {
+      showRecurringEventDialog({
+        eventId,
+        color,
+        dialogTitle: 'Apply Color',
+        dialogMessage: 'Apply to:',
+        onConfirm: async (applyToAll) => {
+          await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+          applyStoredColors();
+        },
+        onClose: () => {}
+      });
+    } else {
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      applyStoredColors();
+    }
+  }
+
+  async function handleTemplateSelectRedesigned(eventId, templateId) {
+    const template = templates[templateId];
+    if (!template) return;
+    const colors = {
+      background: template.background || null,
+      text: template.text || null,
+      border: template.border || null,
+      borderWidth: template.borderWidth || 2,
+      overrideDefaults: true,
+    };
+    const parsed = EventIdUtils.fromEncoded(eventId);
+    if (parsed.isRecurring) {
+      showRecurringEventDialog({
+        eventId,
+        color: template.background,
+        dialogTitle: 'Apply Template',
+        dialogMessage: 'Apply to:',
+        onConfirm: async (applyToAll) => {
+          await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+          applyStoredColors();
+        },
+        onClose: () => {}
+      });
+    } else {
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      applyStoredColors();
+    }
+  }
+
+  function closeColorPicker() {
+    // Close by clicking outside
+    document.body.click();
   }
 
   /**
