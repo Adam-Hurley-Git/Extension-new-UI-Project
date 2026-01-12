@@ -1158,6 +1158,12 @@ export class ColorPickerInjector {
   hasNonBackgroundProperties(existingColors, calendarDefaults) {
     if (!existingColors && !calendarDefaults) return false;
 
+    // If event is marked to use Google colors, it has NO ColorKit properties
+    // Don't show modal - just apply the new ColorKit color directly
+    if (existingColors?.useGoogleColors) {
+      return false;
+    }
+
     // Check event-level properties first
     const hasEventText = !!existingColors?.text;
     const hasEventBorder = !!existingColors?.border;
