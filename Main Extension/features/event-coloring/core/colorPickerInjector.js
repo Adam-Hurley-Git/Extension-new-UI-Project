@@ -12,6 +12,7 @@ import ScenarioDetector from '../utils/scenarioDetector.js';
 import { showRecurringEventDialog } from '../components/RecurringEventDialog.js';
 import { ColorSwatchModal, COLOR_PALETTES } from '../../../shared/components/ColorSwatchModal.js';
 import { EventColorModal, createEventColorModal } from '../../../shared/components/EventColorModal.js';
+import { EventColorPanel, createEventColorPanel } from '../components/EventColorPanel.js';
 
 // ========================================
 // GOOGLE COLOR SCHEME MAPPING
@@ -60,6 +61,7 @@ export class ColorPickerInjector {
     this.observerId = 'colorPickerInjector';
     this.isInjecting = false;
     this.activeModal = null;
+    this.activePanel = null;
     this.cssInjected = false;
   }
 
@@ -69,6 +71,13 @@ export class ColorPickerInjector {
   init() {
     console.log('[CF] ColorPickerInjector initialized');
     this.injectModalCSS();
+
+    // Listen for requests to open full color modal from EventColorPanel
+    window.addEventListener('cf-open-full-color-modal', (e) => {
+      if (e.detail?.eventId) {
+        this.openCustomColorModal(e.detail.eventId);
+      }
+    });
   }
 
   /**
@@ -306,7 +315,7 @@ export class ColorPickerInjector {
       // Close existing menus first
       this.closeMenus();
 
-      // Open the color swatch modal
+      // Open the full EventColorModal for quick custom color access
       this.openCustomColorModal(eventId);
     });
 
@@ -416,6 +425,36 @@ export class ColorPickerInjector {
     });
 
     this.activeModal.open();
+  }
+
+  /**
+   * Open the new Event Color Panel with redesigned UI
+   * @param {string} eventId - The event ID
+   */
+  async openEventColorPanel(eventId) {
+    // Clean up any existing panel
+    if (this.activePanel) {
+      this.activePanel.close();
+      this.activePanel = null;
+    }
+
+    // Close any open menus
+    this.closeMenus();
+
+    // Create and render the panel
+    this.activePanel = new EventColorPanel({
+      eventId,
+      storageService: this.storageService,
+      onClose: () => {
+        this.activePanel = null;
+      },
+      onColorApplied: () => {
+        this.triggerColorUpdate();
+      },
+    });
+
+    await this.activePanel.render();
+    console.log('[CF] EventColorPanel opened for event:', eventId);
   }
 
   /**
@@ -641,14 +680,88 @@ export class ColorPickerInjector {
   }
 
   /**
-   * Create the "Custom Color" section with the "+" button and reset actions
+   * Create the "Custom Color" section with ColorKit Options button and reset actions
    */
   createCustomColorSection(container, scenario) {
     const section = document.createElement('div');
     section.className = 'cf-custom-color-section';
     section.style.marginTop = '16px';
 
-    // Label
+    // ColorKit Options Button - Main entry point for new UI
+    const colorKitBtn = document.createElement('button');
+    colorKitBtn.className = 'cf-colorkit-options-btn';
+    colorKitBtn.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%);
+      border: 1.5px solid #8b5cf6;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: left;
+      margin-bottom: 12px;
+    `;
+
+    colorKitBtn.innerHTML = `
+      <div style="
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      ">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 600; color: #6d28d9; margin-bottom: 2px;">ColorKit Options</div>
+        <div style="font-size: 11px; color: #7c3aed; line-height: 1.3;">Full color panel with modes, templates & more</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" style="flex-shrink: 0;">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    `;
+
+    // Hover effects
+    colorKitBtn.addEventListener('mouseenter', () => {
+      colorKitBtn.style.background = 'linear-gradient(135deg, #ede9fe 0%, #f5f3ff 100%)';
+      colorKitBtn.style.borderColor = '#7c3aed';
+      colorKitBtn.style.transform = 'translateY(-1px)';
+      colorKitBtn.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.2)';
+    });
+    colorKitBtn.addEventListener('mouseleave', () => {
+      colorKitBtn.style.background = 'linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%)';
+      colorKitBtn.style.borderColor = '#8b5cf6';
+      colorKitBtn.style.transform = 'translateY(0)';
+      colorKitBtn.style.boxShadow = 'none';
+    });
+
+    // Click handler - open new EventColorPanel
+    colorKitBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+      if (!eventId) {
+        console.error('[CF] Could not find event ID for ColorKit options');
+        return;
+      }
+
+      this.closeMenus();
+      this.openEventColorPanel(eventId);
+    });
+
+    section.appendChild(colorKitBtn);
+
+    // Custom section label and "+" button
     const label = document.createElement('div');
     label.className = 'color-category-label';
     label.textContent = 'Custom';
@@ -661,7 +774,7 @@ export class ColorPickerInjector {
       text-transform: uppercase;
     `;
 
-    // Container for button
+    // Container for "+" button
     const buttonContainer = document.createElement('div');
     buttonContainer.style.cssText = `
       display: flex;
@@ -671,7 +784,7 @@ export class ColorPickerInjector {
       padding: 0 12px 0 0;
     `;
 
-    // Add the "+" button
+    // Add the "+" button (opens full color modal directly)
     const customButton = this.createCustomColorButton(container, scenario);
     buttonContainer.appendChild(customButton);
 
@@ -1910,6 +2023,14 @@ export class ColorPickerInjector {
    */
   destroy() {
     this.isInjecting = false;
+    if (this.activePanel) {
+      this.activePanel.close();
+      this.activePanel = null;
+    }
+    if (this.activeModal) {
+      this.activeModal.close();
+      this.activeModal = null;
+    }
   }
 }
 
