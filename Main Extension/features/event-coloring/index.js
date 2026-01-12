@@ -1182,22 +1182,49 @@
       <div class="cf-google-colors-container"></div>
     `;
 
-    // Insert the wrapper before the original Google colors
-    parentContainer.insertBefore(googleSection, builtInColorGroup);
+    // Find ALL Google color elements (there may be multiple rows)
+    // Google's colors are typically in elements with vbVGZb class or contain color buttons with jsname="Ly0WL"
+    const googleColorElements = [];
 
-    // Move Google's original colors into our container
-    const googleColorsContainer = googleSection.querySelector('.cf-google-colors-container');
-    googleColorsContainer.appendChild(builtInColorGroup);
+    // Strategy 1: Find all vbVGZb elements (Google's color row class)
+    const vbVGZbElements = parentContainer.querySelectorAll('.vbVGZb');
+    vbVGZbElements.forEach(el => googleColorElements.push(el));
 
-    // Show Google's colors (don't hide them) but style them for grey-out effect when not in Google mode
-    builtInColorGroup.style.display = '';
-    if (!isGoogleMode) {
-      builtInColorGroup.style.opacity = '0.5';
-      builtInColorGroup.style.pointerEvents = 'none';
-    } else {
-      builtInColorGroup.style.opacity = '1';
-      builtInColorGroup.style.pointerEvents = 'auto';
+    // Strategy 2: If no vbVGZb, find elements containing color buttons
+    if (googleColorElements.length === 0) {
+      const colorButtons = parentContainer.querySelectorAll('div[jsname="Ly0WL"]');
+      const parents = new Set();
+      colorButtons.forEach(btn => {
+        if (btn.parentElement && !parents.has(btn.parentElement)) {
+          parents.add(btn.parentElement);
+          googleColorElements.push(btn.parentElement);
+        }
+      });
     }
+
+    // Fallback: use the builtInColorGroup we found
+    if (googleColorElements.length === 0) {
+      googleColorElements.push(builtInColorGroup);
+    }
+
+    // Insert the wrapper before the first Google color element
+    const firstColorElement = googleColorElements[0] || builtInColorGroup;
+    parentContainer.insertBefore(googleSection, firstColorElement);
+
+    // Move ALL Google color elements into our container
+    const googleColorsContainer = googleSection.querySelector('.cf-google-colors-container');
+    googleColorElements.forEach(el => {
+      googleColorsContainer.appendChild(el);
+      // Show the colors but style them for grey-out effect when not in Google mode
+      el.style.display = '';
+      if (!isGoogleMode) {
+        el.style.opacity = '0.5';
+        el.style.pointerEvents = 'none';
+      } else {
+        el.style.opacity = '1';
+        el.style.pointerEvents = 'auto';
+      }
+    });
 
     // Build and inject the rest of the redesigned UI (without Google's section)
     const panel = document.createElement('div');
