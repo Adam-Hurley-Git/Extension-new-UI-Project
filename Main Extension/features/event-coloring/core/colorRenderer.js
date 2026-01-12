@@ -433,13 +433,11 @@ export class ColorRenderer {
 
   /**
    * Update checkmarks in the color picker
+   * NOTE: We only manage checkmarks on OUR custom buttons, not Google's.
    */
   updateCheckmarks(container, selectedColor) {
-    // Remove checkmarks from Google color buttons
-    const googleButtons = container.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
-    googleButtons.forEach(button => {
-      this.toggleCheckmark(button, false);
-    });
+    // NOTE: We no longer hide Google's checkmarks.
+    // Google manages their own checkmarks - we only manage ours.
 
     // Add checkmark to matching custom color button
     const customButtons = container.querySelectorAll(

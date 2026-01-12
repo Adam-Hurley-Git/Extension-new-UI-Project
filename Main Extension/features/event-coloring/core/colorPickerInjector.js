@@ -1158,6 +1158,12 @@ export class ColorPickerInjector {
   hasNonBackgroundProperties(existingColors, calendarDefaults) {
     if (!existingColors && !calendarDefaults) return false;
 
+    // If event is marked to use Google colors, it has NO ColorKit properties
+    // Don't show modal - just apply the new ColorKit color directly
+    if (existingColors?.useGoogleColors) {
+      return false;
+    }
+
     // Check event-level properties first
     const hasEventText = !!existingColors?.text;
     const hasEventBorder = !!existingColors?.border;
@@ -1721,7 +1727,9 @@ export class ColorPickerInjector {
   }
 
   /**
-   * Hide checkmarks on Google colors and show on custom when appropriate
+   * Update checkmarks and modify Google color labels
+   * NOTE: We no longer intercept Google color buttons or hide their checkmarks.
+   * Google colors are entirely handled by Google - we don't interfere.
    */
   async hideCheckmarkAndModifyBuiltInColors() {
     const listContainer = document.querySelector(
@@ -1749,49 +1757,71 @@ export class ColorPickerInjector {
       currentColor = typeof colorData === 'string' ? colorData : colorData?.hex;
     }
 
-    // Add click handlers to Google color buttons
-    const googleButtons = document.querySelectorAll(
+    // Setup cleanup handlers: when user clicks Google color, remove our ColorKit color
+    // This does NOT intercept Google's behavior - just cleans up our data
+    this.setupGoogleColorCleanupHandlers(container, scenario, eventId);
+
+    // Update checkmarks (only for our custom buttons, not Google's)
+    this.updateCheckmarks(currentColor);
+
+    // Modify Google color labels (this is safe - just changes display names)
+    await this.modifyGoogleColorLabels();
+  }
+
+  /**
+   * Setup handlers on Google color buttons to mark events for Google colors when clicked.
+   * IMPORTANT: This does NOT prevent default or stop propagation.
+   * Google's click handler still fires normally - we just mark the event.
+   *
+   * Uses markEventForGoogleColors() which sets useGoogleColors: true.
+   * This tells mergeEventColors() to return null, bypassing:
+   * - Individual event colors
+   * - Calendar default colors (list coloring)
+   * - Recurring series colors
+   */
+  setupGoogleColorCleanupHandlers(container, scenario, eventId) {
+    const googleButtons = container.querySelectorAll(
       COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
     );
 
     googleButtons.forEach((button) => {
       // Only add handler once
-      if (!button.hasAttribute('data-cf-handler')) {
-        button.setAttribute('data-cf-handler', 'true');
+      if (button.hasAttribute('data-cf-cleanup-handler')) return;
+      button.setAttribute('data-cf-cleanup-handler', 'true');
 
-        button.addEventListener('click', async () => {
-          const clickedEventId = ScenarioDetector.findEventIdByScenario(button, scenario);
-          if (clickedEventId) {
-            // When clicking a Google color, remove custom color
-            await this.storageService.removeEventColor(clickedEventId);
-            this.triggerColorUpdate();
-          }
-        });
-      }
+      button.addEventListener('click', async () => {
+        // Re-find event ID in case it changed
+        const currentEventId = ScenarioDetector.findEventIdByScenario(container, scenario) || eventId;
+
+        if (!currentEventId) return;
+
+        console.log('[CF] Google color clicked - marking event for Google colors:', currentEventId);
+
+        // Mark the event to use Google colors - this sets useGoogleColors: true
+        // which bypasses BOTH individual colors AND calendar defaults (list coloring)
+        if (this.storageService.markEventForGoogleColors) {
+          await this.storageService.markEventForGoogleColors(currentEventId);
+        } else {
+          // Fallback to removeEventColor if markEventForGoogleColors not available
+          console.warn('[CF] markEventForGoogleColors not available, falling back to removeEventColor');
+          await this.storageService.removeEventColor(currentEventId);
+        }
+
+        // Trigger re-render - mergeEventColors will return null for this event
+        this.triggerColorUpdate();
+      });
     });
-
-    // Update checkmarks
-    this.updateCheckmarks(currentColor);
-
-    // Modify Google color labels
-    await this.modifyGoogleColorLabels();
   }
 
   /**
    * Update checkmark visibility based on selected color
+   * NOTE: We only manage checkmarks on OUR custom buttons, not Google's.
    */
   updateCheckmarks(selectedColor) {
     // Wait a bit for DOM to settle
     setTimeout(() => {
-      // Remove checkmarks from Google colors if we have a custom color
-      if (selectedColor) {
-        const googleButtons = document.querySelectorAll(
-          COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON
-        );
-        googleButtons.forEach((button) => {
-          this.toggleCheckmark(button, false);
-        });
-      }
+      // NOTE: We no longer hide Google's checkmarks.
+      // Google manages their own checkmarks - we only manage ours.
 
       // Update custom color button checkmarks
       const customButtons = document.querySelectorAll(

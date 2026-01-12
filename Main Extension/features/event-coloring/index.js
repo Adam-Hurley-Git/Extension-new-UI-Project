@@ -471,6 +471,12 @@
   function hasNonBackgroundProperties(existingColors, calendarDefaults) {
     if (!existingColors && !calendarDefaults) return false;
 
+    // If event is marked to use Google colors, it has NO ColorKit properties
+    // Don't show modal - just apply the new ColorKit color directly
+    if (existingColors?.useGoogleColors) {
+      return false;
+    }
+
     // Check event-level properties first
     const hasEventText = !!existingColors?.text;
     const hasEventBorder = !!existingColors?.border;
@@ -1177,10 +1183,67 @@
       parentContainer.appendChild(customColorSection);
     }
 
-    // Add click handlers to Google color buttons (to clear custom colors)
-    setupGoogleColorButtonHandlers(colorPickerElement);
+    // When user clicks a Google color, remove any ColorKit color so Google takes over completely.
+    // This does NOT intercept or prevent Google's behavior - it just cleans up our data.
+    setupGoogleColorCleanupHandlers(colorPickerElement, scenario);
 
     isInjecting = false;
+  }
+
+  /**
+   * Setup handlers on Google color buttons to mark events for Google colors when clicked.
+   * IMPORTANT: This does NOT prevent default or stop propagation.
+   * Google's click handler still fires normally - we just mark the event.
+   *
+   * Uses markEventForGoogleColors() which sets useGoogleColors: true.
+   * This tells mergeEventColors() to return null, bypassing:
+   * - Individual event colors
+   * - Calendar default colors (list coloring)
+   * - Recurring series colors
+   */
+  function setupGoogleColorCleanupHandlers(pickerElement, scenario) {
+    const googleButtons = pickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
+
+    googleButtons.forEach((button) => {
+      // Only add handler once
+      if (button.hasAttribute('data-cf-cleanup-handler')) return;
+      button.setAttribute('data-cf-cleanup-handler', 'true');
+
+      button.addEventListener('click', async () => {
+        // Find the event ID
+        const container = pickerElement.closest(
+          COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR + ', ' +
+          COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
+        ) || pickerElement;
+
+        const eventId = ScenarioDetector.findEventIdByScenario(container, scenario) ||
+                       lastClickedEventId ||
+                       getEventIdFromContext();
+
+        if (!eventId) return;
+
+        console.log('[EventColoring] Google color clicked - marking event for Google colors:', eventId);
+
+        // Mark the event to use Google colors - this sets useGoogleColors: true
+        // which bypasses BOTH individual colors AND calendar defaults (list coloring)
+        const parsed = EventIdUtils.fromEncoded(eventId);
+
+        if (parsed.isRecurring) {
+          // For recurring events, mark the entire series
+          await window.cc3Storage.markRecurringEventForGoogleColors(eventId);
+          // Update local cache
+          eventColors[eventId] = { useGoogleColors: true, isRecurring: true, appliedAt: Date.now() };
+        } else {
+          // For single events
+          await window.cc3Storage.markEventForGoogleColors(eventId);
+          // Update local cache
+          eventColors[eventId] = { useGoogleColors: true, appliedAt: Date.now() };
+        }
+
+        // Trigger re-render - mergeEventColors will return null for this event
+        applyStoredColors();
+      });
+    });
   }
 
   function findBuiltInColorGroup(pickerElement) {
@@ -2827,93 +2890,10 @@
     console.log('[EventColoring] Modal CSS injected');
   }
 
-  function setupGoogleColorButtonHandlers(pickerElement) {
-    const googleButtons = pickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
-
-    googleButtons.forEach((button) => {
-      if (button.hasAttribute('data-cf-handler')) return;
-      button.setAttribute('data-cf-handler', 'true');
-
-      button.addEventListener('click', async (e) => {
-        const scenario = ScenarioDetector.findColorPickerScenario();
-        const eventId = ScenarioDetector.findEventIdByScenario(button, scenario) ||
-                       lastClickedEventId ||
-                       getEventIdFromContext();
-
-        if (!eventId) return;
-
-        // Get the Google color from the button
-        const googleColor = button.getAttribute('data-color');
-        console.log('[EventColoring] Google color clicked:', googleColor, 'for event:', eventId);
-
-        // Get existing colors and calendar defaults
-        const existingColors = findColorForEvent(eventId) || {};
-        const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
-
-        console.log('[EventColoring] Google color - Existing colors:', JSON.stringify(existingColors));
-        console.log('[EventColoring] Google color - Calendar defaults:', JSON.stringify(calendarDefaults));
-
-        // Check if event has non-background properties that would be lost
-        const hasExistingProps = hasNonBackgroundProperties(existingColors, calendarDefaults);
-        console.log('[EventColoring] Google color - Has non-background properties:', hasExistingProps);
-
-        if (hasExistingProps && googleColor) {
-          // Prevent default to stop Google's color from being applied immediately
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Get event title for preview
-          const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
-          const eventTitle = eventElement?.querySelector('.I0UMhf, .lhydbb')?.textContent?.trim() || 'Event';
-
-          console.log('[EventColoring] Google color - showing dialog');
-
-          // Show existing properties dialog
-          showExistingPropertiesDialog({
-            eventId,
-            newBackground: googleColor,
-            existingColors,
-            calendarDefaults,
-            eventTitle,
-            onKeepExisting: async () => {
-              // Merge: keep existing properties with the Google color as background
-              const mergedColors = {
-                background: googleColor,
-                text: existingColors.text || calendarDefaults.text || null,
-                border: existingColors.border || calendarDefaults.border || null,
-                borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
-              };
-              console.log('[EventColoring] Google color - Keeping existing, merged colors:', mergedColors);
-
-              // Save the merged colors (this will override Google's native color)
-              await handleFullColorSelection(eventId, mergedColors);
-              closeColorPicker();
-            },
-            onReplaceAll: async () => {
-              // Replace: apply only the Google background color, clear other properties
-              console.log('[EventColoring] Google color - Replacing all with background only');
-              await applyBackgroundOnly(eventId, googleColor);
-            },
-            onOpenFullModal: () => {
-              // Open full modal prefilled with Google color + existing properties
-              console.log('[EventColoring] Google color - Opening full modal');
-              closeColorPicker();
-              openCustomColorModalPrefilled(eventId, googleColor, existingColors, calendarDefaults);
-            },
-            onClose: () => {
-              console.log('[EventColoring] Google color - Dialog closed');
-            },
-          });
-        } else if (googleColor) {
-          // No other properties to preserve - apply the Google color directly
-          console.log('[EventColoring] Google color - No properties to preserve, applying directly:', googleColor);
-          e.preventDefault();
-          e.stopPropagation();
-          await applyBackgroundOnly(eventId, googleColor);
-        }
-      });
-    });
-  }
+  // NOTE: setupGoogleColorCleanupHandlers (above) replaced the old setupGoogleColorButtonHandlers.
+  // The old function intercepted Google clicks (preventDefault/stopPropagation) and applied our colors.
+  // The new function does NOT intercept - it just removes our ColorKit color when Google color is clicked,
+  // so Google's color takes over completely. This ensures clean separation of ownership.
 
   function updateGoogleColorLabels(pickerElement) {
     const customLabels = settings.googleColorLabels || {};
@@ -2956,16 +2936,8 @@
     const colorData = findColorForEvent(eventId);
     const selectedColor = colorData?.hex;
 
-    // Clear Google checkmarks if we have custom color
-    if (selectedColor) {
-      const googleButtons = pickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
-      googleButtons.forEach((button) => {
-        const checkmark = button.querySelector(COLOR_PICKER_SELECTORS.CHECKMARK_SELECTOR);
-        if (checkmark) {
-          checkmark.style.display = 'none';
-        }
-      });
-    }
+    // NOTE: We no longer hide Google's checkmarks.
+    // Google manages their own checkmarks - we only manage ours.
 
     // Update custom color button checkmarks
     const customButtons = pickerElement.querySelectorAll(
@@ -3390,8 +3362,47 @@
 
       if (mergedColors) {
         applyColorsToElement(element, mergedColors);
+      } else if (manualColors && manualColors.useGoogleColors) {
+        // Event is marked to use Google colors - remove any ColorKit styling
+        removeColorKitStyling(element);
       }
     });
+  }
+
+  /**
+   * Remove all ColorKit styling from an element
+   * Called when user switches to Google colors
+   */
+  function removeColorKitStyling(element) {
+    if (!element) return;
+
+    // Only clean up if we previously colored this element
+    if (!element.dataset.cfEventColored) return;
+
+    console.log('[EventColoring] Removing ColorKit styling from element');
+
+    // Remove background styling
+    element.style.removeProperty('background');
+    element.style.removeProperty('background-color');
+    element.style.removeProperty('border-color');
+
+    // Remove text color
+    element.style.removeProperty('color');
+
+    // Remove border (outline)
+    element.style.removeProperty('outline');
+    element.style.removeProperty('outline-offset');
+
+    // Remove text color from child elements
+    element.querySelectorAll('.I0UMhf, .KcY3wb, .lhydbb, .fFwDnf, .XuJrye, span').forEach((child) => {
+      if (child instanceof HTMLElement) {
+        child.style.removeProperty('color');
+      }
+    });
+
+    // Remove our marker attribute
+    delete element.dataset.cfEventColored;
+    delete element.dataset.cfOriginalColor;
   }
 
   /**

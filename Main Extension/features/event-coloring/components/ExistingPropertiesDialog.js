@@ -443,10 +443,21 @@ export function showExistingPropertiesDialog(options) {
 export function hasNonBackgroundProperties(existingColors, calendarDefaults) {
   if (!existingColors && !calendarDefaults) return false;
 
+  // If event is marked to use Google colors, it has NO ColorKit properties
+  // Don't show modal - just apply the new ColorKit color directly
+  if (existingColors?.useGoogleColors) {
+    return false;
+  }
+
   // Check event-level properties first
   const hasEventText = !!existingColors?.text;
   const hasEventBorder = !!existingColors?.border;
   const hasEventBorderWidth = existingColors?.borderWidth != null && existingColors?.borderWidth !== 2;
+
+  // If event has overrideDefaults, calendar defaults aren't actually applied
+  if (existingColors?.overrideDefaults) {
+    return hasEventText || hasEventBorder || hasEventBorderWidth;
+  }
 
   // Check calendar-level properties
   const hasCalendarText = !!calendarDefaults?.text;
