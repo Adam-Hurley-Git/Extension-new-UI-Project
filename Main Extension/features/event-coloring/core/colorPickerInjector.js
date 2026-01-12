@@ -430,8 +430,10 @@ export class ColorPickerInjector {
   /**
    * Open the new Event Color Panel with redesigned UI
    * @param {string} eventId - The event ID
+   * @param {Object} options - Additional options
+   * @param {Function} options.onCloseExtra - Extra callback to run on close
    */
-  async openEventColorPanel(eventId) {
+  async openEventColorPanel(eventId, options = {}) {
     // Clean up any existing panel
     if (this.activePanel) {
       this.activePanel.close();
@@ -447,6 +449,8 @@ export class ColorPickerInjector {
       storageService: this.storageService,
       onClose: () => {
         this.activePanel = null;
+        // Call extra close handler if provided
+        options.onCloseExtra?.();
       },
       onColorApplied: () => {
         this.triggerColorUpdate();
@@ -557,6 +561,7 @@ export class ColorPickerInjector {
 
   /**
    * Main injection method - called when DOM changes detected
+   * Now opens the new EventColorPanel instead of injecting into Google's picker
    */
   async injectColorPicker() {
     if (this.isInjecting) return;
@@ -571,6 +576,73 @@ export class ColorPickerInjector {
         return;
       }
 
+      // Check if our panel is already open
+      if (this.activePanel) {
+        this.isInjecting = false;
+        return;
+      }
+
+      // Check if already processed (we mark the picker when we intercept it)
+      const editorContainer = document.querySelector(
+        COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.EDITOR
+      );
+      const listContainer = document.querySelector(
+        COLOR_PICKER_SELECTORS.COLOR_PICKER_CONTROLLERS.LIST
+      );
+      const container = listContainer || editorContainer;
+
+      if (!container) {
+        this.isInjecting = false;
+        return;
+      }
+
+      // Mark as processed to prevent re-triggering
+      if (container.hasAttribute('data-cf-panel-shown')) {
+        this.isInjecting = false;
+        return;
+      }
+      container.setAttribute('data-cf-panel-shown', 'true');
+
+      // Find the event ID
+      const scenario = ScenarioDetector.findColorPickerScenario();
+      const eventId = ScenarioDetector.findEventIdByScenario(container, scenario);
+
+      if (!eventId) {
+        console.log('[CF] No event ID found, falling back to old injection');
+        container.removeAttribute('data-cf-panel-shown');
+        await this.injectColorPickerLegacy();
+        this.isInjecting = false;
+        return;
+      }
+
+      console.log('[CF] Opening EventColorPanel for event:', eventId);
+
+      // Hide Google's color picker
+      container.style.display = 'none';
+
+      // Open our new panel with cleanup callback
+      await this.openEventColorPanel(eventId, {
+        onCloseExtra: () => {
+          // Restore Google's picker visibility
+          container.style.display = '';
+          container.removeAttribute('data-cf-panel-shown');
+          // Close Google's picker by clicking elsewhere
+          document.body.click();
+        }
+      });
+    } catch (error) {
+      console.error('[CF] Error in injectColorPicker:', error);
+    }
+
+    this.isInjecting = false;
+  }
+
+  /**
+   * Legacy injection method - injects custom colors into Google's picker
+   * Used as fallback when new panel can't be shown
+   */
+  async injectColorPickerLegacy() {
+    try {
       // Check if already injected
       const existingCustomSection = document.querySelector(
         '.' + COLOR_PICKER_SELECTORS.CUSTOM_CLASSES.COLOR_DIV_GROUP
@@ -581,7 +653,6 @@ export class ColorPickerInjector {
       const existingCustomColorSection = document.querySelector('.cf-custom-color-section');
 
       if (existingCustomSection || existingSeparator || existingCustomColorSection) {
-        this.isInjecting = false;
         return;
       }
 
@@ -595,10 +666,8 @@ export class ColorPickerInjector {
       // Update checkmarks and Google color labels
       await this.hideCheckmarkAndModifyBuiltInColors();
     } catch (error) {
-      console.error('[CF] Error injecting color picker:', error);
+      console.error('[CF] Error in legacy injection:', error);
     }
-
-    this.isInjecting = false;
   }
 
   /**
