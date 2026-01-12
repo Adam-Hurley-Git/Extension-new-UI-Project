@@ -1262,6 +1262,11 @@
       });
     }
 
+    // Setup cleanup handlers for Google color buttons
+    // When user clicks a Google color, mark the event to use Google colors
+    // This bypasses ALL ColorKit coloring including list defaults
+    setupGoogleColorCleanupHandlers(colorPickerElement, scenario);
+
     isInjecting = false;
   }
 
