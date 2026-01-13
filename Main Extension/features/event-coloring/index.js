@@ -1371,7 +1371,7 @@
         .cf-radio-option.active { background: rgba(139, 92, 246, 0.12); border-color: #8b5cf6; }
         .cf-radio-option.disabled { opacity: 0.5; pointer-events: none; }
         .cf-radio-option .cf-radio { margin-top: 2px; }
-        .cf-radio-option-content { flex: 1; min-width: 0; overflow: hidden; }
+        .cf-radio-option-content { flex: 1; min-width: 0; }
         .cf-radio-option-title { font-size: 11px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; line-height: 1.3; }
         .cf-radio-option-desc { font-size: 9px; color: #5f6368; margin-top: 2px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
