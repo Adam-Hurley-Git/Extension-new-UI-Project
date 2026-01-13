@@ -1393,16 +1393,17 @@
           border-radius: 6px; cursor: pointer; transition: all 0.15s;
           border: 1.5px solid transparent; margin-bottom: 6px;
           background: rgba(139, 92, 246, 0.04);
+          width: 100%; box-sizing: border-box;
         }
         .cf-calendar-default-card:hover { background: rgba(139, 92, 246, 0.08); }
         .cf-calendar-default-card.active { background: rgba(139, 92, 246, 0.12); border-color: #8b5cf6; }
 
         .cf-calendar-default-row1 {
-          display: flex; align-items: center; gap: 8px;
+          display: flex; align-items: center; gap: 8px; width: 100%;
         }
         .cf-calendar-default-row2 {
           display: flex; align-items: center; gap: 8px;
-          margin-top: 8px; padding-left: 24px; cursor: pointer;
+          margin-top: 8px; width: 100%;
         }
 
         .cf-calendar-color-box {
@@ -1410,8 +1411,9 @@
           border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
         }
         .cf-calendar-name {
-          font-size: 11px; color: #202124; font-weight: 500; overflow: hidden;
-          text-overflow: ellipsis; white-space: nowrap;
+          font-size: 11px; color: #202124; font-weight: 500;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          flex: 1; min-width: 0;
         }
         .cf-action-text {
           font-size: 10px; color: #5f6368; font-weight: 500; white-space: nowrap;
