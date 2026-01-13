@@ -1405,7 +1405,7 @@
           display: flex; align-items: center; gap: 8px; margin-top: 8px;
         }
         .cf-action-text {
-          font-size: 10px; color: #5f6368; font-weight: 500;
+          font-size: 10px; color: #5f6368; font-weight: 500; white-space: nowrap;
         }
 
         /* Custom section divider */
