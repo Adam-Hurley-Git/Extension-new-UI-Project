@@ -1371,12 +1371,58 @@
         .cf-radio-option.active { background: rgba(139, 92, 246, 0.12); border-color: #8b5cf6; }
         .cf-radio-option.disabled { opacity: 0.5; pointer-events: none; }
         .cf-radio-option .cf-radio { margin-top: 2px; }
-        .cf-radio-option-content { flex: 1; min-width: 0; overflow: hidden; }
+        .cf-radio-option-content { flex: 1; min-width: 0; }
         .cf-radio-option-title { font-size: 11px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; line-height: 1.3; }
         .cf-radio-option-desc { font-size: 9px; color: #5f6368; margin-top: 2px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
         /* Color preview in option */
         .cf-option-color { width: 20px; height: 20px; min-width: 20px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); margin-top: 2px; }
+
+        /* Sample Event badge - styled like a mini calendar event */
+        .cf-sample-event {
+          display: inline-flex; align-items: center; border-radius: 4px; overflow: hidden;
+          font-size: 10px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .cf-sample-event-stripe { width: 4px; align-self: stretch; }
+        .cf-sample-event-text { padding: 3px 8px; }
+
+        /* Calendar Default Card - two row layout */
+        .cf-calendar-default-card {
+          display: flex; flex-direction: column; padding: 10px 12px;
+          border-radius: 6px; cursor: pointer; transition: all 0.15s;
+          border: 1.5px solid transparent; margin-bottom: 6px;
+          background: rgba(139, 92, 246, 0.04);
+          width: 100%; box-sizing: border-box;
+        }
+        .cf-calendar-default-card:hover { background: rgba(139, 92, 246, 0.08); }
+        .cf-calendar-default-card.active { background: rgba(139, 92, 246, 0.12); border-color: #8b5cf6; }
+
+        .cf-calendar-default-row1 {
+          display: flex; align-items: center; gap: 8px; width: 100%;
+        }
+        .cf-calendar-default-row2 {
+          display: flex; align-items: center; gap: 8px;
+          margin-top: 8px; width: 100%;
+        }
+
+        .cf-calendar-color-box {
+          width: 16px; height: 16px; min-width: 16px; border-radius: 3px;
+          border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
+        }
+        .cf-calendar-name {
+          font-size: 11px; color: #202124; font-weight: 500;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          flex: 1; min-width: 0;
+        }
+        .cf-action-text {
+          font-size: 10px; color: #5f6368; font-weight: 500; white-space: nowrap;
+        }
+
+        /* Custom section divider */
+        .cf-custom-divider {
+          height: 1px; background: rgba(139, 92, 246, 0.2); margin: 12px 0 10px;
+        }
 
         /* Quick colors section */
         .cf-quick-colors { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(139, 92, 246, 0.2); }
@@ -1435,32 +1481,42 @@
         </div>
 
         <!-- Calendar Default Option -->
-        <div class="cf-radio-option ${listColorEnabled ? 'active' : ''} ${!hasListColoring ? 'disabled' : ''}" data-option="list">
-          <div class="cf-radio cf-radio-purple ${listColorEnabled ? 'active' : ''}" data-radio="list"></div>
-          <div class="cf-radio-option-content">
-            <div class="cf-radio-option-title">
-              Calendar Default
-              ${listColorEnabled ? '<span class="cf-active-badge cf-active-badge-purple">Using</span>' : ''}
+        ${hasListColoring ? `
+          <div class="cf-calendar-default-card ${listColorEnabled ? 'active' : ''}" data-option="list">
+            <div class="cf-calendar-default-row1">
+              <div class="cf-radio cf-radio-purple ${listColorEnabled ? 'active' : ''}" data-radio="list"></div>
+              <div class="cf-calendar-color-box" style="background:${listBgColor}"></div>
+              <span class="cf-calendar-name">"${calendarName}"</span>
             </div>
-            <div class="cf-radio-option-desc">
-              ${hasListColoring ? `All events in "${calendarName}"` : 'No default color set for this calendar'}
+            <div class="cf-calendar-default-row2" data-action="use-list-color">
+              <span class="cf-sample-event">
+                <span class="cf-sample-event-stripe" style="background:${calendarDefaults?.border || listBgColor}"></span>
+                <span class="cf-sample-event-text" style="background:${listBgColor}; color:${getContrastColor(listBgColor)};">Sample Event</span>
+              </span>
+              <span class="cf-action-text">Calendar Default</span>
             </div>
           </div>
-          ${hasListColoring ? `<div class="cf-option-color" style="background:${listBgColor}"></div>` : ''}
-        </div>
+        ` : `
+          <div class="cf-radio-option disabled" data-option="list">
+            <div class="cf-radio cf-radio-purple" data-radio="list"></div>
+            <div class="cf-radio-option-content">
+              <div class="cf-radio-option-title">Calendar Default</div>
+              <div class="cf-radio-option-desc">No default color set for this calendar</div>
+            </div>
+          </div>
+        `}
 
         <!-- Custom Color Option -->
         <div class="cf-radio-option ${customColorEnabled ? 'active' : ''}" data-option="custom">
           <div class="cf-radio cf-radio-purple ${customColorEnabled ? 'active' : ''}" data-radio="custom"></div>
           <div class="cf-radio-option-content">
-            <div class="cf-radio-option-title">
-              Custom Color
-              ${customColorEnabled ? '<span class="cf-active-badge cf-active-badge-purple">Using</span>' : ''}
-            </div>
+            <div class="cf-radio-option-title">Custom Color</div>
             <div class="cf-radio-option-desc">Override just this event</div>
           </div>
-          ${customColorEnabled && currentAppliedColor ? `<div class="cf-option-color" style="background:${currentAppliedColor}"></div>` : ''}
         </div>
+
+        <!-- Divider before Advanced Custom Colors -->
+        <div class="cf-custom-divider"></div>
 
         <!-- Full Custom Button -->
         <button class="cf-full-custom-btn" data-action="full-custom">
@@ -1525,6 +1581,19 @@
     const listOption = panel.querySelector('[data-option="list"]');
     if (listOption && hasListColoring) {
       listOption.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!listColorEnabled) {
+          await handleEnableListColoringRedesigned(eventId);
+        }
+      });
+    }
+
+    // Action row handler - "Use Calendar Default" click
+    const actionRow = panel.querySelector('[data-action="use-list-color"]');
+    if (actionRow && hasListColoring) {
+      actionRow.style.cursor = 'pointer';
+      actionRow.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (!listColorEnabled) {
