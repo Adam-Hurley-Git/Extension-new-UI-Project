@@ -2044,6 +2044,7 @@ export class ColorPickerInjector {
               text: existingColors.text || calendarDefaults.text || null,
               border: existingColors.border || calendarDefaults.border || null,
               borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
+              overrideDefaults: true, // Must override calendar defaults since user chose custom color
             };
             console.log('[CF] Keeping existing, merged colors:', mergedColors);
             await this.applyBackgroundWithMerge(eventId, mergedColors);
@@ -2078,13 +2079,19 @@ export class ColorPickerInjector {
   async applyBackgroundWithMerge(eventId, colors) {
     const parsed = EventIdUtils.fromEncoded(eventId);
 
+    // Ensure overrideDefaults is set since user is applying custom colors
+    const colorsWithOverride = {
+      ...colors,
+      overrideDefaults: true,
+    };
+
     if (parsed.isRecurring) {
       showRecurringEventDialog({
         eventId,
         color: colors.background,
         onConfirm: async (applyToAll) => {
           if (this.storageService.saveEventColorsFullAdvanced) {
-            await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+            await this.storageService.saveEventColorsFullAdvanced(eventId, colorsWithOverride, { applyToAll });
           }
           this.closeMenus();
           this.triggerColorUpdate();
@@ -2093,7 +2100,7 @@ export class ColorPickerInjector {
       });
     } else {
       if (this.storageService.saveEventColorsFullAdvanced) {
-        await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+        await this.storageService.saveEventColorsFullAdvanced(eventId, colorsWithOverride, { applyToAll: false });
       }
       this.closeMenus();
       this.triggerColorUpdate();

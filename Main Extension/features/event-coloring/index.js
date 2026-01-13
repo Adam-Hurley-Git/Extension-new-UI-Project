@@ -1174,9 +1174,9 @@
         .cf-google-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; }
         .cf-google-section-title { font-size: 13px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
         .cf-google-section-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
-        .cf-radio { width: 18px; height: 18px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+        .cf-radio { width: 18px; height: 18px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-sizing: border-box; }
         .cf-radio.active { border-color: #1a73e8; }
-        .cf-radio.active::after { content: ''; position: absolute; top: 3px; left: 3px; width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
+        .cf-radio.active::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; background: #1a73e8; border-radius: 50%; }
         .cf-active-badge { background: #1a73e8; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-left: 6px; }
       </style>
       <div class="cf-google-section-header" data-action="select-google">
@@ -1363,9 +1363,9 @@
         .cf-section-desc { font-size: 9px; color: #5f6368; margin-top: 1px; }
 
         /* Radio button styles */
-        .cf-radio { width: 16px; height: 16px; min-width: 16px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+        .cf-radio { width: 16px; height: 16px; min-width: 16px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-sizing: border-box; }
         .cf-radio.active { border-color: #1a73e8; }
-        .cf-radio.active::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
+        .cf-radio.active::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
         .cf-radio-purple.active { border-color: #8b5cf6; }
         .cf-radio-purple.active::after { background: #8b5cf6; }
 
@@ -3653,6 +3653,7 @@
             text: existingColors.text || calendarDefaults.text || null,
             border: existingColors.border || calendarDefaults.border || null,
             borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
+            overrideDefaults: true, // Must override calendar defaults since user chose custom color
           };
           console.log('[EventColoring] Keeping existing, merged colors:', mergedColors);
           await applyBackgroundWithMerge(eventId, mergedColors);
@@ -3683,12 +3684,18 @@
   async function applyBackgroundWithMerge(eventId, colors) {
     const parsed = EventIdUtils.fromEncoded(eventId);
 
+    // Ensure overrideDefaults is set since user is applying custom colors
+    const colorsWithOverride = {
+      ...colors,
+      overrideDefaults: true,
+    };
+
     if (parsed.isRecurring) {
       showRecurringEventDialog({
         eventId,
         color: colors.background,
         onConfirm: async (applyToAll) => {
-          await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
+          await saveFullColorsWithRecurringSupport(eventId, colorsWithOverride, applyToAll);
           updateGoogleColorSwatch(eventId, colors.background);
           closeColorPicker();
           // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
@@ -3697,9 +3704,9 @@
         onClose: () => {},
       });
     } else {
-      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colorsWithOverride, { applyToAll: false });
       eventColors[eventId] = {
-        ...colors,
+        ...colorsWithOverride,
         hex: colors.background,
         isRecurring: false,
         appliedAt: Date.now()
