@@ -1493,7 +1493,7 @@
                 <span class="cf-sample-event-stripe" style="background:${calendarDefaults?.border || listBgColor}"></span>
                 <span class="cf-sample-event-text" style="background:${listBgColor}; color:${getContrastColor(listBgColor)};">Sample Event</span>
               </span>
-              <span class="cf-action-text">Use Calendar Default</span>
+              <span class="cf-action-text">Calendar Default</span>
             </div>
           </div>
         ` : `
