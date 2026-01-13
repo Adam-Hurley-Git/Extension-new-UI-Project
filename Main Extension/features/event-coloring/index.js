@@ -1378,6 +1378,34 @@
         /* Color preview in option */
         .cf-option-color { width: 20px; height: 20px; min-width: 20px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); margin-top: 2px; }
 
+        /* Sample Event badge - styled like a mini calendar event */
+        .cf-sample-event {
+          display: inline-flex; align-items: center; border-radius: 4px; overflow: hidden;
+          font-size: 10px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.15); margin-left: 8px;
+        }
+        .cf-sample-event-stripe { width: 4px; align-self: stretch; }
+        .cf-sample-event-text { padding: 3px 8px; }
+
+        /* Calendar info row with color box */
+        .cf-calendar-info {
+          display: flex; align-items: center; gap: 6px; margin-top: 6px;
+          padding-left: 2px;
+        }
+        .cf-calendar-color-box {
+          width: 16px; height: 16px; min-width: 16px; border-radius: 3px;
+          border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
+        }
+        .cf-calendar-name {
+          font-size: 10px; color: #5f6368; overflow: hidden;
+          text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        /* Custom section divider */
+        .cf-custom-divider {
+          height: 1px; background: rgba(139, 92, 246, 0.2); margin: 12px 0 10px;
+        }
+
         /* Quick colors section */
         .cf-quick-colors { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(139, 92, 246, 0.2); }
         .cf-quick-colors.disabled { opacity: 0.4; pointer-events: none; }
@@ -1440,27 +1468,35 @@
           <div class="cf-radio-option-content">
             <div class="cf-radio-option-title">
               Calendar Default
-              ${listColorEnabled ? '<span class="cf-active-badge cf-active-badge-purple">Using</span>' : ''}
+              ${hasListColoring ? `
+                <span class="cf-sample-event">
+                  <span class="cf-sample-event-stripe" style="background:${calendarDefaults?.border || listBgColor}"></span>
+                  <span class="cf-sample-event-text" style="background:${listBgColor}; color:${getContrastColor(listBgColor)};">Sample Event</span>
+                </span>
+              ` : ''}
             </div>
-            <div class="cf-radio-option-desc">
-              ${hasListColoring ? `All events in "${calendarName}"` : 'No default color set for this calendar'}
-            </div>
+            ${hasListColoring ? `
+              <div class="cf-calendar-info">
+                <div class="cf-calendar-color-box" style="background:${listBgColor}"></div>
+                <span class="cf-calendar-name">"${calendarName}"</span>
+              </div>
+            ` : `
+              <div class="cf-radio-option-desc">No default color set for this calendar</div>
+            `}
           </div>
-          ${hasListColoring ? `<div class="cf-option-color" style="background:${listBgColor}"></div>` : ''}
         </div>
 
         <!-- Custom Color Option -->
         <div class="cf-radio-option ${customColorEnabled ? 'active' : ''}" data-option="custom">
           <div class="cf-radio cf-radio-purple ${customColorEnabled ? 'active' : ''}" data-radio="custom"></div>
           <div class="cf-radio-option-content">
-            <div class="cf-radio-option-title">
-              Custom Color
-              ${customColorEnabled ? '<span class="cf-active-badge cf-active-badge-purple">Using</span>' : ''}
-            </div>
+            <div class="cf-radio-option-title">Custom Color</div>
             <div class="cf-radio-option-desc">Override just this event</div>
           </div>
-          ${customColorEnabled && currentAppliedColor ? `<div class="cf-option-color" style="background:${currentAppliedColor}"></div>` : ''}
         </div>
+
+        <!-- Divider before Advanced Custom Colors -->
+        <div class="cf-custom-divider"></div>
 
         <!-- Full Custom Button -->
         <button class="cf-full-custom-btn" data-action="full-custom">
