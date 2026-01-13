@@ -1327,85 +1327,79 @@
 
     return `
       <style>
-        .cf-injected-panel { padding: 8px 0; font-family: 'Google Sans', Roboto, sans-serif; }
+        .cf-injected-panel { padding: 6px 0; font-family: 'Google Sans', Roboto, sans-serif; }
 
         /* Section styles */
-        .cf-section { margin-bottom: 12px; padding: 12px; border-radius: 10px; transition: all 0.2s ease; }
-        .cf-section.cf-section-active {
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .cf-section.cf-section-inactive {
-          opacity: 0.5;
-          background: #f8f9fa !important;
-          border-color: #e8eaed !important;
-        }
+        .cf-section { margin-bottom: 10px; padding: 10px; border-radius: 8px; transition: all 0.2s ease; }
+        .cf-section.cf-section-active { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .cf-section.cf-section-inactive { opacity: 0.5; background: #f8f9fa !important; border-color: #e8eaed !important; }
         .cf-section.cf-section-inactive:hover { opacity: 0.7; }
-        .cf-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; }
-        .cf-section-title { font-size: 13px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
-        .cf-section-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
+        .cf-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; cursor: pointer; gap: 8px; }
+        .cf-section-title { font-size: 12px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .cf-section-desc { font-size: 9px; color: #5f6368; margin-top: 1px; }
 
         /* Radio button styles */
-        .cf-radio { width: 18px; height: 18px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+        .cf-radio { width: 16px; height: 16px; min-width: 16px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
         .cf-radio.active { border-color: #1a73e8; }
-        .cf-radio.active::after { content: ''; position: absolute; top: 3px; left: 3px; width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
+        .cf-radio.active::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
         .cf-radio-purple.active { border-color: #8b5cf6; }
         .cf-radio-purple.active::after { background: #8b5cf6; }
 
-        /* Active badge */
-        .cf-active-badge { background: #1a73e8; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-left: 6px; }
+        /* Badge styles */
+        .cf-active-badge { background: #1a73e8; color: white; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
         .cf-active-badge-purple { background: #8b5cf6; }
-
-        /* PRO badge */
-        .cf-pro-badge { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; padding: 1px 5px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; }
+        .cf-pro-badge { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; padding: 1px 4px; border-radius: 3px; font-size: 7px; font-weight: 600; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
 
         /* ColorKit section */
         .cf-colorkit-section {
           background: ${isColorKitMode ? 'linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%)' : '#f8f9fa'};
           border: 2px solid ${isColorKitMode ? '#8b5cf6' : '#e8eaed'};
-          padding: 14px;
+          padding: 10px;
         }
-        .cf-colorkit-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-        .cf-colorkit-title { font-size: 14px; font-weight: 700; color: #202124; display: flex; align-items: center; gap: 8px; }
+        .cf-colorkit-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 6px; }
+        .cf-colorkit-title { font-size: 13px; font-weight: 700; color: #202124; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
         /* Radio options within ColorKit */
         .cf-radio-option {
-          display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-          border-radius: 8px; cursor: pointer; transition: all 0.15s;
-          border: 1.5px solid transparent; margin-bottom: 8px;
+          display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px;
+          border-radius: 6px; cursor: pointer; transition: all 0.15s;
+          border: 1.5px solid transparent; margin-bottom: 6px;
+          min-height: auto;
         }
+        .cf-radio-option:last-of-type { margin-bottom: 0; }
         .cf-radio-option:hover { background: rgba(139, 92, 246, 0.08); }
-        .cf-radio-option.active {
-          background: rgba(139, 92, 246, 0.12);
-          border-color: #8b5cf6;
-        }
+        .cf-radio-option.active { background: rgba(139, 92, 246, 0.12); border-color: #8b5cf6; }
         .cf-radio-option.disabled { opacity: 0.5; pointer-events: none; }
-        .cf-radio-option-content { flex: 1; }
-        .cf-radio-option-title { font-size: 12px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
-        .cf-radio-option-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
+        .cf-radio-option .cf-radio { margin-top: 2px; }
+        .cf-radio-option-content { flex: 1; min-width: 0; overflow: hidden; }
+        .cf-radio-option-title { font-size: 11px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; line-height: 1.3; }
+        .cf-radio-option-desc { font-size: 9px; color: #5f6368; margin-top: 2px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
         /* Color preview in option */
-        .cf-option-color { width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
+        .cf-option-color { width: 20px; height: 20px; min-width: 20px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); margin-top: 2px; }
 
         /* Quick colors section */
-        .cf-quick-colors { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e8eaed; }
+        .cf-quick-colors { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(139, 92, 246, 0.2); }
         .cf-quick-colors.disabled { opacity: 0.4; pointer-events: none; }
 
-        .cf-color-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-        .cf-color-swatch { width: 24px; height: 24px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .cf-color-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+        .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .cf-color-swatch:hover { transform: scale(1.15); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
 
-        .cf-full-custom-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px; background: rgba(139, 92, 246, 0.08); border: 1.5px dashed #8b5cf6; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
+        .cf-full-custom-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; background: rgba(139, 92, 246, 0.08); border: 1.5px dashed #8b5cf6; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
         .cf-full-custom-btn:hover { background: rgba(139, 92, 246, 0.15); }
-        .cf-full-custom-icon { width: 24px; height: 24px; background: #8b5cf6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; color: white; font-weight: bold; }
+        .cf-full-custom-icon { width: 20px; height: 20px; min-width: 20px; background: #8b5cf6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: bold; }
+        .cf-full-custom-text { font-size: 11px; font-weight: 500; color: #202124; }
+        .cf-full-custom-subtext { font-size: 9px; color: #5f6368; }
 
-        .cf-divider { display: flex; align-items: center; gap: 8px; margin: 14px 0 10px; font-size: 10px; font-weight: 600; color: #5f6368; text-transform: uppercase; }
-        .cf-divider::before, .cf-divider::after { content: ''; flex: 1; height: 1px; background: #e8eaed; }
+        .cf-divider { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; font-size: 9px; font-weight: 600; color: #5f6368; text-transform: uppercase; }
+        .cf-divider::before, .cf-divider::after { content: ''; flex: 1; height: 1px; background: rgba(139, 92, 246, 0.2); }
 
-        .cf-category-section { margin-bottom: 10px; }
+        .cf-category-section { margin-bottom: 8px; }
         .cf-category-section.disabled { opacity: 0.4; pointer-events: none; }
-        .cf-category-label { font-size: 10px; font-weight: 600; color: #5f6368; text-transform: uppercase; margin-bottom: 6px; }
-        .cf-templates-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-        .cf-template-chip { padding: 4px 10px; border-radius: 12px; border: none; font-size: 11px; font-weight: 500; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+        .cf-category-label { font-size: 9px; font-weight: 600; color: #5f6368; text-transform: uppercase; margin-bottom: 4px; }
+        .cf-templates-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+        .cf-template-chip { padding: 3px 8px; border-radius: 10px; border: none; font-size: 10px; font-weight: 500; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
         .cf-template-chip:hover { transform: scale(1.05); box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
       </style>
 
@@ -1472,8 +1466,8 @@
         <button class="cf-full-custom-btn" data-action="full-custom">
           <div class="cf-full-custom-icon">+</div>
           <div>
-            <div style="font-size:12px;font-weight:500;color:#202124;">Advanced Custom Colors</div>
-            <div style="font-size:10px;color:#5f6368;">Background, Text & Border</div>
+            <div class="cf-full-custom-text">Advanced Custom Colors</div>
+            <div class="cf-full-custom-subtext">Background, Text & Border</div>
           </div>
         </button>
 
