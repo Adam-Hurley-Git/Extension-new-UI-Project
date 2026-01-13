@@ -1387,10 +1387,24 @@
         .cf-sample-event-stripe { width: 4px; align-self: stretch; }
         .cf-sample-event-text { padding: 3px 8px; }
 
-        /* Calendar info row - first row with color box and name */
-        .cf-calendar-info {
-          display: flex; align-items: center; gap: 6px;
+        /* Calendar Default Card - two row layout */
+        .cf-calendar-default-card {
+          display: flex; flex-direction: column; padding: 10px 12px;
+          border-radius: 6px; cursor: pointer; transition: all 0.15s;
+          border: 1.5px solid transparent; margin-bottom: 6px;
+          background: rgba(139, 92, 246, 0.04);
         }
+        .cf-calendar-default-card:hover { background: rgba(139, 92, 246, 0.08); }
+        .cf-calendar-default-card.active { background: rgba(139, 92, 246, 0.12); border-color: #8b5cf6; }
+
+        .cf-calendar-default-row1 {
+          display: flex; align-items: center; gap: 8px;
+        }
+        .cf-calendar-default-row2 {
+          display: flex; align-items: center; gap: 8px;
+          margin-top: 8px; padding-left: 24px; cursor: pointer;
+        }
+
         .cf-calendar-color-box {
           width: 16px; height: 16px; min-width: 16px; border-radius: 3px;
           border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
@@ -1398,11 +1412,6 @@
         .cf-calendar-name {
           font-size: 11px; color: #202124; font-weight: 500; overflow: hidden;
           text-overflow: ellipsis; white-space: nowrap;
-        }
-
-        /* Calendar Default action row - second row with sample event + text */
-        .cf-calendar-action-row {
-          display: flex; align-items: center; gap: 8px; margin-top: 8px;
         }
         .cf-action-text {
           font-size: 10px; color: #5f6368; font-weight: 500; white-space: nowrap;
@@ -1470,29 +1479,30 @@
         </div>
 
         <!-- Calendar Default Option -->
-        <div class="cf-radio-option ${listColorEnabled ? 'active' : ''} ${!hasListColoring ? 'disabled' : ''}" data-option="list">
-          <div class="cf-radio cf-radio-purple ${listColorEnabled ? 'active' : ''}" data-radio="list"></div>
-          ${hasListColoring ? `
-            <div class="cf-radio-option-content">
-              <div class="cf-calendar-info">
-                <div class="cf-calendar-color-box" style="background:${listBgColor}"></div>
-                <span class="cf-calendar-name">"${calendarName}"</span>
-              </div>
-              <div class="cf-calendar-action-row" data-action="use-list-color">
-                <span class="cf-sample-event">
-                  <span class="cf-sample-event-stripe" style="background:${calendarDefaults?.border || listBgColor}"></span>
-                  <span class="cf-sample-event-text" style="background:${listBgColor}; color:${getContrastColor(listBgColor)};">Sample Event</span>
-                </span>
-                <span class="cf-action-text">Use Calendar Default</span>
-              </div>
+        ${hasListColoring ? `
+          <div class="cf-calendar-default-card ${listColorEnabled ? 'active' : ''}" data-option="list">
+            <div class="cf-calendar-default-row1">
+              <div class="cf-radio cf-radio-purple ${listColorEnabled ? 'active' : ''}" data-radio="list"></div>
+              <div class="cf-calendar-color-box" style="background:${listBgColor}"></div>
+              <span class="cf-calendar-name">"${calendarName}"</span>
             </div>
-          ` : `
+            <div class="cf-calendar-default-row2" data-action="use-list-color">
+              <span class="cf-sample-event">
+                <span class="cf-sample-event-stripe" style="background:${calendarDefaults?.border || listBgColor}"></span>
+                <span class="cf-sample-event-text" style="background:${listBgColor}; color:${getContrastColor(listBgColor)};">Sample Event</span>
+              </span>
+              <span class="cf-action-text">Use Calendar Default</span>
+            </div>
+          </div>
+        ` : `
+          <div class="cf-radio-option disabled" data-option="list">
+            <div class="cf-radio cf-radio-purple" data-radio="list"></div>
             <div class="cf-radio-option-content">
               <div class="cf-radio-option-title">Calendar Default</div>
               <div class="cf-radio-option-desc">No default color set for this calendar</div>
             </div>
-          `}
-        </div>
+          </div>
+        `}
 
         <!-- Custom Color Option -->
         <div class="cf-radio-option ${customColorEnabled ? 'active' : ''}" data-option="custom">
