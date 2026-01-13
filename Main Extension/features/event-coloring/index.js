@@ -1119,10 +1119,10 @@
       return;
     }
 
-    // Get current event colors and calendar defaults
+    // Get current event colors and calendar defaults (ColorKit list coloring)
     const currentEventColors = eventColors[eventId] || null;
     const calendarId = getCalendarIdForEvent(eventId);
-    const calendarDefaults = calendarId ? calendarColors[calendarId] : null;
+    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
 
     // Determine current mode
     const isGoogleMode = currentEventColors?.useGoogleColors ||
@@ -1133,15 +1133,19 @@
     const hasListColoring = !!(calendarDefaults?.background || calendarDefaults?.text || calendarDefaults?.border);
     const listColorEnabled = hasListColoring && !currentEventColors?.overrideDefaults && !currentEventColors?.useGoogleColors;
 
+    // Detect if custom event colors are applied (overriding list defaults)
+    const hasCustomColors = !!(currentEventColors?.background || currentEventColors?.text || currentEventColors?.border);
+    const customColorEnabled = isColorKitMode && hasCustomColors && currentEventColors?.overrideDefaults;
+
+    // Get the current applied color for display
+    const currentAppliedColor = currentEventColors?.background || calendarDefaults?.background || null;
+
     // Get calendar name
     let calendarName = calendarId || 'Calendar';
     const calendarSelect = document.querySelector('[data-key="calendar"] select');
     if (calendarSelect?.selectedOptions?.[0]) {
       calendarName = calendarSelect.selectedOptions[0].textContent;
     }
-
-    // Hide Google's built-in color group
-    builtInColorGroup.style.display = 'none';
 
     // Style parent for scrolling
     parentContainer.style.cssText = `
@@ -1151,7 +1155,88 @@
       scrollbar-width: thin !important;
     `;
 
-    // Build and inject the redesigned UI
+    // Wrap Google's built-in color group in our section container (instead of hiding it)
+    const googleSection = document.createElement('div');
+    googleSection.className = `cf-section ${isGoogleMode ? 'cf-section-active' : 'cf-section-inactive'}`;
+    googleSection.dataset.section = 'google';
+    // Apply inline styles for the new design
+    googleSection.style.cssText = `
+      margin-bottom: 12px;
+      padding: 12px;
+      border-radius: 10px;
+      transition: all 0.2s ease;
+      background: ${isGoogleMode ? 'linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%)' : '#f8f9fa'};
+      border: 2px solid ${isGoogleMode ? '#1a73e8' : '#e8eaed'};
+      ${isGoogleMode ? 'box-shadow: 0 2px 8px rgba(0,0,0,0.1);' : 'opacity: 0.5;'}
+    `;
+    googleSection.innerHTML = `
+      <style>
+        .cf-google-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; }
+        .cf-google-section-title { font-size: 13px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
+        .cf-google-section-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
+        .cf-radio { width: 18px; height: 18px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+        .cf-radio.active { border-color: #1a73e8; }
+        .cf-radio.active::after { content: ''; position: absolute; top: 3px; left: 3px; width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
+        .cf-active-badge { background: #1a73e8; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-left: 6px; }
+      </style>
+      <div class="cf-google-section-header" data-action="select-google">
+        <div>
+          <div class="cf-google-section-title">
+            Google Colors
+            ${isGoogleMode ? '<span class="cf-active-badge">Active</span>' : ''}
+          </div>
+          <div class="cf-google-section-desc">Syncs across devices</div>
+        </div>
+        <div class="cf-radio ${isGoogleMode ? 'active' : ''}" data-radio="google"></div>
+      </div>
+      <div class="cf-google-colors-container"></div>
+    `;
+
+    // Find ALL Google color elements (there may be multiple rows)
+    // Google's colors are typically in elements with vbVGZb class or contain color buttons with jsname="Ly0WL"
+    const googleColorElements = [];
+
+    // Strategy 1: Find all vbVGZb elements (Google's color row class)
+    const vbVGZbElements = parentContainer.querySelectorAll('.vbVGZb');
+    vbVGZbElements.forEach(el => googleColorElements.push(el));
+
+    // Strategy 2: If no vbVGZb, find elements containing color buttons
+    if (googleColorElements.length === 0) {
+      const colorButtons = parentContainer.querySelectorAll('div[jsname="Ly0WL"]');
+      const parents = new Set();
+      colorButtons.forEach(btn => {
+        if (btn.parentElement && !parents.has(btn.parentElement)) {
+          parents.add(btn.parentElement);
+          googleColorElements.push(btn.parentElement);
+        }
+      });
+    }
+
+    // Fallback: use the builtInColorGroup we found
+    if (googleColorElements.length === 0) {
+      googleColorElements.push(builtInColorGroup);
+    }
+
+    // Insert the wrapper before the first Google color element
+    const firstColorElement = googleColorElements[0] || builtInColorGroup;
+    parentContainer.insertBefore(googleSection, firstColorElement);
+
+    // Move ALL Google color elements into our container
+    const googleColorsContainer = googleSection.querySelector('.cf-google-colors-container');
+    googleColorElements.forEach(el => {
+      googleColorsContainer.appendChild(el);
+      // Show the colors but style them for grey-out effect when not in Google mode
+      el.style.display = '';
+      if (!isGoogleMode) {
+        el.style.opacity = '0.5';
+        el.style.pointerEvents = 'none';
+      } else {
+        el.style.opacity = '1';
+        el.style.pointerEvents = 'auto';
+      }
+    });
+
+    // Build and inject the rest of the redesigned UI (without Google's section)
     const panel = document.createElement('div');
     panel.className = 'cf-injected-panel';
     panel.innerHTML = buildRedesignedPanelHTML({
@@ -1159,22 +1244,46 @@
       isColorKitMode,
       hasListColoring,
       listColorEnabled,
+      customColorEnabled,
+      currentAppliedColor,
       calendarName,
       calendarDefaults,
       categories: Object.values(categories),
       templates: Object.values(templates),
+      skipGoogleSection: true, // Don't render duplicate Google section
     });
 
-    // Insert at the beginning
-    parentContainer.insertBefore(panel, parentContainer.firstChild);
+    // Insert after the Google section
+    googleSection.insertAdjacentElement('afterend', panel);
 
-    // Attach event listeners
+    // Attach event listeners to the panel (ColorKit sections)
     attachRedesignedPanelListeners(panel, colorPickerElement, scenario, eventId, {
       isGoogleMode,
       hasListColoring,
       listColorEnabled,
+      customColorEnabled,
       builtInColorGroup,
     });
+
+    // Attach click listener to Google section header/radio for switching to Google mode
+    const googleHeader = googleSection.querySelector('.cf-google-section-header');
+    const googleRadio = googleSection.querySelector('.cf-radio[data-radio="google"]');
+
+    const handleGoogleSelect = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isGoogleMode) {
+        await handleSwitchToGoogleModeRedesigned(eventId);
+      }
+    };
+
+    if (googleHeader) googleHeader.addEventListener('click', handleGoogleSelect);
+    if (googleRadio) googleRadio.addEventListener('click', handleGoogleSelect);
+
+    // Setup cleanup handlers for Google color buttons
+    // When user clicks a Google color, mark the event to use Google colors
+    // This bypasses ALL ColorKit coloring including list defaults
+    setupGoogleColorCleanupHandlers(colorPickerElement, scenario);
 
     isInjecting = false;
   }
@@ -1188,10 +1297,13 @@
       isColorKitMode,
       hasListColoring,
       listColorEnabled,
+      customColorEnabled,
+      currentAppliedColor,
       calendarName,
       calendarDefaults,
       categories: categoriesArray,
       templates: templatesArray,
+      skipGoogleSection = false,
     } = data;
 
     const listBgColor = calendarDefaults?.background || '#039be5';
@@ -1215,130 +1327,191 @@
 
     return `
       <style>
-        .cf-injected-panel { padding: 8px 0; font-family: 'Google Sans', Roboto, sans-serif; }
-        .cf-section { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; transition: opacity 0.2s; }
-        .cf-section.disabled { opacity: 0.45; pointer-events: none; }
-        .cf-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-        .cf-section-title { font-size: 12px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
-        .cf-section-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
-        .cf-toggle { width: 36px; height: 20px; background: #dadce0; border-radius: 10px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
-        .cf-toggle.active { background: #1a73e8; }
-        .cf-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: white; border-radius: 50%; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        .cf-toggle.active::after { left: 18px; }
-        .cf-pro-badge { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; padding: 1px 5px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; }
-        .cf-color-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-        .cf-color-swatch { width: 24px; height: 24px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .cf-injected-panel { padding: 6px 0; font-family: 'Google Sans', Roboto, sans-serif; }
+
+        /* Section styles */
+        .cf-section { margin-bottom: 10px; padding: 10px; border-radius: 8px; transition: all 0.2s ease; }
+        .cf-section.cf-section-active { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .cf-section.cf-section-inactive { opacity: 0.5; background: #f8f9fa !important; border-color: #e8eaed !important; }
+        .cf-section.cf-section-inactive:hover { opacity: 0.7; }
+        .cf-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; cursor: pointer; gap: 8px; }
+        .cf-section-title { font-size: 12px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .cf-section-desc { font-size: 9px; color: #5f6368; margin-top: 1px; }
+
+        /* Radio button styles */
+        .cf-radio { width: 16px; height: 16px; min-width: 16px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+        .cf-radio.active { border-color: #1a73e8; }
+        .cf-radio.active::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
+        .cf-radio-purple.active { border-color: #8b5cf6; }
+        .cf-radio-purple.active::after { background: #8b5cf6; }
+
+        /* Badge styles */
+        .cf-active-badge { background: #1a73e8; color: white; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 600; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
+        .cf-active-badge-purple { background: #8b5cf6; }
+        .cf-pro-badge { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; padding: 1px 4px; border-radius: 3px; font-size: 7px; font-weight: 600; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
+
+        /* ColorKit section */
+        .cf-colorkit-section {
+          background: ${isColorKitMode ? 'linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%)' : '#f8f9fa'};
+          border: 2px solid ${isColorKitMode ? '#8b5cf6' : '#e8eaed'};
+          padding: 10px;
+        }
+        .cf-colorkit-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 6px; }
+        .cf-colorkit-title { font-size: 13px; font-weight: 700; color: #202124; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+
+        /* Radio options within ColorKit */
+        .cf-radio-option {
+          display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px;
+          border-radius: 6px; cursor: pointer; transition: all 0.15s;
+          border: 1.5px solid transparent; margin-bottom: 6px;
+          min-height: auto;
+        }
+        .cf-radio-option:last-of-type { margin-bottom: 0; }
+        .cf-radio-option:hover { background: rgba(139, 92, 246, 0.08); }
+        .cf-radio-option.active { background: rgba(139, 92, 246, 0.12); border-color: #8b5cf6; }
+        .cf-radio-option.disabled { opacity: 0.5; pointer-events: none; }
+        .cf-radio-option .cf-radio { margin-top: 2px; }
+        .cf-radio-option-content { flex: 1; min-width: 0; overflow: hidden; }
+        .cf-radio-option-title { font-size: 11px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; line-height: 1.3; }
+        .cf-radio-option-desc { font-size: 9px; color: #5f6368; margin-top: 2px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+        /* Color preview in option */
+        .cf-option-color { width: 20px; height: 20px; min-width: 20px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); margin-top: 2px; }
+
+        /* Quick colors section */
+        .cf-quick-colors { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(139, 92, 246, 0.2); }
+        .cf-quick-colors.disabled { opacity: 0.4; pointer-events: none; }
+
+        .cf-color-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+        .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .cf-color-swatch:hover { transform: scale(1.15); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-        .cf-list-info { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 8px; background: #f8f9fa; border-radius: 6px; }
-        .cf-list-color { width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0; }
-        .cf-list-name { font-size: 11px; color: #202124; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .cf-full-custom-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px; background: #f8f9fa; border: 1.5px dashed #dadce0; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
-        .cf-full-custom-btn:hover { background: #e8f0fe; border-color: #1a73e8; }
-        .cf-full-custom-icon { width: 24px; height: 24px; background: #e8eaed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #5f6368; }
-        .cf-divider { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; font-size: 10px; font-weight: 600; color: #5f6368; text-transform: uppercase; }
-        .cf-divider::before, .cf-divider::after { content: ''; flex: 1; height: 1px; background: #e8eaed; }
-        .cf-category-section { margin-bottom: 10px; }
-        .cf-category-label { font-size: 10px; font-weight: 600; color: #5f6368; text-transform: uppercase; margin-bottom: 6px; }
-        .cf-templates-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-        .cf-template-chip { padding: 4px 10px; border-radius: 12px; border: none; font-size: 11px; font-weight: 500; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+
+        .cf-full-custom-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; background: rgba(139, 92, 246, 0.08); border: 1.5px dashed #8b5cf6; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
+        .cf-full-custom-btn:hover { background: rgba(139, 92, 246, 0.15); }
+        .cf-full-custom-icon { width: 20px; height: 20px; min-width: 20px; background: #8b5cf6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: bold; }
+        .cf-full-custom-text { font-size: 11px; font-weight: 500; color: #202124; }
+        .cf-full-custom-subtext { font-size: 9px; color: #5f6368; }
+
+        .cf-divider { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; font-size: 9px; font-weight: 600; color: #5f6368; text-transform: uppercase; }
+        .cf-divider::before, .cf-divider::after { content: ''; flex: 1; height: 1px; background: rgba(139, 92, 246, 0.2); }
+
+        .cf-category-section { margin-bottom: 8px; }
+        .cf-category-section.disabled { opacity: 0.4; pointer-events: none; }
+        .cf-category-label { font-size: 9px; font-weight: 600; color: #5f6368; text-transform: uppercase; margin-bottom: 4px; }
+        .cf-templates-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+        .cf-template-chip { padding: 3px 8px; border-radius: 10px; border: none; font-size: 10px; font-weight: 500; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
         .cf-template-chip:hover { transform: scale(1.05); box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-        .cf-section-google { background: ${isGoogleMode ? 'linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%)' : '#f8f9fa'}; border: 1px solid ${isGoogleMode ? '#1a73e8' : '#e8eaed'}; }
-        .cf-section-list { background: ${listColorEnabled ? 'linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%)' : '#f8f9fa'}; border: 1px solid ${listColorEnabled ? '#1a73e8' : '#e8eaed'}; }
-        .cf-section-colorkit { background: ${isColorKitMode ? 'linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%)' : '#f8f9fa'}; border: 1px solid ${isColorKitMode ? '#8b5cf6' : '#e8eaed'}; }
       </style>
 
-      <!-- Google's Own Colors Section -->
-      <div class="cf-section cf-section-google ${isGoogleMode ? '' : 'disabled'}" data-section="google">
-        <div class="cf-section-header">
+      ${skipGoogleSection ? '' : `
+      <!-- Google's Own Colors Section - only shown if not skipped -->
+      <div class="cf-section ${isGoogleMode ? 'cf-section-active' : 'cf-section-inactive'}"
+           style="background: ${isGoogleMode ? 'linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%)' : '#f8f9fa'}; border: 2px solid ${isGoogleMode ? '#1a73e8' : '#e8eaed'};"
+           data-section="google">
+        <div class="cf-section-header" data-action="select-google">
           <div>
-            <div class="cf-section-title">Google's own colors</div>
-            <div class="cf-section-desc">Use Google's built-in colors. Syncs across devices.</div>
+            <div class="cf-section-title">
+              Google Colors
+              ${isGoogleMode ? '<span class="cf-active-badge">Active</span>' : ''}
+            </div>
+            <div class="cf-section-desc">Syncs across devices</div>
           </div>
-          <div class="cf-toggle ${isGoogleMode ? 'active' : ''}" data-toggle="google"></div>
+          <div class="cf-radio ${isGoogleMode ? 'active' : ''}" data-radio="google"></div>
         </div>
         <div class="cf-color-grid">
           ${googleColors.map(c => `<div class="cf-color-swatch cf-google-color" style="background:${c}" data-color="${c}" data-type="google"></div>`).join('')}
         </div>
       </div>
+      `}
 
-      <!-- ColorKit List Color Section -->
-      <div class="cf-section cf-section-list ${isColorKitMode ? '' : 'disabled'}" data-section="list">
-        <div class="cf-section-header">
-          <div>
-            <div class="cf-section-title">ColorKit List Color <span class="cf-pro-badge">PRO</span></div>
-            <div class="cf-section-desc">Apply calendar's default color</div>
+      <!-- ColorKit Section - Consolidated -->
+      <div class="cf-section cf-colorkit-section ${isColorKitMode ? 'cf-section-active' : 'cf-section-inactive'}" data-section="colorkit-main">
+        <div class="cf-colorkit-header">
+          <div class="cf-colorkit-title">
+            ColorKit
+            <span class="cf-pro-badge">PRO</span>
+            ${isColorKitMode ? '<span class="cf-active-badge cf-active-badge-purple">Active</span>' : ''}
           </div>
-          <div class="cf-toggle ${listColorEnabled ? 'active' : ''}" data-toggle="list"></div>
         </div>
-        ${hasListColoring ? `
-          <div class="cf-list-info">
-            <div class="cf-list-color" style="background:${listBgColor}"></div>
-            <div class="cf-list-name">${calendarName}</div>
-          </div>
-        ` : `
-          <div class="cf-section-desc" style="margin-top:6px;font-style:italic;">No list color set for this calendar</div>
-        `}
-      </div>
 
-      <!-- ColorKit's Colors Section -->
-      <div class="cf-section cf-section-colorkit ${isColorKitMode ? '' : 'disabled'}" data-section="colorkit">
-        <div class="cf-section-header">
-          <div>
-            <div class="cf-section-title">ColorKit's Colors</div>
-            <div class="cf-section-desc">Use custom colors with text & border options.</div>
+        <!-- Calendar Default Option -->
+        <div class="cf-radio-option ${listColorEnabled ? 'active' : ''} ${!hasListColoring ? 'disabled' : ''}" data-option="list">
+          <div class="cf-radio cf-radio-purple ${listColorEnabled ? 'active' : ''}" data-radio="list"></div>
+          <div class="cf-radio-option-content">
+            <div class="cf-radio-option-title">
+              Calendar Default
+              ${listColorEnabled ? '<span class="cf-active-badge cf-active-badge-purple">Using</span>' : ''}
+            </div>
+            <div class="cf-radio-option-desc">
+              ${hasListColoring ? `All events in "${calendarName}"` : 'No default color set for this calendar'}
+            </div>
           </div>
-          <div class="cf-toggle ${isColorKitMode ? 'active' : ''}" data-toggle="colorkit"></div>
+          ${hasListColoring ? `<div class="cf-option-color" style="background:${listBgColor}"></div>` : ''}
         </div>
+
+        <!-- Custom Color Option -->
+        <div class="cf-radio-option ${customColorEnabled ? 'active' : ''}" data-option="custom">
+          <div class="cf-radio cf-radio-purple ${customColorEnabled ? 'active' : ''}" data-radio="custom"></div>
+          <div class="cf-radio-option-content">
+            <div class="cf-radio-option-title">
+              Custom Color
+              ${customColorEnabled ? '<span class="cf-active-badge cf-active-badge-purple">Using</span>' : ''}
+            </div>
+            <div class="cf-radio-option-desc">Override just this event</div>
+          </div>
+          ${customColorEnabled && currentAppliedColor ? `<div class="cf-option-color" style="background:${currentAppliedColor}"></div>` : ''}
+        </div>
+
+        <!-- Full Custom Button -->
         <button class="cf-full-custom-btn" data-action="full-custom">
           <div class="cf-full-custom-icon">+</div>
           <div>
-            <div style="font-size:12px;font-weight:500;color:#202124;">Full Custom Coloring</div>
-            <div style="font-size:10px;color:#5f6368;">Background, Text and Border</div>
+            <div class="cf-full-custom-text">Advanced Custom Colors</div>
+            <div class="cf-full-custom-subtext">Background, Text & Border</div>
           </div>
         </button>
-      </div>
 
-      <!-- Background Colors Divider -->
-      <div class="cf-divider">Background Colors</div>
+        <!-- Quick Colors -->
+        <div class="cf-quick-colors ${isColorKitMode ? '' : 'disabled'}">
+          <div class="cf-divider">Quick Colors</div>
 
-      <!-- Google's Default Colors for Quick Pick -->
-      <div class="cf-category-section ${isColorKitMode ? '' : 'disabled'}">
-        <div class="cf-category-label">Google's Default Colors</div>
-        <div class="cf-color-grid">
-          ${googleColors.map(c => `<div class="cf-color-swatch" style="background:${c}" data-color="${c}" data-type="colorkit"></div>`).join('')}
+          <div class="cf-category-section">
+            <div class="cf-category-label">Standard Colors</div>
+            <div class="cf-color-grid">
+              ${googleColors.map(c => `<div class="cf-color-swatch" style="background:${c}" data-color="${c}" data-type="colorkit"></div>`).join('')}
+            </div>
+          </div>
+
+          ${categoriesArray.map(cat => `
+            <div class="cf-category-section">
+              <div class="cf-category-label">${cat.name || 'Category'}</div>
+              <div class="cf-color-grid">
+                ${(cat.colors || []).map(colorObj => {
+                  const hex = typeof colorObj === 'string' ? colorObj : colorObj.hex;
+                  return `<div class="cf-color-swatch" style="background:${hex}" data-color="${hex}" data-type="colorkit"></div>`;
+                }).join('')}
+              </div>
+            </div>
+          `).join('')}
+
+          ${templatesArray.length > 0 ? `
+            <div class="cf-category-section">
+              <div class="cf-category-label">
+                <span style="display:inline-flex;align-items:center;gap:4px;">Templates <span class="cf-pro-badge">PRO</span></span>
+              </div>
+              <div class="cf-templates-grid">
+                ${templatesArray.map(t => `
+                  <button class="cf-template-chip" data-template="${t.id}" style="
+                    background:${t.background || '#039be5'};
+                    color:${t.text || getContrastColor(t.background || '#039be5')};
+                    ${t.border ? `outline:2px solid ${t.border};outline-offset:-1px;` : ''}
+                  ">${t.name || 'Template'}</button>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
         </div>
       </div>
-
-      <!-- Custom Categories -->
-      ${categoriesArray.map(cat => `
-        <div class="cf-category-section ${isColorKitMode ? '' : 'disabled'}">
-          <div class="cf-category-label">${cat.name || 'Category'}</div>
-          <div class="cf-color-grid">
-            ${(cat.colors || []).map(colorObj => {
-              const hex = typeof colorObj === 'string' ? colorObj : colorObj.hex;
-              return `<div class="cf-color-swatch" style="background:${hex}" data-color="${hex}" data-type="colorkit"></div>`;
-            }).join('')}
-          </div>
-        </div>
-      `).join('')}
-
-      <!-- Templates -->
-      ${templatesArray.length > 0 ? `
-        <div class="cf-category-section ${isColorKitMode ? '' : 'disabled'}">
-          <div class="cf-category-label">
-            <span style="display:inline-flex;align-items:center;gap:4px;">Templates <span class="cf-pro-badge">PRO</span></span>
-          </div>
-          <div class="cf-templates-grid">
-            ${templatesArray.map(t => `
-              <button class="cf-template-chip" data-template="${t.id}" style="
-                background:${t.background || '#039be5'};
-                color:${t.text || getContrastColor(t.background || '#039be5')};
-                ${t.border ? `outline:2px solid ${t.border};outline-offset:-1px;` : ''}
-              ">${t.name || 'Template'}</button>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
     `;
   }
 
@@ -1346,28 +1519,30 @@
    * Attach event listeners to the redesigned panel
    */
   function attachRedesignedPanelListeners(panel, colorPickerElement, scenario, eventId, state) {
-    const { isGoogleMode, hasListColoring, listColorEnabled, builtInColorGroup } = state;
+    const { isGoogleMode, hasListColoring, listColorEnabled, customColorEnabled, builtInColorGroup } = state;
 
-    // Toggle handlers
-    panel.querySelectorAll('.cf-toggle').forEach(toggle => {
-      toggle.addEventListener('click', async (e) => {
+    // Radio option handlers - Calendar Default
+    const listOption = panel.querySelector('[data-option="list"]');
+    if (listOption && hasListColoring) {
+      listOption.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const toggleType = toggle.dataset.toggle;
-
-        if (toggleType === 'google') {
-          await handleSwitchToGoogleModeRedesigned(eventId);
-        } else if (toggleType === 'colorkit') {
-          await handleSwitchToColorKitModeRedesigned(eventId, hasListColoring);
-        } else if (toggleType === 'list') {
-          if (listColorEnabled) {
-            showDisableListColorPromptRedesigned(eventId);
-          } else if (hasListColoring) {
-            await handleEnableListColoringRedesigned(eventId);
-          }
+        if (!listColorEnabled) {
+          await handleEnableListColoringRedesigned(eventId);
         }
       });
-    });
+    }
+
+    // Radio option handlers - Custom Color
+    const customOption = panel.querySelector('[data-option="custom"]');
+    if (customOption) {
+      customOption.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeColorPicker();
+        openCustomColorModal(eventId);
+      });
+    }
 
     // Full custom button
     panel.querySelector('[data-action="full-custom"]')?.addEventListener('click', (e) => {
@@ -1377,21 +1552,7 @@
       openCustomColorModal(eventId);
     });
 
-    // Google color swatches (in Google section)
-    panel.querySelectorAll('.cf-google-color').forEach(swatch => {
-      swatch.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const color = swatch.dataset.color;
-        // Find and click Google's actual button
-        const googleBtn = builtInColorGroup?.querySelector(`[data-color="${color}"]`);
-        if (googleBtn) {
-          googleBtn.click();
-        }
-      });
-    });
-
-    // ColorKit color swatches
+    // ColorKit color swatches - these set custom colors
     panel.querySelectorAll('.cf-color-swatch[data-type="colorkit"]').forEach(swatch => {
       swatch.addEventListener('click', async (e) => {
         e.preventDefault();
@@ -1468,15 +1629,21 @@
           } else {
             await window.cc3Storage.removeEventColor(eventId);
           }
+          // Clear from local cache so list coloring takes effect immediately
+          delete eventColors[eventId];
           closeColorPicker();
-          applyStoredColors();
+          // Refresh colors from storage and re-apply
+          await refreshColors();
         },
         onClose: () => {}
       });
     } else {
       await window.cc3Storage.removeEventColor(eventId);
+      // Clear from local cache so list coloring takes effect immediately
+      delete eventColors[eventId];
       closeColorPicker();
-      applyStoredColors();
+      // Refresh colors from storage and re-apply
+      await refreshColors();
     }
   }
 
