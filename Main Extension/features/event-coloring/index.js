@@ -1365,7 +1365,7 @@
         /* Radio button styles */
         .cf-radio { width: 16px; height: 16px; min-width: 16px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-sizing: border-box; }
         .cf-radio.active { border-color: #1a73e8; }
-        .cf-radio.active::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
+        .cf-radio.active::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 9px; height: 9px; background: #1a73e8; border-radius: 50%; }
         .cf-radio-purple.active { border-color: #8b5cf6; }
         .cf-radio-purple.active::after { background: #8b5cf6; }
 
@@ -3621,9 +3621,21 @@
   async function handleColorSelection(eventId, colorHex) {
     console.log('[EventColoring] Color selected:', eventId, colorHex);
 
-    // Get existing colors and calendar defaults
+    // Get existing colors from cache
     const existingColors = findColorForEvent(eventId) || {};
-    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
+
+    // Get calendar defaults - refresh cache if needed to ensure we have latest data
+    let calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+    if (!calendarDefaults) {
+      // Try refreshing the calendar defaults cache from storage
+      try {
+        calendarDefaultColors = await window.cc3Storage.getEventCalendarColors() || {};
+        calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+      } catch (e) {
+        console.warn('[EventColoring] Failed to refresh calendar defaults:', e);
+      }
+    }
+    calendarDefaults = calendarDefaults || {};
 
     console.log('[EventColoring] Existing colors:', JSON.stringify(existingColors));
     console.log('[EventColoring] Calendar defaults:', JSON.stringify(calendarDefaults));
