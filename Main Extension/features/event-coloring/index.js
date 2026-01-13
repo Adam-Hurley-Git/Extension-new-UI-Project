@@ -1325,6 +1325,19 @@
       return luminance > 0.5 ? '#000000' : '#ffffff';
     };
 
+    // Helper to check if a color is currently selected
+    const isColorSelected = (color) => {
+      if (!currentAppliedColor || !color) return false;
+      return color.toLowerCase() === currentAppliedColor.toLowerCase();
+    };
+
+    // Helper to render a color swatch with checkmark
+    const renderSwatch = (color, type, extraClass = '') => {
+      const selected = isColorSelected(color);
+      const checkColor = getContrastColor(color);
+      return `<div class="cf-color-swatch ${extraClass} ${selected ? 'selected' : ''}" style="background:${color}; color:${color};" data-color="${color}" data-type="${type}"><span class="cf-swatch-check" style="color:${checkColor}">✓</span></div>`;
+    };
+
     return `
       <style>
         .cf-injected-panel { padding: 6px 0; font-family: 'Google Sans', Roboto, sans-serif; }
@@ -1429,8 +1442,11 @@
         .cf-quick-colors.disabled { opacity: 0.4; pointer-events: none; }
 
         .cf-color-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-        .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; display: flex; align-items: center; justify-content: center; }
         .cf-color-swatch:hover { transform: scale(1.15); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .cf-color-swatch .cf-swatch-check { display: none; font-size: 14px; font-weight: bold; }
+        .cf-color-swatch.selected .cf-swatch-check { display: block; }
+        .cf-color-swatch.selected { box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor; }
 
         .cf-full-custom-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; background: rgba(139, 92, 246, 0.08); border: 1.5px dashed #8b5cf6; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
         .cf-full-custom-btn:hover { background: rgba(139, 92, 246, 0.15); }
@@ -1465,7 +1481,7 @@
           <div class="cf-radio ${isGoogleMode ? 'active' : ''}" data-radio="google"></div>
         </div>
         <div class="cf-color-grid">
-          ${googleColors.map(c => `<div class="cf-color-swatch cf-google-color" style="background:${c}" data-color="${c}" data-type="google"></div>`).join('')}
+          ${googleColors.map(c => renderSwatch(c, 'google', 'cf-google-color')).join('')}
         </div>
       </div>
       `}
@@ -1534,7 +1550,7 @@
           <div class="cf-category-section">
             <div class="cf-category-label">Standard Colors</div>
             <div class="cf-color-grid">
-              ${googleColors.map(c => `<div class="cf-color-swatch" style="background:${c}" data-color="${c}" data-type="colorkit"></div>`).join('')}
+              ${googleColors.map(c => renderSwatch(c, 'colorkit')).join('')}
             </div>
           </div>
 
@@ -1544,7 +1560,7 @@
               <div class="cf-color-grid">
                 ${(cat.colors || []).map(colorObj => {
                   const hex = typeof colorObj === 'string' ? colorObj : colorObj.hex;
-                  return `<div class="cf-color-swatch" style="background:${hex}" data-color="${hex}" data-type="colorkit"></div>`;
+                  return renderSwatch(hex, 'colorkit');
                 }).join('')}
               </div>
             </div>
