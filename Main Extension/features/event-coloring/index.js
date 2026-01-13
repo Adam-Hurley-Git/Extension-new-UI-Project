@@ -1622,13 +1622,47 @@
     });
 
     // ColorKit color swatches - these set custom colors
+    // Uses handleColorSelection to properly check for existing text/border properties
     panel.querySelectorAll('.cf-color-swatch[data-type="colorkit"]').forEach(swatch => {
       swatch.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         const color = swatch.dataset.color;
-        await handleColorKitColorSelect(eventId, color);
-        closeColorPicker();
+        // Use handleColorSelection which checks for existing properties and shows merge dialog if needed
+        await handleColorSelection(eventId, color);
+        // Note: closeColorPicker is called inside handleColorSelection flow
+      });
+    });
+
+    // Google color swatches in redesigned panel (when skipGoogleSection is false)
+    // These need to click Google's native color buttons
+    panel.querySelectorAll('.cf-google-color').forEach(swatch => {
+      swatch.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const color = swatch.dataset.color;
+        // Find and click Google's native color button with matching color
+        const googleButtons = colorPickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
+        for (const btn of googleButtons) {
+          const btnStyle = window.getComputedStyle(btn);
+          const btnColor = btnStyle.backgroundColor;
+          // Convert RGB to hex for comparison
+          const rgbMatch = btnColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if (rgbMatch) {
+            const hex = '#' + [1,2,3].map(i => parseInt(rgbMatch[i]).toString(16).padStart(2, '0')).join('');
+            if (hex.toLowerCase() === color.toLowerCase()) {
+              btn.click();
+              return;
+            }
+          }
+          // Also check data-color attribute
+          const dataColor = btn.getAttribute('data-color');
+          if (dataColor && dataColor.toLowerCase() === color.toLowerCase()) {
+            btn.click();
+            return;
+          }
+        }
+        console.warn('[EventColoring] Could not find Google color button for:', color);
       });
     });
 
