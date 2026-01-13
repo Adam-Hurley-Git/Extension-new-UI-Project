@@ -1325,10 +1325,21 @@
       return luminance > 0.5 ? '#000000' : '#ffffff';
     };
 
+    // Helper to normalize hex color for comparison
+    const normalizeHex = (hex) => {
+      if (!hex) return null;
+      let h = hex.trim().toLowerCase();
+      // Handle 3-char hex codes
+      if (/^#[0-9a-f]{3}$/i.test(h)) {
+        h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+      }
+      return h;
+    };
+
     // Helper to check if a color is currently selected
     const isColorSelected = (color) => {
       if (!currentAppliedColor || !color) return false;
-      return color.toLowerCase() === currentAppliedColor.toLowerCase();
+      return normalizeHex(color) === normalizeHex(currentAppliedColor);
     };
 
     // Helper to render a color swatch with checkmark
@@ -1442,11 +1453,11 @@
         .cf-quick-colors.disabled { opacity: 0.4; pointer-events: none; }
 
         .cf-color-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-        .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; display: flex; align-items: center; justify-content: center; }
-        .cf-color-swatch:hover { transform: scale(1.15); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-        .cf-color-swatch .cf-swatch-check { display: none; font-size: 14px; font-weight: bold; }
+        .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+        .cf-color-swatch:hover { transform: scale(1.1); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .cf-color-swatch .cf-swatch-check { display: none; font-size: 12px; font-weight: bold; }
         .cf-color-swatch.selected .cf-swatch-check { display: block; }
-        .cf-color-swatch.selected { box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor; }
+        .cf-color-swatch.selected { border-color: white; box-shadow: 0 0 0 2px #5f6368; }
 
         .cf-full-custom-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; background: rgba(139, 92, 246, 0.08); border: 1.5px dashed #8b5cf6; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
         .cf-full-custom-btn:hover { background: rgba(139, 92, 246, 0.15); }
