@@ -1174,9 +1174,9 @@
         .cf-google-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; }
         .cf-google-section-title { font-size: 13px; font-weight: 600; color: #202124; display: flex; align-items: center; gap: 6px; }
         .cf-google-section-desc { font-size: 10px; color: #5f6368; margin-top: 2px; }
-        .cf-radio { width: 18px; height: 18px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+        .cf-radio { width: 18px; height: 18px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-sizing: border-box; }
         .cf-radio.active { border-color: #1a73e8; }
-        .cf-radio.active::after { content: ''; position: absolute; top: 3px; left: 3px; width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
+        .cf-radio.active::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; background: #1a73e8; border-radius: 50%; }
         .cf-active-badge { background: #1a73e8; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-left: 6px; }
       </style>
       <div class="cf-google-section-header" data-action="select-google">
@@ -1325,6 +1325,30 @@
       return luminance > 0.5 ? '#000000' : '#ffffff';
     };
 
+    // Helper to normalize hex color for comparison
+    const normalizeHex = (hex) => {
+      if (!hex) return null;
+      let h = hex.trim().toLowerCase();
+      // Handle 3-char hex codes
+      if (/^#[0-9a-f]{3}$/i.test(h)) {
+        h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+      }
+      return h;
+    };
+
+    // Helper to check if a color is currently selected
+    const isColorSelected = (color) => {
+      if (!currentAppliedColor || !color) return false;
+      return normalizeHex(color) === normalizeHex(currentAppliedColor);
+    };
+
+    // Helper to render a color swatch with checkmark
+    const renderSwatch = (color, type, extraClass = '') => {
+      const selected = isColorSelected(color);
+      const checkColor = getContrastColor(color);
+      return `<div class="cf-color-swatch ${extraClass} ${selected ? 'selected' : ''}" style="background:${color}; color:${color};" data-color="${color}" data-type="${type}"><span class="cf-swatch-check" style="color:${checkColor}">✓</span></div>`;
+    };
+
     return `
       <style>
         .cf-injected-panel { padding: 6px 0; font-family: 'Google Sans', Roboto, sans-serif; }
@@ -1339,9 +1363,9 @@
         .cf-section-desc { font-size: 9px; color: #5f6368; margin-top: 1px; }
 
         /* Radio button styles */
-        .cf-radio { width: 16px; height: 16px; min-width: 16px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+        .cf-radio { width: 16px; height: 16px; min-width: 16px; border: 2px solid #dadce0; border-radius: 50%; position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-sizing: border-box; }
         .cf-radio.active { border-color: #1a73e8; }
-        .cf-radio.active::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; background: #1a73e8; border-radius: 50%; }
+        .cf-radio.active::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 9px; height: 9px; background: #1a73e8; border-radius: 50%; }
         .cf-radio-purple.active { border-color: #8b5cf6; }
         .cf-radio-purple.active::after { background: #8b5cf6; }
 
@@ -1429,8 +1453,11 @@
         .cf-quick-colors.disabled { opacity: 0.4; pointer-events: none; }
 
         .cf-color-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-        .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .cf-color-swatch:hover { transform: scale(1.15); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+        .cf-color-swatch:hover { transform: scale(1.1); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .cf-color-swatch .cf-swatch-check { display: none; font-size: 12px; font-weight: bold; }
+        .cf-color-swatch.selected .cf-swatch-check { display: block; }
+        .cf-color-swatch.selected { border-color: white; box-shadow: 0 0 0 2px #5f6368; }
 
         .cf-full-custom-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; background: rgba(139, 92, 246, 0.08); border: 1.5px dashed #8b5cf6; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
         .cf-full-custom-btn:hover { background: rgba(139, 92, 246, 0.15); }
@@ -1465,7 +1492,7 @@
           <div class="cf-radio ${isGoogleMode ? 'active' : ''}" data-radio="google"></div>
         </div>
         <div class="cf-color-grid">
-          ${googleColors.map(c => `<div class="cf-color-swatch cf-google-color" style="background:${c}" data-color="${c}" data-type="google"></div>`).join('')}
+          ${googleColors.map(c => renderSwatch(c, 'google', 'cf-google-color')).join('')}
         </div>
       </div>
       `}
@@ -1534,7 +1561,7 @@
           <div class="cf-category-section">
             <div class="cf-category-label">Standard Colors</div>
             <div class="cf-color-grid">
-              ${googleColors.map(c => `<div class="cf-color-swatch" style="background:${c}" data-color="${c}" data-type="colorkit"></div>`).join('')}
+              ${googleColors.map(c => renderSwatch(c, 'colorkit')).join('')}
             </div>
           </div>
 
@@ -1544,7 +1571,7 @@
               <div class="cf-color-grid">
                 ${(cat.colors || []).map(colorObj => {
                   const hex = typeof colorObj === 'string' ? colorObj : colorObj.hex;
-                  return `<div class="cf-color-swatch" style="background:${hex}" data-color="${hex}" data-type="colorkit"></div>`;
+                  return renderSwatch(hex, 'colorkit');
                 }).join('')}
               </div>
             </div>
@@ -1622,13 +1649,47 @@
     });
 
     // ColorKit color swatches - these set custom colors
+    // Uses handleColorSelection to properly check for existing text/border properties
     panel.querySelectorAll('.cf-color-swatch[data-type="colorkit"]').forEach(swatch => {
       swatch.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         const color = swatch.dataset.color;
-        await handleColorKitColorSelect(eventId, color);
-        closeColorPicker();
+        // Use handleColorSelection which checks for existing properties and shows merge dialog if needed
+        await handleColorSelection(eventId, color);
+        // Note: closeColorPicker is called inside handleColorSelection flow
+      });
+    });
+
+    // Google color swatches in redesigned panel (when skipGoogleSection is false)
+    // These need to click Google's native color buttons
+    panel.querySelectorAll('.cf-google-color').forEach(swatch => {
+      swatch.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const color = swatch.dataset.color;
+        // Find and click Google's native color button with matching color
+        const googleButtons = colorPickerElement.querySelectorAll(COLOR_PICKER_SELECTORS.GOOGLE_COLOR_BUTTON);
+        for (const btn of googleButtons) {
+          const btnStyle = window.getComputedStyle(btn);
+          const btnColor = btnStyle.backgroundColor;
+          // Convert RGB to hex for comparison
+          const rgbMatch = btnColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if (rgbMatch) {
+            const hex = '#' + [1,2,3].map(i => parseInt(rgbMatch[i]).toString(16).padStart(2, '0')).join('');
+            if (hex.toLowerCase() === color.toLowerCase()) {
+              btn.click();
+              return;
+            }
+          }
+          // Also check data-color attribute
+          const dataColor = btn.getAttribute('data-color');
+          if (dataColor && dataColor.toLowerCase() === color.toLowerCase()) {
+            btn.click();
+            return;
+          }
+        }
+        console.warn('[EventColoring] Could not find Google color button for:', color);
       });
     });
 
@@ -3560,9 +3621,21 @@
   async function handleColorSelection(eventId, colorHex) {
     console.log('[EventColoring] Color selected:', eventId, colorHex);
 
-    // Get existing colors and calendar defaults
+    // Get existing colors from cache
     const existingColors = findColorForEvent(eventId) || {};
-    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId) || {};
+
+    // Get calendar defaults - refresh cache if needed to ensure we have latest data
+    let calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+    if (!calendarDefaults) {
+      // Try refreshing the calendar defaults cache from storage
+      try {
+        calendarDefaultColors = await window.cc3Storage.getEventCalendarColors() || {};
+        calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+      } catch (e) {
+        console.warn('[EventColoring] Failed to refresh calendar defaults:', e);
+      }
+    }
+    calendarDefaults = calendarDefaults || {};
 
     console.log('[EventColoring] Existing colors:', JSON.stringify(existingColors));
     console.log('[EventColoring] Calendar defaults:', JSON.stringify(calendarDefaults));
@@ -3592,6 +3665,7 @@
             text: existingColors.text || calendarDefaults.text || null,
             border: existingColors.border || calendarDefaults.border || null,
             borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
+            overrideDefaults: true, // Must override calendar defaults since user chose custom color
           };
           console.log('[EventColoring] Keeping existing, merged colors:', mergedColors);
           await applyBackgroundWithMerge(eventId, mergedColors);
@@ -3622,12 +3696,18 @@
   async function applyBackgroundWithMerge(eventId, colors) {
     const parsed = EventIdUtils.fromEncoded(eventId);
 
+    // Ensure overrideDefaults is set since user is applying custom colors
+    const colorsWithOverride = {
+      ...colors,
+      overrideDefaults: true,
+    };
+
     if (parsed.isRecurring) {
       showRecurringEventDialog({
         eventId,
         color: colors.background,
         onConfirm: async (applyToAll) => {
-          await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
+          await saveFullColorsWithRecurringSupport(eventId, colorsWithOverride, applyToAll);
           updateGoogleColorSwatch(eventId, colors.background);
           closeColorPicker();
           // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
@@ -3636,9 +3716,9 @@
         onClose: () => {},
       });
     } else {
-      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colorsWithOverride, { applyToAll: false });
       eventColors[eventId] = {
-        ...colors,
+        ...colorsWithOverride,
         hex: colors.background,
         isRecurring: false,
         appliedAt: Date.now()

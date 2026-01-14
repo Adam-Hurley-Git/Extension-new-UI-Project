@@ -666,6 +666,9 @@ export class ColorPickerInjector {
     const panel = document.createElement('div');
     panel.className = 'cf-injected-panel';
 
+    // Get current applied color for checkmark display
+    const currentAppliedColor = eventColors?.background || calendarDefaults?.background || null;
+
     // Build the HTML
     panel.innerHTML = this.buildInjectedPanelHTML({
       eventId,
@@ -674,6 +677,7 @@ export class ColorPickerInjector {
       listColorEnabled,
       calendarName,
       calendarDefaults,
+      currentAppliedColor,
       categories: Array.isArray(categories) ? categories : Object.values(categories || {}),
       templates: Array.isArray(templates) ? templates : Object.values(templates || {}),
     });
@@ -711,6 +715,7 @@ export class ColorPickerInjector {
       listColorEnabled,
       calendarName,
       calendarDefaults,
+      currentAppliedColor,
       categories,
       templates,
     } = data;
@@ -727,6 +732,30 @@ export class ColorPickerInjector {
       const b = parseInt(cleanHex.substr(4, 2), 16);
       const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
       return luminance > 0.5 ? '#000000' : '#ffffff';
+    };
+
+    // Helper to normalize hex color for comparison
+    const normalizeHex = (hex) => {
+      if (!hex) return null;
+      let h = hex.trim().toLowerCase();
+      // Handle 3-char hex codes
+      if (/^#[0-9a-f]{3}$/i.test(h)) {
+        h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+      }
+      return h;
+    };
+
+    // Helper to check if a color is currently selected
+    const isColorSelected = (color) => {
+      if (!currentAppliedColor || !color) return false;
+      return normalizeHex(color) === normalizeHex(currentAppliedColor);
+    };
+
+    // Helper to render a color swatch with checkmark
+    const renderSwatch = (color, type, extraClass = '') => {
+      const selected = isColorSelected(color);
+      const checkColor = getContrastColor(color);
+      return `<div class="cf-color-swatch ${extraClass} ${selected ? 'selected' : ''}" style="background:${color}; color:${color};" data-color="${color}" data-type="${type}"><span class="cf-swatch-check" style="color:${checkColor}">✓</span></div>`;
     };
 
     // Google's 12 default colors
@@ -817,14 +846,31 @@ export class ColorPickerInjector {
           width: 24px;
           height: 24px;
           border-radius: 50%;
-          border: none;
+          border: 2px solid transparent;
           cursor: pointer;
           transition: transform 0.1s, box-shadow 0.1s;
           box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
         }
         .cf-color-swatch:hover {
-          transform: scale(1.15);
+          transform: scale(1.1);
           box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        .cf-color-swatch .cf-swatch-check {
+          display: none;
+          font-size: 12px;
+          font-weight: bold;
+        }
+        .cf-color-swatch.selected .cf-swatch-check {
+          display: block;
+        }
+        .cf-color-swatch.selected {
+          border-color: white;
+          box-shadow: 0 0 0 2px #5f6368;
         }
         .cf-list-info {
           display: flex;
@@ -946,7 +992,7 @@ export class ColorPickerInjector {
           <div class="cf-toggle ${isGoogleMode ? 'active' : ''}" data-toggle="google"></div>
         </div>
         <div class="cf-color-grid">
-          ${googleColors.map(c => `<div class="cf-color-swatch cf-google-color" style="background:${c}" data-color="${c}" data-type="google"></div>`).join('')}
+          ${googleColors.map(c => renderSwatch(c, 'google', 'cf-google-color')).join('')}
         </div>
       </div>
 
@@ -995,7 +1041,7 @@ export class ColorPickerInjector {
       <div class="cf-category-section ${isColorKitMode ? '' : 'disabled'}">
         <div class="cf-category-label">Google's Default Colors</div>
         <div class="cf-color-grid">
-          ${googleColors.map(c => `<div class="cf-color-swatch" style="background:${c}" data-color="${c}" data-type="colorkit"></div>`).join('')}
+          ${googleColors.map(c => renderSwatch(c, 'colorkit')).join('')}
         </div>
       </div>
 
@@ -1006,7 +1052,7 @@ export class ColorPickerInjector {
           <div class="cf-color-grid">
             ${(cat.colors || []).map(colorObj => {
               const hex = typeof colorObj === 'string' ? colorObj : colorObj.hex;
-              return `<div class="cf-color-swatch" style="background:${hex}" data-color="${hex}" data-type="colorkit"></div>`;
+              return renderSwatch(hex, 'colorkit');
             }).join('')}
           </div>
         </div>
@@ -1998,6 +2044,7 @@ export class ColorPickerInjector {
               text: existingColors.text || calendarDefaults.text || null,
               border: existingColors.border || calendarDefaults.border || null,
               borderWidth: existingColors.borderWidth ?? calendarDefaults.borderWidth ?? null,
+              overrideDefaults: true, // Must override calendar defaults since user chose custom color
             };
             console.log('[CF] Keeping existing, merged colors:', mergedColors);
             await this.applyBackgroundWithMerge(eventId, mergedColors);
@@ -2032,13 +2079,19 @@ export class ColorPickerInjector {
   async applyBackgroundWithMerge(eventId, colors) {
     const parsed = EventIdUtils.fromEncoded(eventId);
 
+    // Ensure overrideDefaults is set since user is applying custom colors
+    const colorsWithOverride = {
+      ...colors,
+      overrideDefaults: true,
+    };
+
     if (parsed.isRecurring) {
       showRecurringEventDialog({
         eventId,
         color: colors.background,
         onConfirm: async (applyToAll) => {
           if (this.storageService.saveEventColorsFullAdvanced) {
-            await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+            await this.storageService.saveEventColorsFullAdvanced(eventId, colorsWithOverride, { applyToAll });
           }
           this.closeMenus();
           this.triggerColorUpdate();
@@ -2047,7 +2100,7 @@ export class ColorPickerInjector {
       });
     } else {
       if (this.storageService.saveEventColorsFullAdvanced) {
-        await this.storageService.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+        await this.storageService.saveEventColorsFullAdvanced(eventId, colorsWithOverride, { applyToAll: false });
       }
       this.closeMenus();
       this.triggerColorUpdate();
