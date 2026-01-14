@@ -1128,6 +1128,22 @@
     const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
     const actualCalendarColor = eventElement ? getStripeOnlyFromDOM(eventElement) : null;
 
+    // Get calendar info from API cache (has name and color)
+    // Try exact match first, then partial match
+    let calendarInfo = calendarColors[calendarId];
+    if (!calendarInfo && calendarId) {
+      // Try partial match - calendar ID might be just the email while cache has full ID
+      const matchingKey = Object.keys(calendarColors).find(key =>
+        key.includes(calendarId) || calendarId.includes(key.split('@')[0])
+      );
+      if (matchingKey) {
+        calendarInfo = calendarColors[matchingKey];
+      }
+    }
+
+    // Get the actual Google calendar color (from DOM stripe, API, or fallback)
+    const googleCalendarColor = actualCalendarColor || calendarInfo?.backgroundColor || '#039be5';
+
     // Determine current mode
     const isGoogleMode = currentEventColors?.useGoogleColors ||
       (!currentEventColors?.background && !currentEventColors?.text && !currentEventColors?.border &&
@@ -1144,11 +1160,21 @@
     // Get the current applied color for display
     const currentAppliedColor = currentEventColors?.background || calendarDefaults?.background || null;
 
-    // Get calendar name
-    let calendarName = calendarId || 'Calendar';
+    // Get calendar name - try multiple sources
+    let calendarName = 'Calendar';
+    // 1. Try the calendar select dropdown (most accurate for current event)
     const calendarSelect = document.querySelector('[data-key="calendar"] select');
     if (calendarSelect?.selectedOptions?.[0]) {
       calendarName = calendarSelect.selectedOptions[0].textContent;
+    }
+    // 2. Fall back to API cache summary
+    else if (calendarInfo?.summary) {
+      calendarName = calendarInfo.summary;
+    }
+    // 3. Fall back to calendar ID (last resort)
+    else if (calendarId) {
+      // Try to extract just the name part from email if possible
+      calendarName = calendarId.includes('@') ? calendarId.split('@')[0] : calendarId;
     }
 
     // Style parent for scrolling
@@ -1252,7 +1278,7 @@
       currentAppliedColor,
       calendarName,
       calendarDefaults,
-      actualCalendarColor,
+      googleCalendarColor,
       categories: Object.values(categories),
       templates: Object.values(templates),
       skipGoogleSection: true, // Don't render duplicate Google section
@@ -1306,14 +1332,15 @@
       currentAppliedColor,
       calendarName,
       calendarDefaults,
-      actualCalendarColor,
+      googleCalendarColor,
       categories: categoriesArray,
       templates: templatesArray,
       skipGoogleSection = false,
     } = data;
 
-    // Use actual calendar color from DOM stripe, or fallback to calendarDefaults background
-    const calendarColor = actualCalendarColor || calendarDefaults?.background || '#039be5';
+    // googleCalendarColor is the actual Google calendar color (from DOM stripe or API)
+    // listBgColor is the ColorKit configured background color
+    const calendarColor = googleCalendarColor || '#039be5';
     const listBgColor = calendarDefaults?.background || '#039be5';
 
     // Google's 12 default colors
