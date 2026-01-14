@@ -26,6 +26,7 @@
   let templates = {}; // Color templates: templateId → { id, name, background, text, border, borderWidth, categoryId }
   let calendarColors = {}; // Cache: calendarId → { backgroundColor, foregroundColor } (from Google API)
   let calendarDefaultColors = {}; // User-defined per-calendar colors: calendarId → { background, text, border }
+  let calendarDOMColorsCache = {}; // Cache of actual DOM colors: calendarId → hex color (more accurate than API)
   let isEnabled = false;
   let colorPickerObserver = null;
   let colorRenderObserver = null;
@@ -956,6 +957,16 @@
     calendarDefaultColors = await window.cc3Storage.getEventCalendarColors();
     console.log('[EventColoring] Loaded calendar default colors for', Object.keys(calendarDefaultColors).length, 'calendars');
 
+    // Load cached DOM colors (actual colors displayed in Google Calendar, more accurate than API)
+    try {
+      const domColorsData = await chrome.storage.local.get('cf.calendarDOMColors');
+      calendarDOMColorsCache = domColorsData['cf.calendarDOMColors'] || {};
+      console.log('[EventColoring] Loaded DOM colors cache for', Object.keys(calendarDOMColorsCache).length, 'calendars');
+    } catch (error) {
+      console.warn('[EventColoring] Failed to load DOM colors cache:', error);
+      calendarDOMColorsCache = {};
+    }
+
     // Fetch calendar colors from API (single call, cached in background)
     await fetchCalendarColors();
 
@@ -1124,10 +1135,6 @@
     const calendarId = getCalendarIdForEvent(eventId);
     const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
 
-    // Get actual calendar stripe color from DOM (this is the true calendar color)
-    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
-    const actualCalendarColor = eventElement ? getStripeOnlyFromDOM(eventElement) : null;
-
     // Get calendar info from API cache (has name and color)
     // Try exact match first, then partial match
     let calendarInfo = calendarColors[calendarId];
@@ -1141,8 +1148,43 @@
       }
     }
 
-    // Get the actual Google calendar color (from DOM stripe, API, or fallback)
-    const googleCalendarColor = actualCalendarColor || calendarInfo?.backgroundColor || '#039be5';
+    // Get the actual Google calendar color using proper priority:
+    // 1. Cached DOM color (most accurate - stored before ColorKit modifies anything)
+    // 2. Element's cached original color (cfOriginalColor dataset)
+    // 3. API color from calendarInfo
+    // 4. Fallback
+    let googleCalendarColor = null;
+
+    // Priority 1: Check calendarDOMColorsCache (same approach as popup)
+    if (calendarId && calendarDOMColorsCache[calendarId]) {
+      googleCalendarColor = calendarDOMColorsCache[calendarId];
+    }
+    // Try partial match for DOM colors cache
+    if (!googleCalendarColor && calendarId) {
+      const matchingDOMKey = Object.keys(calendarDOMColorsCache).find(key =>
+        key.includes(calendarId) || calendarId.includes(key.split('@')[0])
+      );
+      if (matchingDOMKey) {
+        googleCalendarColor = calendarDOMColorsCache[matchingDOMKey];
+      }
+    }
+
+    // Priority 2: Check element's cached original color
+    if (!googleCalendarColor) {
+      const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+      if (eventElement) {
+        // First check the cached original color (set before ColorKit modified the element)
+        googleCalendarColor = eventElement.dataset.cfOriginalColor || getOriginalEventColor(eventElement);
+      }
+    }
+
+    // Priority 3: Fall back to API color
+    if (!googleCalendarColor) {
+      googleCalendarColor = calendarInfo?.backgroundColor;
+    }
+
+    // Priority 4: Ultimate fallback
+    googleCalendarColor = googleCalendarColor || '#039be5';
 
     // Determine current mode
     const isGoogleMode = currentEventColors?.useGoogleColors ||
@@ -3073,6 +3115,8 @@
         };
 
         await chrome.storage.local.set({ 'cf.calendarDOMColors': merged });
+        // Also update the local cache for immediate use
+        calendarDOMColorsCache = { ...calendarDOMColorsCache, ...merged };
         console.log('[EventColoring] Cached calendar DOM colors:', merged);
       } catch (error) {
         console.error('[EventColoring] Failed to cache calendar DOM colors:', error);
