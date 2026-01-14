@@ -1458,7 +1458,7 @@
 
         /* Quick colors section */
         .cf-quick-colors { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(139, 92, 246, 0.2); }
-        .cf-quick-colors.disabled { opacity: 0.4; pointer-events: none; }
+        .cf-quick-colors.disabled { opacity: 0.4; }
 
         .cf-color-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
         .cf-color-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
@@ -1477,7 +1477,7 @@
         .cf-divider::before, .cf-divider::after { content: ''; flex: 1; height: 1px; background: rgba(139, 92, 246, 0.2); }
 
         .cf-category-section { margin-bottom: 8px; }
-        .cf-category-section.disabled { opacity: 0.4; pointer-events: none; }
+        .cf-category-section.disabled { opacity: 0.4; }
         .cf-category-label { font-size: 9px; font-weight: 600; color: #5f6368; text-transform: uppercase; margin-bottom: 4px; }
         .cf-templates-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
         .cf-template-chip { padding: 3px 8px; border-radius: 10px; border: none; font-size: 10px; font-weight: 500; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
@@ -1664,8 +1664,8 @@
         e.stopPropagation();
         const color = swatch.dataset.color;
         // Use handleColorSelection which checks for existing properties and shows merge dialog if needed
-        await handleColorSelection(eventId, color);
-        // Note: closeColorPicker is called inside handleColorSelection flow
+        // keepOpen: true so picker stays open and switches to ColorKit mode
+        await handleColorSelection(eventId, color, { keepOpen: true });
       });
     });
 
@@ -1871,6 +1871,111 @@
   function closeColorPicker() {
     // Close by clicking outside
     document.body.click();
+  }
+
+  /**
+   * Refresh the color picker panel UI to reflect current state
+   * Used when keepOpen is true to update the panel after applying colors
+   */
+  function refreshColorPickerPanel(eventId) {
+    const panel = document.querySelector('.cf-injected-panel');
+    const googleSection = document.querySelector('.cf-section[data-section="google"]');
+    if (!panel) return;
+
+    // Get updated state
+    const currentEventColors = eventColors[eventId] || null;
+    const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
+    const isGoogleMode = currentEventColors?.useGoogleColors || false;
+    const isColorKitMode = !isGoogleMode;
+    const hasListColoring = !!(calendarDefaults?.background || calendarDefaults?.text || calendarDefaults?.border);
+    const listColorEnabled = hasListColoring && !currentEventColors?.overrideDefaults && !currentEventColors?.useGoogleColors;
+    const customColorEnabled = isColorKitMode && currentEventColors?.overrideDefaults;
+
+    // Update Google section styling
+    if (googleSection) {
+      googleSection.className = `cf-section ${isGoogleMode ? 'cf-section-active' : 'cf-section-inactive'}`;
+      googleSection.style.background = isGoogleMode ? 'linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%)' : '#f8f9fa';
+      googleSection.style.borderColor = isGoogleMode ? '#1a73e8' : '#e8eaed';
+      googleSection.style.boxShadow = isGoogleMode ? '0 2px 8px rgba(0,0,0,0.1)' : 'none';
+      googleSection.style.opacity = isGoogleMode ? '1' : '0.5';
+
+      const googleRadio = googleSection.querySelector('.cf-radio[data-radio="google"]');
+      if (googleRadio) {
+        googleRadio.classList.toggle('active', isGoogleMode);
+      }
+
+      const googleBadge = googleSection.querySelector('.cf-active-badge');
+      if (googleBadge) {
+        googleBadge.style.display = isGoogleMode ? 'inline' : 'none';
+      } else if (isGoogleMode) {
+        const titleDiv = googleSection.querySelector('.cf-google-section-title');
+        if (titleDiv && !titleDiv.querySelector('.cf-active-badge')) {
+          titleDiv.insertAdjacentHTML('beforeend', '<span class="cf-active-badge">Active</span>');
+        }
+      }
+
+      // Update Google colors opacity/pointer-events
+      const googleColorsContainer = googleSection.querySelector('.cf-google-colors-container');
+      if (googleColorsContainer) {
+        googleColorsContainer.querySelectorAll('.vbVGZb, [jsname="Ly0WL"]').forEach(el => {
+          el.style.opacity = isGoogleMode ? '1' : '0.5';
+          el.style.pointerEvents = isGoogleMode ? 'auto' : 'none';
+        });
+      }
+    }
+
+    // Update ColorKit section styling
+    const colorkitSection = panel.querySelector('.cf-colorkit-section');
+    if (colorkitSection) {
+      colorkitSection.classList.toggle('cf-section-active', isColorKitMode);
+      colorkitSection.classList.toggle('cf-section-inactive', !isColorKitMode);
+
+      // Update active badge
+      const colorkitBadge = colorkitSection.querySelector('.cf-active-badge-purple');
+      if (colorkitBadge) {
+        colorkitBadge.style.display = isColorKitMode ? 'inline' : 'none';
+      }
+    }
+
+    // Update Calendar Default card
+    const listCard = panel.querySelector('.cf-calendar-default-card');
+    if (listCard) {
+      listCard.classList.toggle('active', listColorEnabled);
+      const listRadio = listCard.querySelector('.cf-radio[data-radio="list"]');
+      if (listRadio) {
+        listRadio.classList.toggle('active', listColorEnabled);
+      }
+    }
+
+    // Update Custom Color option
+    const customOption = panel.querySelector('.cf-radio-option[data-option="custom"]');
+    if (customOption) {
+      customOption.classList.toggle('active', customColorEnabled);
+      const customRadio = customOption.querySelector('.cf-radio[data-radio="custom"]');
+      if (customRadio) {
+        customRadio.classList.toggle('active', customColorEnabled);
+      }
+    }
+
+    // Update quick colors and category sections - remove disabled class when in ColorKit mode
+    const quickColors = panel.querySelector('.cf-quick-colors');
+    if (quickColors) {
+      quickColors.classList.toggle('disabled', !isColorKitMode);
+    }
+
+    const categorySection = panel.querySelector('.cf-category-section');
+    if (categorySection) {
+      categorySection.classList.toggle('disabled', !isColorKitMode);
+    }
+
+    // Update selected color checkmark
+    const currentAppliedColor = currentEventColors?.background || null;
+    panel.querySelectorAll('.cf-color-swatch').forEach(swatch => {
+      const swatchColor = swatch.dataset.color;
+      const isSelected = currentAppliedColor && swatchColor &&
+        swatchColor.toLowerCase() === currentAppliedColor.toLowerCase();
+      swatch.classList.toggle('selected', isSelected);
+    });
   }
 
   /**
@@ -3643,8 +3748,9 @@
   // COLOR SELECTION HANDLING
   // ========================================
 
-  async function handleColorSelection(eventId, colorHex) {
-    console.log('[EventColoring] Color selected:', eventId, colorHex);
+  async function handleColorSelection(eventId, colorHex, options = {}) {
+    const { keepOpen = false } = options;
+    console.log('[EventColoring] Color selected:', eventId, colorHex, 'keepOpen:', keepOpen);
 
     // Get existing colors from cache
     const existingColors = findColorForEvent(eventId) || {};
@@ -3693,12 +3799,12 @@
             overrideDefaults: true, // Must override calendar defaults since user chose custom color
           };
           console.log('[EventColoring] Keeping existing, merged colors:', mergedColors);
-          await applyBackgroundWithMerge(eventId, mergedColors);
+          await applyBackgroundWithMerge(eventId, mergedColors, { keepOpen });
         },
         onReplaceAll: async () => {
           // Replace: clear all properties, just use background
           console.log('[EventColoring] Replacing all with background only');
-          await applyBackgroundOnly(eventId, colorHex);
+          await applyBackgroundOnly(eventId, colorHex, { keepOpen });
         },
         onOpenFullModal: () => {
           // Open full modal prefilled with new background + existing properties
@@ -3711,14 +3817,15 @@
       });
     } else {
       // No other properties, apply background only (current behavior)
-      await applyBackgroundOnly(eventId, colorHex);
+      await applyBackgroundOnly(eventId, colorHex, { keepOpen });
     }
   }
 
   /**
    * Apply background color with merged properties (keeps existing text/border)
    */
-  async function applyBackgroundWithMerge(eventId, colors) {
+  async function applyBackgroundWithMerge(eventId, colors, options = {}) {
+    const { keepOpen = false } = options;
     const parsed = EventIdUtils.fromEncoded(eventId);
 
     // Ensure overrideDefaults is set since user is applying custom colors
@@ -3734,7 +3841,11 @@
         onConfirm: async (applyToAll) => {
           await saveFullColorsWithRecurringSupport(eventId, colorsWithOverride, applyToAll);
           updateGoogleColorSwatch(eventId, colors.background);
-          closeColorPicker();
+          if (keepOpen) {
+            refreshColorPickerPanel(eventId);
+          } else {
+            closeColorPicker();
+          }
           // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
           applyStoredColors();
         },
@@ -3749,7 +3860,11 @@
         appliedAt: Date.now()
       };
       updateGoogleColorSwatch(eventId, colors.background);
-      closeColorPicker();
+      if (keepOpen) {
+        refreshColorPickerPanel(eventId);
+      } else {
+        closeColorPicker();
+      }
       // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
       applyStoredColors();
     }
@@ -3758,7 +3873,8 @@
   /**
    * Apply background color only (clears other properties and overrides calendar defaults)
    */
-  async function applyBackgroundOnly(eventId, colorHex) {
+  async function applyBackgroundOnly(eventId, colorHex, options = {}) {
+    const { keepOpen = false } = options;
     const parsed = EventIdUtils.fromEncoded(eventId);
 
     // Create colors object that explicitly overrides calendar defaults
@@ -3778,7 +3894,11 @@
           console.log('[EventColoring] Recurring confirmed (background only), applyToAll:', applyToAll);
           await saveFullColorsWithRecurringSupport(eventId, colors, applyToAll);
           updateGoogleColorSwatch(eventId, colorHex);
-          closeColorPicker();
+          if (keepOpen) {
+            refreshColorPickerPanel(eventId);
+          } else {
+            closeColorPicker();
+          }
           // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
           applyStoredColors();
         },
@@ -3796,7 +3916,11 @@
         appliedAt: Date.now()
       };
       updateGoogleColorSwatch(eventId, colorHex);
-      closeColorPicker();
+      if (keepOpen) {
+        refreshColorPickerPanel(eventId);
+      } else {
+        closeColorPicker();
+      }
       // Apply colors directly from local cache - don't use refreshColors() to avoid race conditions
       applyStoredColors();
     }
