@@ -1595,7 +1595,7 @@
             <div class="cf-calendar-default-row2" data-action="use-list-color">
               <span class="cf-sample-event" style="border: ${calendarDefaults?.borderWidth ?? 2}px solid ${calendarDefaults?.border || calendarColor};">
                 <span class="cf-sample-event-stripe" style="background:${calendarColor};"></span>
-                <span class="cf-sample-event-text" style="background:${listBgColor}; color:${calendarDefaults?.text || getContrastColor(listBgColor)};">Sample Event</span>
+                <span class="cf-sample-event-text" style="background:${listBgColor}; color:${calendarDefaults?.text || getContrastColor(listBgColor)};">Event</span>
               </span>
               <span class="cf-action-text">Calendar Default</span>
             </div>
