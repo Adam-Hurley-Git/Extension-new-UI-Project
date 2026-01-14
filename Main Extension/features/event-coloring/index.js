@@ -2933,22 +2933,18 @@
    * This reads the actual displayed color from Google's .jSrjCf stripe element,
    * which is the TRUE color Google uses for the calendar/event sidebar.
    * Falls back to event background color or API color if stripe not found.
+   * Also detects when calendar color has changed and updates the cache.
    * @param {HTMLElement} element - The event element
    * @returns {string|null} - The original hex color or null
    */
   function getOriginalEventColor(element) {
     if (!element) return null;
 
-    // Check if we already cached the original color
     const cachedColor = element.dataset.cfOriginalColor;
-    if (cachedColor) {
-      return cachedColor;
-    }
-
     let hexColor = null;
 
-    // PRIORITY 1: Look for Google's sidebar stripe element (.jSrjCf)
-    // This is the most accurate representation of the calendar/event color
+    // ALWAYS check the stripe element first - it reflects the TRUE calendar color
+    // even if we've cached a different value (calendar color may have changed)
     const sidebarStripe = element.querySelector('.jSrjCf');
     if (sidebarStripe) {
       const stripeStyle = window.getComputedStyle(sidebarStripe);
@@ -2956,21 +2952,36 @@
       if (stripeColor && stripeColor !== 'rgba(0, 0, 0, 0)' && stripeColor !== 'transparent') {
         hexColor = rgbToHex(stripeColor);
         if (hexColor) {
+          // Check if color changed from cached value
+          if (cachedColor && cachedColor.toLowerCase() !== hexColor.toLowerCase()) {
+            console.log('[EventColoring] Calendar color changed, updating cache from',
+              cachedColor, 'to', hexColor);
+          }
           element.dataset.cfOriginalColor = hexColor;
           return hexColor;
         }
       }
     }
 
-    // PRIORITY 2: Read the event element's background color
-    const computedStyle = window.getComputedStyle(element);
-    let bgColor = computedStyle.backgroundColor;
+    // If stripe not found but we have a cached color, return it
+    if (cachedColor) {
+      return cachedColor;
+    }
 
-    if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
-      hexColor = rgbToHex(bgColor);
-      if (hexColor) {
-        element.dataset.cfOriginalColor = hexColor;
-        return hexColor;
+    // PRIORITY 2: Read the event element's background color (only if not modified by ColorKit)
+    if (!element.dataset.cfEventColored) {
+      const computedStyle = window.getComputedStyle(element);
+      let bgColor = computedStyle.backgroundColor;
+
+      if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+        // Skip gradients (applied by our extension)
+        if (!bgColor.includes('gradient')) {
+          hexColor = rgbToHex(bgColor);
+          if (hexColor) {
+            element.dataset.cfOriginalColor = hexColor;
+            return hexColor;
+          }
+        }
       }
     }
 
@@ -3067,16 +3078,15 @@
       const calendarId = getCalendarIdForEvent(eventId);
       if (!calendarId) return;
 
-      // Skip if we already have a color for this calendar
+      // Skip if we already have a color for this calendar in THIS scan
       if (calendarDOMColors[calendarId]) return;
 
-      // Try to get the original color from this element
-      // Check cached value first
-      let domColor = element.dataset.cfOriginalColor;
+      let domColor = null;
 
-      // If not cached, try to read from the DOM (only if not modified by our extension)
-      if (!domColor && !element.dataset.cfEventColored) {
-        // Look for the sidebar stripe element
+      // For elements NOT modified by ColorKit, always read fresh from DOM
+      // This ensures we detect when Google changes a calendar's color
+      if (!element.dataset.cfEventColored) {
+        // Look for the sidebar stripe element (most accurate for calendar color)
         const sidebarStripe = element.querySelector('.jSrjCf');
         if (sidebarStripe) {
           const stripeStyle = window.getComputedStyle(sidebarStripe);
@@ -3097,6 +3107,22 @@
             }
           }
         }
+
+        // If we got a fresh DOM color, check if it differs from cached original
+        // If so, the calendar color was changed - update the element's cache
+        if (domColor && element.dataset.cfOriginalColor &&
+            domColor.toLowerCase() !== element.dataset.cfOriginalColor.toLowerCase()) {
+          console.log('[EventColoring] Calendar color changed for', calendarId,
+            'from', element.dataset.cfOriginalColor, 'to', domColor);
+          // Update the element's cached original color
+          element.dataset.cfOriginalColor = domColor;
+        }
+      }
+
+      // For ColorKit-modified elements, use the cached original color
+      // (since we can't read the true color from DOM anymore)
+      if (!domColor && element.dataset.cfOriginalColor) {
+        domColor = element.dataset.cfOriginalColor;
       }
 
       if (domColor) {
@@ -3107,10 +3133,21 @@
     // Only save if we found any colors
     if (Object.keys(calendarDOMColors).length > 0) {
       try {
-        // Merge with existing cache to preserve colors from calendars not currently visible
+        // Get existing cache
         const existing = await chrome.storage.local.get('cf.calendarDOMColors');
+        const existingColors = existing['cf.calendarDOMColors'] || {};
+
+        // Check for color changes and log them
+        for (const [calId, newColor] of Object.entries(calendarDOMColors)) {
+          if (existingColors[calId] && existingColors[calId].toLowerCase() !== newColor.toLowerCase()) {
+            console.log('[EventColoring] Updating cached color for calendar', calId,
+              'from', existingColors[calId], 'to', newColor);
+          }
+        }
+
+        // Merge: new colors override old ones
         const merged = {
-          ...(existing['cf.calendarDOMColors'] || {}),
+          ...existingColors,
           ...calendarDOMColors,
         };
 
