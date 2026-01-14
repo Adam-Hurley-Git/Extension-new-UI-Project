@@ -1816,7 +1816,10 @@
 
   async function handleTemplateSelectRedesigned(eventId, templateId) {
     const template = templates[templateId];
-    if (!template) return;
+    if (!template) {
+      console.warn('[EventColoring] Template not found:', templateId);
+      return;
+    }
     const colors = {
       background: template.background || null,
       text: template.text || null,
@@ -1833,12 +1836,26 @@
         dialogMessage: 'Apply to:',
         onConfirm: async (applyToAll) => {
           await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll });
+          // Update local cache
+          eventColors[eventId] = {
+            ...colors,
+            hex: template.background,
+            isRecurring: applyToAll,
+            appliedAt: Date.now()
+          };
           applyStoredColors();
         },
         onClose: () => {}
       });
     } else {
       await window.cc3Storage.saveEventColorsFullAdvanced(eventId, colors, { applyToAll: false });
+      // Update local cache so applyStoredColors uses the new colors
+      eventColors[eventId] = {
+        ...colors,
+        hex: template.background,
+        isRecurring: false,
+        appliedAt: Date.now()
+      };
       applyStoredColors();
     }
   }
