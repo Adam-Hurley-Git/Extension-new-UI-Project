@@ -1408,7 +1408,7 @@
           font-size: 10px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
           box-shadow: 0 1px 3px rgba(0,0,0,0.15);
         }
-        .cf-sample-event-stripe { width: 4px; align-self: stretch; }
+        .cf-sample-event-stripe { min-width: 2px; align-self: stretch; }
         .cf-sample-event-text { padding: 3px 8px; }
 
         /* Calendar Default Card - two row layout */
@@ -1517,8 +1517,8 @@
             </div>
             <div class="cf-calendar-default-row2" data-action="use-list-color">
               <span class="cf-sample-event">
-                <span class="cf-sample-event-stripe" style="background:${calendarDefaults?.border || listBgColor}"></span>
-                <span class="cf-sample-event-text" style="background:${listBgColor}; color:${getContrastColor(listBgColor)};">Sample Event</span>
+                <span class="cf-sample-event-stripe" style="background:${calendarDefaults?.border || listBgColor}; width:${calendarDefaults?.borderWidth ?? 4}px;"></span>
+                <span class="cf-sample-event-text" style="background:${listBgColor}; color:${calendarDefaults?.text || getContrastColor(listBgColor)};">Sample Event</span>
               </span>
               <span class="cf-action-text">Calendar Default</span>
             </div>
