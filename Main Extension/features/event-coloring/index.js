@@ -1124,6 +1124,10 @@
     const calendarId = getCalendarIdForEvent(eventId);
     const calendarDefaults = getCalendarDefaultColorsForEvent(eventId);
 
+    // Get actual calendar stripe color from DOM (this is the true calendar color)
+    const eventElement = document.querySelector(`[data-eventid="${eventId}"]`);
+    const actualCalendarColor = eventElement ? getStripeOnlyFromDOM(eventElement) : null;
+
     // Determine current mode
     const isGoogleMode = currentEventColors?.useGoogleColors ||
       (!currentEventColors?.background && !currentEventColors?.text && !currentEventColors?.border &&
@@ -1248,6 +1252,7 @@
       currentAppliedColor,
       calendarName,
       calendarDefaults,
+      actualCalendarColor,
       categories: Object.values(categories),
       templates: Object.values(templates),
       skipGoogleSection: true, // Don't render duplicate Google section
@@ -1301,11 +1306,14 @@
       currentAppliedColor,
       calendarName,
       calendarDefaults,
+      actualCalendarColor,
       categories: categoriesArray,
       templates: templatesArray,
       skipGoogleSection = false,
     } = data;
 
+    // Use actual calendar color from DOM stripe, or fallback to calendarDefaults background
+    const calendarColor = actualCalendarColor || calendarDefaults?.background || '#039be5';
     const listBgColor = calendarDefaults?.background || '#039be5';
 
     // Google's 12 default colors
@@ -1512,13 +1520,13 @@
           <div class="cf-calendar-default-card ${listColorEnabled ? 'active' : ''}" data-option="list">
             <div class="cf-calendar-default-row1">
               <div class="cf-radio cf-radio-purple ${listColorEnabled ? 'active' : ''}" data-radio="list"></div>
-              <div class="cf-calendar-color-box" style="background:${listBgColor}"></div>
+              <div class="cf-calendar-color-box" style="background:${calendarColor}"></div>
               <span class="cf-calendar-name">"${calendarName}"</span>
             </div>
             <div class="cf-calendar-default-row2" data-action="use-list-color">
-              <span class="cf-sample-event">
-                <span class="cf-sample-event-stripe" style="background:${calendarDefaults?.border || listBgColor}"></span>
-                <span class="cf-sample-event-text" style="background:${listBgColor}; color:${getContrastColor(listBgColor)};">Sample Event</span>
+              <span class="cf-sample-event" style="border: ${calendarDefaults?.borderWidth ?? 2}px solid ${calendarDefaults?.border || calendarColor};">
+                <span class="cf-sample-event-stripe" style="background:${calendarColor};"></span>
+                <span class="cf-sample-event-text" style="background:${listBgColor}; color:${calendarDefaults?.text || getContrastColor(listBgColor)};">Sample Event</span>
               </span>
               <span class="cf-action-text">Calendar Default</span>
             </div>
