@@ -1642,7 +1642,10 @@
             </div>
           </div>
 
-          ${categoriesArray.map(cat => `
+          ${categoriesArray.map(cat => {
+            // Get templates assigned to this category
+            const categoryTemplates = templatesArray.filter(t => t.categoryId === cat.id);
+            return `
             <div class="cf-category-section">
               <div class="cf-category-label">${cat.name || 'Category'}</div>
               <div class="cf-color-grid">
@@ -1651,16 +1654,30 @@
                   return renderSwatch(hex, 'colorkit');
                 }).join('')}
               </div>
+              ${categoryTemplates.length > 0 ? `
+                <div class="cf-templates-grid" style="margin-top: 6px;">
+                  ${categoryTemplates.map(t => `
+                    <button class="cf-template-chip" data-template="${t.id}" style="
+                      background:${t.background || '#039be5'};
+                      color:${t.text || getContrastColor(t.background || '#039be5')};
+                      ${t.border ? `outline:2px solid ${t.border};outline-offset:-1px;` : ''}
+                    ">${t.name || 'Template'}</button>
+                  `).join('')}
+                </div>
+              ` : ''}
             </div>
-          `).join('')}
+          `}).join('')}
 
-          ${templatesArray.length > 0 ? `
+          ${(() => {
+            // Get templates NOT assigned to any category
+            const unassignedTemplates = templatesArray.filter(t => !t.categoryId);
+            return unassignedTemplates.length > 0 ? `
             <div class="cf-category-section">
               <div class="cf-category-label">
                 <span style="display:inline-flex;align-items:center;gap:4px;">Templates <span class="cf-pro-badge">PRO</span></span>
               </div>
               <div class="cf-templates-grid">
-                ${templatesArray.map(t => `
+                ${unassignedTemplates.map(t => `
                   <button class="cf-template-chip" data-template="${t.id}" style="
                     background:${t.background || '#039be5'};
                     color:${t.text || getContrastColor(t.background || '#039be5')};
@@ -1669,7 +1686,8 @@
                 `).join('')}
               </div>
             </div>
-          ` : ''}
+          ` : '';
+          })()}
         </div>
       </div>
     `;
