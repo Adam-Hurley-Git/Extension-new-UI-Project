@@ -1088,6 +1088,13 @@
       return;
     }
 
+    // Skip injection for event edit modal - only show in right-click preview modal
+    const scenario = ScenarioDetector.findColorPickerScenario();
+    if (scenario === Scenario.EVENTEDIT) {
+      console.log('[EventColoring] Skipping color picker injection for edit modal');
+      return;
+    }
+
     isInjecting = true;
     colorPickerElement.dataset.cfEventColorModified = 'true';
     console.log('[EventColoring] Injecting redesigned color picker UI');
@@ -1116,10 +1123,7 @@
       return;
     }
 
-    // Detect scenario for proper sizing
-    const scenario = ScenarioDetector.findColorPickerScenario();
-
-    // Find event ID
+    // Find event ID (scenario already detected above)
     const eventId = ScenarioDetector.findEventIdByScenario(colorPickerElement, scenario) ||
                    lastClickedEventId ||
                    getEventIdFromContext();
