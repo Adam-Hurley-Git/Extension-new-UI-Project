@@ -1089,11 +1089,14 @@
     }
 
     // Skip injection for event edit modal - only show in right-click preview modal
-    const scenario = ScenarioDetector.findColorPickerScenario();
-    if (scenario === Scenario.EVENTEDIT) {
-      console.log('[EventColoring] Skipping color picker injection for edit modal');
+    // Check URL for /eventedit/ which indicates the full edit modal page
+    if (window.location.href.includes('/eventedit/')) {
+      console.log('[EventColoring] Skipping color picker injection for edit modal (URL check)');
       return;
     }
+
+    // Detect scenario for later use
+    const scenario = ScenarioDetector.findColorPickerScenario();
 
     isInjecting = true;
     colorPickerElement.dataset.cfEventColorModified = 'true';
