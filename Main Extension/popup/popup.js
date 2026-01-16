@@ -8627,18 +8627,44 @@ Would you like to refresh all Google Calendar tabs?`;
     const loadingEl = qs('eventCalendarColorsLoading');
     const contentEl = qs('eventCalendarColorsContent');
     const emptyEl = qs('eventCalendarColorsEmpty');
+    const notConnectedEl = qs('eventCalendarColorsNotConnected');
 
     if (!loadingEl || !contentEl || !emptyEl) {
       debugLog('Event calendar colors elements not found');
       return;
     }
 
-    // Show loading state
+    // Show loading state, hide others
     loadingEl.style.display = 'block';
     contentEl.style.display = 'none';
     emptyEl.style.display = 'none';
+    if (notConnectedEl) notConnectedEl.style.display = 'none';
 
     try {
+      // First check if Calendar OAuth is granted
+      const authStatus = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'CHECK_CALENDAR_OAUTH' }, (response) => {
+          resolve(response || { granted: false });
+        });
+      });
+
+      debugLog('Calendar OAuth status:', authStatus.granted ? 'granted' : 'not granted');
+
+      if (!authStatus.granted) {
+        // Show "not connected" UI with Connect button
+        loadingEl.style.display = 'none';
+        updateCalendarSyncStatus(false); // Hide sync status
+        if (notConnectedEl) {
+          notConnectedEl.style.display = 'block';
+          setupConnectCalendarButton();
+        } else {
+          // Fallback if element doesn't exist
+          emptyEl.style.display = 'block';
+          emptyEl.textContent = 'Calendar access not granted. Please reconnect.';
+        }
+        return;
+      }
+
       // Fetch calendars from background script with forceRefresh to get latest Google colors
       const calendars = await new Promise((resolve) => {
         chrome.runtime.sendMessage({ type: 'GET_CALENDAR_COLORS', forceRefresh: true }, (response) => {
@@ -8667,6 +8693,7 @@ Would you like to refresh all Google Calendar tabs?`;
       if (eventCalendarsList.length === 0) {
         loadingEl.style.display = 'none';
         emptyEl.style.display = 'block';
+        updateCalendarSyncStatus(true, 0);
         return;
       }
 
@@ -8676,12 +8703,108 @@ Would you like to refresh all Google Calendar tabs?`;
       loadingEl.style.display = 'none';
       contentEl.style.display = 'block';
 
+      // Show sync status and setup refresh button
+      updateCalendarSyncStatus(true, eventCalendarsList.length);
+      setupRefreshCalendarsButton();
+
     } catch (error) {
       console.error('[Popup] Failed to load event calendar colors:', error);
       loadingEl.style.display = 'none';
       emptyEl.style.display = 'block';
       emptyEl.textContent = 'Failed to load calendars. Please try again.';
+      updateCalendarSyncStatus(false);
     }
+  }
+
+  // Update calendar sync status indicator
+  function updateCalendarSyncStatus(connected, calendarCount = 0) {
+    const statusEl = qs('calendarSyncStatus');
+    const statusTextEl = qs('calendarSyncStatusText');
+    if (!statusEl) return;
+
+    if (connected) {
+      statusEl.style.display = 'flex';
+      if (statusTextEl) {
+        statusTextEl.innerHTML = `
+          <span style="width: 6px; height: 6px; background: #22c55e; border-radius: 50%; display: inline-block;"></span>
+          Synced${calendarCount > 0 ? ` (${calendarCount})` : ''}
+        `;
+      }
+    } else {
+      statusEl.style.display = 'none';
+    }
+  }
+
+  // Setup refresh calendars button handler
+  function setupRefreshCalendarsButton() {
+    const refreshBtn = qs('refreshCalendarsBtn');
+    if (!refreshBtn) return;
+
+    refreshBtn.onclick = async () => {
+      debugLog('Refresh calendars button clicked');
+
+      // Add spinning animation to button
+      const svg = refreshBtn.querySelector('svg');
+      if (svg) svg.style.animation = 'spin 1s linear infinite';
+
+      try {
+        await loadEventCalendarColors();
+      } finally {
+        // Remove spinning animation
+        if (svg) svg.style.animation = '';
+      }
+    };
+  }
+
+  // Setup Connect Calendar button click handler
+  function setupConnectCalendarButton() {
+    const connectBtn = qs('connectCalendarBtn');
+    if (!connectBtn) return;
+
+    // Remove existing listener to avoid duplicates
+    connectBtn.onclick = null;
+
+    connectBtn.onclick = async () => {
+      debugLog('Connect Calendar button clicked');
+
+      // Update button to show loading state
+      const originalContent = connectBtn.innerHTML;
+      connectBtn.disabled = true;
+      connectBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="animation: spin 1s linear infinite;">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.3"/>
+          <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Connecting...
+      `;
+
+      try {
+        // Request Calendar OAuth permission (interactive - shows popup)
+        const result = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ type: 'REQUEST_CALENDAR_OAUTH' }, (response) => {
+            resolve(response || { success: false });
+          });
+        });
+
+        debugLog('Calendar OAuth request result:', result);
+
+        if (result.success) {
+          // Success - reload calendar colors
+          debugLog('Calendar connected successfully, reloading calendars...');
+          await loadEventCalendarColors();
+        } else {
+          // Failed - show error
+          connectBtn.disabled = false;
+          connectBtn.innerHTML = originalContent;
+          alert('Failed to connect calendar. Please try again.');
+        }
+      } catch (error) {
+        console.error('[Popup] Calendar OAuth request failed:', error);
+        connectBtn.disabled = false;
+        connectBtn.innerHTML = originalContent;
+        alert('Failed to connect calendar. Please try again.');
+      }
+    };
   }
 
   // Render event calendar colors list

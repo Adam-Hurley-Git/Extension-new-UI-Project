@@ -4556,6 +4556,29 @@
                     <h4 class="ec-panel-title">Calendar Default Colors <span class="cc3-pro-badge" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px;">Pro</span></h4>
                     <p class="ec-panel-desc">Set automatic colors for all events from each calendar</p>
                   </div>
+                  <div id="calendarSyncStatus" style="display: none; margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                    <span id="calendarSyncStatusText" style="font-size: 10px; color: #22c55e; display: flex; align-items: center; gap: 4px;">
+                      <span style="width: 6px; height: 6px; background: #22c55e; border-radius: 50%; display: inline-block;"></span>
+                      Synced
+                    </span>
+                    <button id="refreshCalendarsBtn" title="Refresh calendars" style="
+                      padding: 4px;
+                      background: transparent;
+                      border: 1px solid #e2e8f0;
+                      border-radius: 4px;
+                      cursor: pointer;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      transition: all 0.2s ease;
+                    ">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2">
+                        <path d="M23 4v6h-6"/>
+                        <path d="M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
                 <div id="eventCalendarColorsList">
@@ -4570,6 +4593,43 @@
                   </div>
                   <div id="eventCalendarColorsContent" style="display: none;">
                     <!-- Populated dynamically by JS -->
+                  </div>
+                  <div id="eventCalendarColorsNotConnected" style="display: none; padding: 20px 16px; text-align: center; background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%); border-radius: 8px; border: 1px solid #c2e0ff;">
+                    <div style="margin-bottom: 12px;">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="1.5">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                        <path d="M12 14v4M12 14l2 2M12 14l-2 2" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
+                    <div style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 4px;">Connect Your Calendar</div>
+                    <div style="font-size: 11px; color: #64748b; margin-bottom: 14px; line-height: 1.4;">
+                      Grant access to sync your calendar list and enable automatic event coloring
+                    </div>
+                    <button id="connectCalendarBtn" style="
+                      display: inline-flex;
+                      align-items: center;
+                      gap: 6px;
+                      padding: 8px 16px;
+                      background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+                      color: white;
+                      border: none;
+                      border-radius: 6px;
+                      font-size: 12px;
+                      font-weight: 600;
+                      cursor: pointer;
+                      transition: all 0.2s ease;
+                      box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
+                    ">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                        <polyline points="10 17 15 12 10 7"/>
+                        <line x1="15" y1="12" x2="3" y2="12"/>
+                      </svg>
+                      Connect Calendar
+                    </button>
                   </div>
                   <div id="eventCalendarColorsEmpty" style="display: none; padding: 16px; text-align: center; color: #5f6368; font-size: 12px; background: rgba(255,255,255,0.7); border-radius: 6px;">
                     No calendars found. Calendar colors are fetched from your Google Calendar account.
