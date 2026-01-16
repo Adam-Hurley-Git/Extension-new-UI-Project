@@ -102,7 +102,10 @@
       createEl('span', {}, ['Color Day']),
       createEl('button', { className: 'cc3-panel-close', innerHTML: '&times;' }),
     ]);
-    header.querySelector('.cc3-panel-close').addEventListener('click', closePanel);
+    header.querySelector('.cc3-panel-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePanel();
+    });
     panel.appendChild(header);
 
     // Apply to section
@@ -161,7 +164,8 @@
       if (state.selectedColor === color) {
         swatch.classList.add('cc3-swatch-selected');
       }
-      swatch.addEventListener('click', async () => {
+      swatch.addEventListener('click', async (e) => {
+        e.stopPropagation();
         state.selectedColor = color;
         await applyDayColor(color);
         closePanel();
@@ -177,7 +181,8 @@
       const colorInput = createEl('input', { type: 'color', className: 'cc3-color-input' });
       colorInput.value = state.selectedColor || '#FDE68A';
       const applyCustomBtn = createEl('button', { className: 'cc3-btn cc3-btn-small' }, ['Apply']);
-      applyCustomBtn.addEventListener('click', async () => {
+      applyCustomBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
         await applyDayColor(colorInput.value);
         closePanel();
       });
@@ -190,7 +195,8 @@
 
     // Clear button
     const clearBtn = createEl('button', { className: 'cc3-btn cc3-btn-secondary cc3-btn-full' }, ['Clear Color']);
-    clearBtn.addEventListener('click', async () => {
+    clearBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       await clearDayColor();
       closePanel();
     });
@@ -209,7 +215,10 @@
       createEl('span', {}, ['Add Time Block']),
       createEl('button', { className: 'cc3-panel-close', innerHTML: '&times;' }),
     ]);
-    header.querySelector('.cc3-panel-close').addEventListener('click', closePanel);
+    header.querySelector('.cc3-panel-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePanel();
+    });
     panel.appendChild(header);
 
     // Apply to section
@@ -318,7 +327,8 @@
       if (state.selectedBlockColor === color) {
         swatch.classList.add('cc3-swatch-selected');
       }
-      swatch.addEventListener('click', () => {
+      swatch.addEventListener('click', (e) => {
+        e.stopPropagation();
         state.selectedBlockColor = color;
         renderToolbar();
       });
@@ -330,7 +340,8 @@
 
     // Add Block button
     const addBtn = createEl('button', { className: 'cc3-btn cc3-btn-primary cc3-btn-full' }, ['Add Block']);
-    addBtn.addEventListener('click', async () => {
+    addBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       await addTimeBlock();
       closePanel();
     });
@@ -415,7 +426,8 @@
       innerHTML: state.collapsed ? '&#9650;' : '&#9660;',
       title: state.collapsed ? 'Expand toolbar' : 'Collapse toolbar',
     });
-    collapseBtn.addEventListener('click', () => {
+    collapseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       state.collapsed = !state.collapsed;
       if (state.collapsed) {
         state.activePanel = null;
@@ -448,7 +460,8 @@
       title: 'Add day color',
     });
     colorBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg><span>Color</span>';
-    colorBtn.addEventListener('click', () => {
+    colorBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       state.activePanel = state.activePanel === 'color' ? null : 'color';
       renderToolbar();
     });
@@ -460,7 +473,8 @@
       title: 'Add time block',
     });
     blockBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Block</span>';
-    blockBtn.addEventListener('click', () => {
+    blockBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       state.activePanel = state.activePanel === 'block' ? null : 'block';
       renderToolbar();
     });
