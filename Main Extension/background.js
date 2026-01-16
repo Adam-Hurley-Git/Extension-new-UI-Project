@@ -2,6 +2,7 @@
 import { CONFIG, debugLog } from './config.production.js';
 import { forceRefreshSubscription, validateSubscription } from './lib/subscription-validator.js';
 import * as GoogleCalendarAPI from './lib/google-calendar-api.js';
+import { isAuthGranted, getAuthToken } from './lib/google-auth.js';
 
 // Service Worker Installation
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -182,6 +183,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'GET_CALENDAR_COLOR_FOR_EVENT':
       // Get calendar color for a specific event ID
       GoogleCalendarAPI.getCalendarColorFromEventId(message.eventId).then(sendResponse);
+      return true;
+
+    case 'CHECK_CALENDAR_OAUTH':
+      // Check if Google Calendar API OAuth permission is granted
+      isAuthGranted().then(granted => {
+        debugLog('Calendar OAuth status:', granted ? 'granted' : 'not granted');
+        sendResponse({ granted });
+      });
+      return true;
+
+    case 'REQUEST_CALENDAR_OAUTH':
+      // Request Google Calendar API OAuth permission (shows popup)
+      getAuthToken(true)
+        .then(token => {
+          debugLog('Calendar OAuth request result:', token ? 'success' : 'failed');
+          sendResponse({ success: !!token });
+        })
+        .catch(err => {
+          debugLog('Calendar OAuth request error:', err.message);
+          sendResponse({ success: false, error: err.message });
+        });
       return true;
 
     case 'SUBSCRIPTION_UPDATED':
