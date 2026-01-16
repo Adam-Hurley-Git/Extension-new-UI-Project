@@ -8,7 +8,10 @@
     blockStartTime: '09:00',
     blockDuration: 60, // minutes
     selectedColor: null,
+    selectedOpacity: 30, // 0-100
     selectedBlockColor: '#FFEB3B',
+    blockLabel: '',
+    blockShadingStyle: 'solid', // 'solid' | 'hashed'
   };
 
   // Day key mapping for weeklySchedule
@@ -40,6 +43,9 @@
     '#00BCD4', // Cyan
     '#FF5722', // Deep Orange
   ];
+
+  // Opacity presets
+  const OPACITY_PRESETS = [10, 20, 30, 40, 50, 100];
 
   function createEl(tag, props = {}, children = []) {
     const el = document.createElement(tag);
@@ -95,7 +101,8 @@
 
   function renderColorPanel() {
     const panel = createEl('div', { className: 'cc3-flyout-panel cc3-color-panel' });
-    const { dayName, dateKey } = getTodayInfo();
+    const { dayName, dayIndex, dateKey } = getTodayInfo();
+    const isPremium = window.cc3IsPremium;
 
     // Header
     const header = createEl('div', { className: 'cc3-panel-header' }, [
@@ -132,7 +139,6 @@
     const weekdayRadio = createEl('input', { type: 'radio', name: 'colorApply', value: 'weekday' });
     weekdayRadio.checked = state.colorApplyTo === 'weekday';
 
-    const isPremium = window.cc3IsPremium;
     if (!isPremium) {
       weekdayRadio.disabled = true;
       weekdayLabel.classList.add('cc3-disabled');
@@ -156,6 +162,9 @@
 
     // Color swatches
     const swatchSection = createEl('div', { className: 'cc3-swatch-section' });
+    const swatchLabel = createEl('div', { className: 'cc3-section-label' }, ['Color:']);
+    swatchSection.appendChild(swatchLabel);
+
     const swatchGrid = createEl('div', { className: 'cc3-swatch-grid' });
 
     PRESET_COLORS.forEach((color) => {
@@ -164,11 +173,10 @@
       if (state.selectedColor === color) {
         swatch.classList.add('cc3-swatch-selected');
       }
-      swatch.addEventListener('click', async (e) => {
+      swatch.addEventListener('click', (e) => {
         e.stopPropagation();
         state.selectedColor = color;
-        await applyDayColor(color);
-        closePanel();
+        renderToolbar();
       });
       swatchGrid.appendChild(swatch);
     });
@@ -180,27 +188,89 @@
       const customRow = createEl('div', { className: 'cc3-custom-color-row' });
       const colorInput = createEl('input', { type: 'color', className: 'cc3-color-input' });
       colorInput.value = state.selectedColor || '#FDE68A';
-      const applyCustomBtn = createEl('button', { className: 'cc3-btn cc3-btn-small' }, ['Apply']);
-      applyCustomBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await applyDayColor(colorInput.value);
-        closePanel();
+      colorInput.addEventListener('input', (e) => {
+        state.selectedColor = e.target.value;
       });
       customRow.appendChild(colorInput);
-      customRow.appendChild(applyCustomBtn);
+      customRow.appendChild(createEl('span', { className: 'cc3-custom-label' }, ['Custom']));
       swatchSection.appendChild(customRow);
     }
 
     panel.appendChild(swatchSection);
 
-    // Clear button
-    const clearBtn = createEl('button', { className: 'cc3-btn cc3-btn-secondary cc3-btn-full' }, ['Clear Color']);
+    // Opacity section
+    const opacitySection = createEl('div', { className: 'cc3-opacity-section' });
+    const opacityHeader = createEl('div', { className: 'cc3-opacity-header' });
+    opacityHeader.appendChild(createEl('span', { className: 'cc3-section-label' }, ['Opacity:']));
+    const opacityValue = createEl('span', { className: 'cc3-opacity-value' }, [`${state.selectedOpacity}%`]);
+    opacityHeader.appendChild(opacityValue);
+    opacitySection.appendChild(opacityHeader);
+
+    // Opacity presets
+    const opacityPresets = createEl('div', { className: 'cc3-opacity-presets' });
+    OPACITY_PRESETS.forEach((val) => {
+      const btn = createEl('button', {
+        className: `cc3-opacity-btn ${state.selectedOpacity === val ? 'cc3-active' : ''}`,
+      }, [`${val}%`]);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.selectedOpacity = val;
+        renderToolbar();
+      });
+      opacityPresets.appendChild(btn);
+    });
+    opacitySection.appendChild(opacityPresets);
+
+    // Opacity slider
+    const opacitySlider = createEl('input', {
+      type: 'range',
+      className: 'cc3-opacity-slider',
+      min: '0',
+      max: '100',
+      value: String(state.selectedOpacity),
+    });
+    opacitySlider.addEventListener('input', (e) => {
+      state.selectedOpacity = parseInt(e.target.value, 10);
+      opacityValue.textContent = `${state.selectedOpacity}%`;
+    });
+    opacitySlider.addEventListener('change', (e) => {
+      state.selectedOpacity = parseInt(e.target.value, 10);
+      renderToolbar();
+    });
+    opacitySection.appendChild(opacitySlider);
+
+    panel.appendChild(opacitySection);
+
+    // Preview section
+    const previewSection = createEl('div', { className: 'cc3-preview-section' });
+    previewSection.appendChild(createEl('span', { className: 'cc3-section-label' }, ['Preview:']));
+    const previewSwatch = createEl('div', { className: 'cc3-preview-swatch' });
+    const previewColor = state.selectedColor || PRESET_COLORS[0];
+    previewSwatch.style.backgroundColor = previewColor;
+    previewSwatch.style.opacity = state.selectedOpacity / 100;
+    previewSection.appendChild(previewSwatch);
+    panel.appendChild(previewSection);
+
+    // Action buttons
+    const actionRow = createEl('div', { className: 'cc3-action-row' });
+
+    const applyBtn = createEl('button', { className: 'cc3-btn cc3-btn-primary' }, ['Apply']);
+    applyBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await applyDayColor(state.selectedColor || PRESET_COLORS[0], state.selectedOpacity);
+      closePanel();
+    });
+    actionRow.appendChild(applyBtn);
+
+    const clearBtn = createEl('button', { className: 'cc3-btn cc3-btn-secondary' }, ['Clear']);
     clearBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       await clearDayColor();
       closePanel();
     });
-    panel.appendChild(clearBtn);
+    actionRow.appendChild(clearBtn);
+
+    panel.appendChild(actionRow);
 
     return panel;
   }
@@ -316,9 +386,49 @@
 
     panel.appendChild(timeSection);
 
+    // Label input
+    const labelSection = createEl('div', { className: 'cc3-label-section' });
+    const labelRow = createEl('div', { className: 'cc3-form-row' });
+    labelRow.appendChild(createEl('label', {}, ['Label:']));
+    const labelInput = createEl('input', {
+      type: 'text',
+      className: 'cc3-text-input',
+      placeholder: 'e.g., Deep Work, Meeting',
+      value: state.blockLabel,
+    });
+    labelInput.addEventListener('input', (e) => {
+      state.blockLabel = e.target.value;
+    });
+    labelRow.appendChild(labelInput);
+    labelSection.appendChild(labelRow);
+    panel.appendChild(labelSection);
+
+    // Style selection
+    const styleSection = createEl('div', { className: 'cc3-style-section' });
+    const styleRow = createEl('div', { className: 'cc3-form-row' });
+    styleRow.appendChild(createEl('label', {}, ['Style:']));
+    const styleSelect = createEl('select', { className: 'cc3-select' });
+
+    const styles = [
+      { value: 'solid', label: 'Solid' },
+      { value: 'hashed', label: 'Hashed' },
+    ];
+
+    styles.forEach(({ value, label }) => {
+      const option = createEl('option', { value }, [label]);
+      if (value === state.blockShadingStyle) option.selected = true;
+      styleSelect.appendChild(option);
+    });
+    styleSelect.addEventListener('change', (e) => {
+      state.blockShadingStyle = e.target.value;
+    });
+    styleRow.appendChild(styleSelect);
+    styleSection.appendChild(styleRow);
+    panel.appendChild(styleSection);
+
     // Color selection for block
     const colorSection = createEl('div', { className: 'cc3-block-color-section' });
-    colorSection.appendChild(createEl('label', {}, ['Color:']));
+    colorSection.appendChild(createEl('label', { className: 'cc3-section-label' }, ['Color:']));
     const colorGrid = createEl('div', { className: 'cc3-block-color-grid' });
 
     BLOCK_COLORS.forEach((color) => {
@@ -350,15 +460,17 @@
     return panel;
   }
 
-  async function applyDayColor(color) {
+  async function applyDayColor(color, opacity) {
     const { dayIndex, dateKey } = getTodayInfo();
 
     if (state.colorApplyTo === 'today') {
       // Apply to specific date
       await window.cc3Storage.setDateColor(dateKey, color);
+      await window.cc3Storage.setDateOpacity(dateKey, opacity);
     } else {
       // Apply to weekday (Pro feature)
       await window.cc3Storage.setWeekdayColor(dayIndex, color);
+      await window.cc3Storage.setWeekdayOpacity(dayIndex, opacity);
     }
 
     // Trigger feature update
@@ -393,7 +505,8 @@
     const timeBlock = {
       timeRange: [startTime, endTime],
       color: state.selectedBlockColor,
-      label: '',
+      label: state.blockLabel,
+      shadingStyle: state.blockShadingStyle,
     };
 
     if (state.blockApplyTo === 'today') {
@@ -403,6 +516,9 @@
       // Add to weekly schedule (Pro feature)
       await window.cc3Storage.addTimeBlock(dayKey, timeBlock);
     }
+
+    // Reset label after adding
+    state.blockLabel = '';
 
     // Trigger feature update
     const newSettings = await window.cc3Storage.getSettings();

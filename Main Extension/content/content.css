@@ -329,6 +329,144 @@
   justify-content: center;
 }
 
+/* Section labels */
+.cc3-section-label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+/* Custom color label */
+.cc3-custom-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Opacity section */
+.cc3-opacity-section {
+  margin-bottom: 12px;
+}
+.cc3-opacity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.cc3-opacity-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+}
+.cc3-opacity-presets {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.cc3-opacity-btn {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 11px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cc3-opacity-btn:hover {
+  background: #f3f4f6;
+}
+.cc3-opacity-btn.cc3-active {
+  background: #0b57d0;
+  color: #fff;
+  border-color: #0b57d0;
+}
+.cc3-opacity-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #e5e7eb;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+.cc3-opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #0b57d0;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.cc3-opacity-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #0b57d0;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Preview section */
+.cc3-preview-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+.cc3-preview-swatch {
+  width: 40px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+}
+
+/* Action row */
+.cc3-action-row {
+  display: flex;
+  gap: 8px;
+}
+.cc3-action-row .cc3-btn {
+  flex: 1;
+}
+
+/* Text input */
+.cc3-text-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+  background: #fff;
+}
+.cc3-text-input:focus {
+  outline: none;
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
+}
+.cc3-text-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Label section */
+.cc3-label-section {
+  margin-bottom: 8px;
+}
+
+/* Style section */
+.cc3-style-section {
+  margin-bottom: 12px;
+}
+
 /* Legacy toggle styles (kept for compatibility) */
 .cc3-toolbar .cc3-row {
   display: flex;
