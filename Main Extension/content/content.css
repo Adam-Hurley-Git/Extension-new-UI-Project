@@ -728,40 +728,32 @@
   color: #6b7280;
 }
 
-/* Color palette */
+/* Color palette - matches popup.html structure */
 .cc3-palette-container {
   margin-bottom: 12px;
 }
 .cc3-color-palette {
   display: grid;
   grid-template-columns: repeat(10, 1fr);
-  gap: 3px;
+  gap: 4px;
   padding: 0;
   background: transparent;
   border-radius: 0;
   border: none;
-  max-height: 100px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-/* Palette within tab panel */
-.cc3-color-tab-panel .cc3-color-palette {
-  max-height: 80px;
 }
 .cc3-palette-swatch {
-  width: 100%;
-  aspect-ratio: 1;
-  min-width: 14px;
-  max-width: 24px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 2px;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
   cursor: pointer;
-  transition: transform 0.1s ease, border-color 0.1s ease;
+  transition: all 0.15s ease;
   padding: 0;
 }
 .cc3-palette-swatch:hover {
-  transform: scale(1.2);
+  transform: scale(1.15);
   border-color: #0b57d0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
   z-index: 2;
   position: relative;
 }
@@ -769,56 +761,6 @@
   border-color: #0b57d0;
   border-width: 2px;
   box-shadow: 0 0 0 1px rgba(11, 87, 208, 0.4);
-  z-index: 1;
-}
-/* Smooth scroll for palette */
-.cc3-color-palette::-webkit-scrollbar {
-  width: 4px;
-}
-.cc3-color-palette::-webkit-scrollbar-track {
-  background: transparent;
-}
-.cc3-color-palette::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 2px;
-}
-.cc3-color-palette::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
-}
-
-/* Custom color input row */
-.cc3-custom-input-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border: 1px solid #e8eaed;
-}
-.cc3-custom-color-picker {
-  width: 48px;
-  height: 36px;
-  padding: 2px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.cc3-hex-input {
-  flex: 1;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 13px;
-  font-family: monospace;
-  color: #374151;
-  background: #fff;
-}
-.cc3-hex-input:focus {
-  outline: none;
-  border-color: #0b57d0;
-  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
 }
 
 /* Flyout panel max width */
