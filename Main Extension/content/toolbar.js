@@ -62,6 +62,20 @@
   // Opacity presets
   const OPACITY_PRESETS = [10, 20, 30, 40, 50, 100];
 
+  // Custom colors from Color Lab (loaded from storage)
+  let customColors = [];
+
+  // Load custom colors from chrome storage
+  async function loadCustomColors() {
+    try {
+      const result = await chrome.storage.sync.get('customDayColors');
+      customColors = result.customDayColors || [];
+    } catch (error) {
+      console.error('Error loading custom colors:', error);
+      customColors = [];
+    }
+  }
+
   function createEl(tag, props = {}, children = []) {
     const el = document.createElement(tag);
     Object.assign(el, props);
@@ -251,32 +265,23 @@
     }
   }
 
-  function renderColorTabs(activeTab, onTabClick) {
-    const tabs = createEl('div', { className: 'cc3-color-tabs' });
-    ['vibrant', 'pastel', 'dark', 'custom'].forEach(tab => {
-      const btn = createEl('button', {
-        className: `cc3-color-tab ${activeTab === tab ? 'cc3-active' : ''}`,
-      }, [tab.charAt(0).toUpperCase() + tab.slice(1)]);
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onTabClick(tab);
-      });
-      tabs.appendChild(btn);
-    });
-    return tabs;
-  }
-
-  function renderColorPalette(colors, selectedColor, onColorSelect) {
+  // Create a color palette grid
+  function renderColorPalette(colors, selectedColor, onColorSelect, containerId) {
     const grid = createEl('div', { className: 'cc3-color-palette' });
+    if (containerId) grid.id = containerId;
+
     colors.forEach(color => {
       const swatch = createEl('button', { className: `cc3-palette-swatch ${selectedColor === color ? 'cc3-selected' : ''}` });
       swatch.style.backgroundColor = color;
-      swatch.dataset.color = color; // Store for comparison
+      swatch.dataset.color = color;
       if (color === '#ffffff') swatch.style.border = '1px solid #ccc';
       swatch.addEventListener('click', (e) => {
         e.stopPropagation();
-        // Update selection visually without re-render
-        grid.querySelectorAll('.cc3-palette-swatch').forEach(s => s.classList.remove('cc3-selected'));
+        // Update selection visually in all palettes
+        const container = grid.closest('.cc3-color-picker-section');
+        if (container) {
+          container.querySelectorAll('.cc3-palette-swatch').forEach(s => s.classList.remove('cc3-selected'));
+        }
         swatch.classList.add('cc3-selected');
         onColorSelect(color);
       });
@@ -285,25 +290,152 @@
     return grid;
   }
 
-  function renderCustomColorInput(selectedColor, onChange) {
-    const row = createEl('div', { className: 'cc3-custom-input-row' });
-    const input = createEl('input', { type: 'color', className: 'cc3-custom-color-picker' });
-    input.value = selectedColor || '#FDE68A';
-    input.addEventListener('input', (e) => onChange(e.target.value));
-    row.appendChild(input);
+  // Create empty state for custom colors
+  function createCustomColorsEmptyState() {
+    const empty = createEl('div', { className: 'cc3-custom-empty' });
+    empty.appendChild(createEl('div', { className: 'cc3-custom-empty-icon' }, ['🎨']));
+    empty.appendChild(createEl('div', { className: 'cc3-custom-empty-text' }, ['No custom colors yet']));
+    empty.appendChild(createEl('div', { className: 'cc3-custom-empty-subtext' }, ['Add colors in Color Lab (Preferences)']));
+    return empty;
+  }
+
+  // Create the full color picker section (color input + hex + tabs + palettes)
+  function renderColorPickerSection(selectedColor, activeTab, onColorSelect, onTabChange, pickerId) {
+    const section = createEl('div', { className: 'cc3-color-picker-section' });
+
+    // Color input row (color picker + hex input) - ABOVE tabs
+    const colorInputRow = createEl('div', { className: 'cc3-color-input-row' });
+
+    const colorInput = createEl('input', {
+      type: 'color',
+      className: 'cc3-color-picker-input',
+      value: selectedColor || '#000000'
+    });
 
     const hexInput = createEl('input', {
       type: 'text',
       className: 'cc3-hex-input',
-      placeholder: '#RRGGBB',
-      value: selectedColor || ''
+      placeholder: '#000000',
+      value: (selectedColor || '#000000').toUpperCase(),
+      maxLength: 7
     });
-    hexInput.addEventListener('change', (e) => {
-      const val = e.target.value;
-      if (/^#[0-9A-Fa-f]{6}$/.test(val)) onChange(val);
+
+    // Sync color picker and hex input
+    const syncHexFromColor = () => {
+      hexInput.value = colorInput.value.toUpperCase();
+      hexInput.style.borderColor = '';
+      onColorSelect(colorInput.value);
+    };
+
+    const syncColorFromHex = () => {
+      let hexValue = hexInput.value.trim();
+      if (!hexValue.startsWith('#')) hexValue = '#' + hexValue;
+      if (/^#[0-9A-Fa-f]{6}$/.test(hexValue)) {
+        colorInput.value = hexValue;
+        hexInput.style.borderColor = '#1a73e8';
+        onColorSelect(hexValue);
+      } else {
+        hexInput.style.borderColor = '#dc2626';
+      }
+    };
+
+    colorInput.addEventListener('input', syncHexFromColor);
+    colorInput.addEventListener('change', syncHexFromColor);
+    hexInput.addEventListener('input', syncColorFromHex);
+    hexInput.addEventListener('change', syncColorFromHex);
+
+    // Block keyboard events
+    [colorInput, hexInput].forEach(input => {
+      input.addEventListener('keydown', blockCalendarHotkeys);
+      input.addEventListener('keyup', blockCalendarHotkeys);
+      input.addEventListener('keypress', blockCalendarHotkeys);
     });
-    row.appendChild(hexInput);
-    return row;
+
+    colorInputRow.appendChild(colorInput);
+    colorInputRow.appendChild(hexInput);
+    section.appendChild(colorInputRow);
+
+    // Tabs
+    const tabs = createEl('div', { className: 'cc3-color-tabs' });
+    ['vibrant', 'pastel', 'dark', 'custom'].forEach(tab => {
+      const btn = createEl('button', {
+        className: `cc3-color-tab ${activeTab === tab ? 'cc3-active' : ''}`,
+      }, [tab.charAt(0).toUpperCase() + tab.slice(1)]);
+      btn.dataset.tab = tab;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Update tab active state
+        tabs.querySelectorAll('.cc3-color-tab').forEach(t => t.classList.remove('cc3-active'));
+        btn.classList.add('cc3-active');
+        // Update panel visibility
+        section.querySelectorAll('.cc3-color-tab-panel').forEach(p => p.classList.remove('cc3-active'));
+        const panel = section.querySelector(`[data-panel="${tab}"]`);
+        if (panel) panel.classList.add('cc3-active');
+        onTabChange(tab);
+      });
+      tabs.appendChild(btn);
+    });
+    section.appendChild(tabs);
+
+    // Tab panels container
+    const tabContent = createEl('div', { className: 'cc3-color-tab-content' });
+
+    // Vibrant panel
+    const vibrantPanel = createEl('div', {
+      className: `cc3-color-tab-panel ${activeTab === 'vibrant' ? 'cc3-active' : ''}`
+    });
+    vibrantPanel.dataset.panel = 'vibrant';
+    vibrantPanel.appendChild(renderColorPalette(VIBRANT_COLORS, selectedColor, (color) => {
+      colorInput.value = color;
+      hexInput.value = color.toUpperCase();
+      onColorSelect(color);
+    }, `${pickerId}-vibrant`));
+    tabContent.appendChild(vibrantPanel);
+
+    // Pastel panel
+    const pastelPanel = createEl('div', {
+      className: `cc3-color-tab-panel ${activeTab === 'pastel' ? 'cc3-active' : ''}`
+    });
+    pastelPanel.dataset.panel = 'pastel';
+    pastelPanel.appendChild(renderColorPalette(PASTEL_COLORS, selectedColor, (color) => {
+      colorInput.value = color;
+      hexInput.value = color.toUpperCase();
+      onColorSelect(color);
+    }, `${pickerId}-pastel`));
+    tabContent.appendChild(pastelPanel);
+
+    // Dark panel
+    const darkPanel = createEl('div', {
+      className: `cc3-color-tab-panel ${activeTab === 'dark' ? 'cc3-active' : ''}`
+    });
+    darkPanel.dataset.panel = 'dark';
+    darkPanel.appendChild(renderColorPalette(DARK_COLORS, selectedColor, (color) => {
+      colorInput.value = color;
+      hexInput.value = color.toUpperCase();
+      onColorSelect(color);
+    }, `${pickerId}-dark`));
+    tabContent.appendChild(darkPanel);
+
+    // Custom panel
+    const customPanel = createEl('div', {
+      className: `cc3-color-tab-panel ${activeTab === 'custom' ? 'cc3-active' : ''}`
+    });
+    customPanel.dataset.panel = 'custom';
+
+    if (customColors.length === 0) {
+      customPanel.appendChild(createCustomColorsEmptyState());
+    } else {
+      customPanel.appendChild(renderColorPalette(customColors, selectedColor, (color) => {
+        colorInput.value = color;
+        hexInput.value = color.toUpperCase();
+        onColorSelect(color);
+      }, `${pickerId}-custom`));
+    }
+    tabContent.appendChild(customPanel);
+
+    section.appendChild(tabContent);
+
+    return section;
   }
 
   function renderModeSelector(mode, onModeChange, isPremium) {
@@ -407,7 +539,7 @@
     });
     panel.appendChild(header);
 
-    // Mode selector - use local updates where possible
+    // Mode selector
     panel.appendChild(renderModeSelector(state.colorMode, (mode) => {
       state.colorMode = mode;
       if (mode === 'specific' && !state.colorSelectedDate) {
@@ -425,37 +557,27 @@
     } else {
       panel.appendChild(renderDatePicker(state.colorSelectedDate, (date) => {
         state.colorSelectedDate = date;
-        // Don't re-render for date changes - just update state
       }));
     }
 
-    // Color tabs
-    panel.appendChild(renderColorTabs(state.colorActiveTab, (tab) => {
-      state.colorActiveTab = tab;
-      scheduleRender();
-    }));
+    // Color section label
+    panel.appendChild(createEl('div', { className: 'cc3-section-label' }, ['Color:']));
 
-    // Color palette based on active tab - compact layout
-    const paletteContainer = createEl('div', { className: 'cc3-palette-container cc3-palette-compact' });
-    let colors = VIBRANT_COLORS;
-    if (state.colorActiveTab === 'pastel') colors = PASTEL_COLORS;
-    else if (state.colorActiveTab === 'dark') colors = DARK_COLORS;
-
-    if (state.colorActiveTab === 'custom') {
-      paletteContainer.appendChild(renderCustomColorInput(state.selectedColor, (color) => {
+    // Color picker section (color input + hex + tabs + palettes)
+    panel.appendChild(renderColorPickerSection(
+      state.selectedColor || VIBRANT_COLORS[0],
+      state.colorActiveTab,
+      (color) => {
         state.selectedColor = color;
         updatePreviewSwatch();
-      }));
-    } else {
-      paletteContainer.appendChild(renderColorPalette(colors, state.selectedColor, (color) => {
-        state.selectedColor = color;
-        updatePreviewSwatch();
-        updatePaletteSelection(paletteContainer, color);
-      }));
-    }
-    panel.appendChild(paletteContainer);
+      },
+      (tab) => {
+        state.colorActiveTab = tab;
+      },
+      'color-day-picker'
+    ));
 
-    // Opacity section with local updates
+    // Opacity section
     const opacitySection = createEl('div', { className: 'cc3-opacity-section' });
     const opacityHeader = createEl('div', { className: 'cc3-opacity-header' });
     opacityHeader.appendChild(createEl('span', { className: 'cc3-section-label' }, ['Opacity:']));
@@ -489,7 +611,6 @@
       opacityValue.textContent = `${state.selectedOpacity}%`;
       updatePreviewSwatch();
     });
-    // No re-render needed on change
     opacitySection.appendChild(opacitySlider);
     panel.appendChild(opacitySection);
 
@@ -639,30 +760,21 @@
     styleRow.appendChild(styleSelect);
     panel.appendChild(styleRow);
 
-    // Color tabs
-    panel.appendChild(renderColorTabs(state.blockActiveTab, (tab) => {
-      state.blockActiveTab = tab;
-      scheduleRender();
-    }));
+    // Color section label
+    panel.appendChild(createEl('div', { className: 'cc3-section-label' }, ['Color:']));
 
-    // Color palette - compact layout
-    const paletteContainer = createEl('div', { className: 'cc3-palette-container cc3-palette-compact' });
-    let colors = VIBRANT_COLORS;
-    if (state.blockActiveTab === 'pastel') colors = PASTEL_COLORS;
-    else if (state.blockActiveTab === 'dark') colors = DARK_COLORS;
-
-    if (state.blockActiveTab === 'custom') {
-      paletteContainer.appendChild(renderCustomColorInput(state.selectedBlockColor, (color) => {
+    // Color picker section (color input + hex + tabs + palettes)
+    panel.appendChild(renderColorPickerSection(
+      state.selectedBlockColor || '#FFEB3B',
+      state.blockActiveTab,
+      (color) => {
         state.selectedBlockColor = color;
-        // No re-render needed
-      }));
-    } else {
-      paletteContainer.appendChild(renderColorPalette(colors, state.selectedBlockColor, (color) => {
-        state.selectedBlockColor = color;
-        // No re-render needed - selection handled in renderColorPalette
-      }));
-    }
-    panel.appendChild(paletteContainer);
+      },
+      (tab) => {
+        state.blockActiveTab = tab;
+      },
+      'time-block-picker'
+    ));
 
     // Add Block button
     const addBtn = createEl('button', { className: 'cc3-btn cc3-btn-primary cc3-btn-full' }, ['Add Block']);
@@ -848,12 +960,29 @@
   }
 
   async function mount() {
+    // Load settings and custom colors
     state.settings = await window.cc3Storage.getSettings();
+    await loadCustomColors();
+
     renderToolbar();
+
+    // Listen for settings changes
     window.cc3Storage.onSettingsChanged((s) => {
       state.settings = s;
       if (!state.activePanel) renderToolbar();
     });
+
+    // Listen for custom colors changes from Color Lab
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'sync' && changes.customDayColors) {
+        customColors = changes.customDayColors.newValue || [];
+        // Re-render if panel is open to update custom colors
+        if (state.activePanel) {
+          scheduleRender();
+        }
+      }
+    });
+
     document.addEventListener('click', handleClickOutside);
   }
 

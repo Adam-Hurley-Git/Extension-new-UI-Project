@@ -613,11 +613,57 @@
   margin-left: 4px;
 }
 
+/* Color picker section */
+.cc3-color-picker-section {
+  margin-bottom: 12px;
+}
+
+/* Color input row (color picker + hex input) */
+.cc3-color-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.cc3-color-picker-input {
+  width: 48px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #fff;
+}
+.cc3-color-picker-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+.cc3-color-picker-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+.cc3-hex-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  color: #374151;
+  background: #fff;
+  text-transform: uppercase;
+}
+.cc3-hex-input:focus {
+  outline: none;
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
+}
+
 /* Color tabs */
 .cc3-color-tabs {
   display: flex;
   border-bottom: 1px solid #e5e7eb;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 .cc3-color-tab {
   flex: 1;
@@ -643,6 +689,45 @@
   font-weight: 600;
 }
 
+/* Color tab panels */
+.cc3-color-tab-content {
+  background: #f8f9fa;
+  border: 1px solid #e8eaed;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+}
+.cc3-color-tab-panel {
+  display: none;
+  padding: 6px;
+}
+.cc3-color-tab-panel.cc3-active {
+  display: block;
+}
+
+/* Custom colors empty state */
+.cc3-custom-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  text-align: center;
+}
+.cc3-custom-empty-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+.cc3-custom-empty-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 4px;
+}
+.cc3-custom-empty-subtext {
+  font-size: 11px;
+  color: #6b7280;
+}
+
 /* Color palette */
 .cc3-palette-container {
   margin-bottom: 12px;
@@ -651,20 +736,17 @@
   display: grid;
   grid-template-columns: repeat(10, 1fr);
   gap: 3px;
-  padding: 6px;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border: 1px solid #e8eaed;
-  max-height: 120px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  max-height: 100px;
   overflow-y: auto;
   overflow-x: hidden;
 }
-/* Compact palette for toolbar - more columns, smaller swatches */
-.cc3-palette-compact .cc3-color-palette {
-  grid-template-columns: repeat(12, 1fr);
-  gap: 2px;
-  padding: 4px;
-  max-height: 90px;
+/* Palette within tab panel */
+.cc3-color-tab-panel .cc3-color-palette {
+  max-height: 80px;
 }
 .cc3-palette-swatch {
   width: 100%;
