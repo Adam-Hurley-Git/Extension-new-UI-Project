@@ -506,7 +506,9 @@
 
   async function clearDayColor() {
     if (state.colorMode === 'recurring') {
-      await window.cc3Storage.setWeekdayColor(state.colorSelectedDay, null);
+      // Set to white/transparent to "clear" the color
+      await window.cc3Storage.setWeekdayColor(state.colorSelectedDay, '#ffffff');
+      await window.cc3Storage.setWeekdayOpacity(state.colorSelectedDay, 0);
     } else {
       const dateKey = state.colorSelectedDate || formatDateForInput(new Date());
       await window.cc3Storage.clearDateColor(dateKey);
@@ -519,11 +521,19 @@
   }
 
   async function addTimeBlock() {
+    // Validate end time is after start time
+    const startMins = timeToMinutes(state.blockStartTime);
+    const endMins = timeToMinutes(state.blockEndTime);
+    if (endMins <= startMins) {
+      console.warn('End time must be after start time');
+      return;
+    }
+
     const timeBlock = {
       timeRange: [state.blockStartTime, state.blockEndTime],
       color: state.selectedBlockColor,
-      label: state.blockLabel,
-      shadingStyle: state.blockShadingStyle,
+      label: state.blockLabel || '',
+      style: state.blockShadingStyle,
     };
 
     if (state.blockMode === 'recurring') {
@@ -539,6 +549,11 @@
     if (window.cc3Features?.updateFeature) {
       window.cc3Features.updateFeature('timeBlocking', newSettings.timeBlocking || {});
     }
+  }
+
+  function timeToMinutes(time24) {
+    const [hours, mins] = time24.split(':').map(Number);
+    return hours * 60 + mins;
   }
 
   function renderToolbar() {
@@ -584,6 +599,10 @@
     colorBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg><span>Color</span>';
     colorBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (state.activePanel !== 'color') {
+        // Set default color if none selected
+        if (!state.selectedColor) state.selectedColor = VIBRANT_COLORS[0];
+      }
       state.activePanel = state.activePanel === 'color' ? null : 'color';
       renderToolbar();
     });
@@ -596,6 +615,10 @@
     blockBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Block</span>';
     blockBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (state.activePanel !== 'block') {
+        // Set default block color if none selected
+        if (!state.selectedBlockColor) state.selectedBlockColor = VIBRANT_COLORS[6]; // Yellow
+      }
       state.activePanel = state.activePanel === 'block' ? null : 'block';
       renderToolbar();
     });
