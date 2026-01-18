@@ -467,6 +467,199 @@
   margin-bottom: 12px;
 }
 
+/* Mode selector */
+.cc3-mode-section {
+  margin-bottom: 12px;
+}
+.cc3-mode-group {
+  display: flex;
+  gap: 6px;
+}
+.cc3-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cc3-mode-btn:hover {
+  background: #f3f4f6;
+}
+.cc3-mode-btn.cc3-active {
+  background: #0b57d0;
+  color: #fff;
+  border-color: #0b57d0;
+}
+.cc3-mode-btn.cc3-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Day selector */
+.cc3-day-selector {
+  margin-bottom: 12px;
+}
+.cc3-day-grid {
+  display: flex;
+  gap: 4px;
+}
+.cc3-day-btn {
+  flex: 1;
+  padding: 6px 2px;
+  font-size: 10px;
+  font-weight: 500;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cc3-day-btn:hover {
+  background: #f3f4f6;
+}
+.cc3-day-btn.cc3-active {
+  background: #0b57d0;
+  color: #fff;
+  border-color: #0b57d0;
+}
+
+/* Date picker */
+.cc3-date-picker {
+  margin-bottom: 12px;
+}
+.cc3-date-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+  background: #fff;
+  cursor: pointer;
+}
+.cc3-date-input:focus {
+  outline: none;
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
+}
+
+/* Color tabs */
+.cc3-color-tabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 8px;
+}
+.cc3-color-tab {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  background: #f8f9fa;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cc3-color-tab:hover {
+  background: #e8eaed;
+  color: #333;
+}
+.cc3-color-tab.cc3-active {
+  background: #fff;
+  color: #0b57d0;
+  border-bottom-color: #0b57d0;
+  font-weight: 600;
+}
+
+/* Color palette */
+.cc3-palette-container {
+  margin-bottom: 12px;
+}
+.cc3-color-palette {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e8eaed;
+  max-height: 100px;
+  overflow-y: auto;
+}
+.cc3-palette-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 18px;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+.cc3-palette-swatch:hover {
+  transform: scale(1.15);
+  border-color: #0b57d0;
+  z-index: 1;
+}
+.cc3-palette-swatch.cc3-selected {
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.3);
+}
+
+/* Custom color input row */
+.cc3-custom-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e8eaed;
+}
+.cc3-custom-color-picker {
+  width: 48px;
+  height: 36px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cc3-hex-input {
+  flex: 1;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: monospace;
+  color: #374151;
+  background: #fff;
+}
+.cc3-hex-input:focus {
+  outline: none;
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
+}
+
+/* Flyout panel max width */
+.cc3-flyout-panel {
+  min-width: 280px;
+  max-width: 320px;
+}
+
 /* Legacy toggle styles (kept for compatibility) */
 .cc3-toolbar .cc3-row {
   display: flex;
