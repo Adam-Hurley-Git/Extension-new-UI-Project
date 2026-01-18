@@ -20,6 +20,9 @@
     blockActiveTab: 'vibrant',
     blockLabel: '',
     blockShadingStyle: 'solid',
+    // Anti-flicker flags
+    isRendering: false,
+    pendingRender: false,
   };
 
   // Day names
@@ -91,9 +94,154 @@
     return d.toISOString().split('T')[0];
   }
 
+  // Debounced render to prevent flickering
+  function scheduleRender() {
+    if (state.isRendering) {
+      state.pendingRender = true;
+      return;
+    }
+    requestAnimationFrame(() => {
+      renderToolbar();
+    });
+  }
+
+  // Safe update that avoids unnecessary re-renders
+  function updateStateAndRender(updates) {
+    Object.assign(state, updates);
+    scheduleRender();
+  }
+
   function closePanel() {
     state.activePanel = null;
-    renderToolbar();
+    scheduleRender();
+  }
+
+  // Block Google Calendar keyboard shortcuts
+  function blockCalendarHotkeys(e) {
+    // Prevent all keyboard events from reaching Google Calendar
+    e.stopPropagation();
+    // Also stop immediate propagation to prevent any other listeners
+    e.stopImmediatePropagation();
+  }
+
+  // Create typeable time picker (HH:MM format)
+  function createTimePicker(initialTime, onTimeChange, label) {
+    const [initialHours, initialMinutes] = (initialTime || '09:00').split(':');
+
+    const container = createEl('div', { className: 'cc3-time-picker-row' });
+
+    const labelEl = createEl('label', { className: 'cc3-time-label' }, [label]);
+    container.appendChild(labelEl);
+
+    const pickerWrapper = createEl('div', { className: 'cc3-time-picker-wrapper' });
+
+    const hoursInput = createEl('input', {
+      type: 'text',
+      className: 'cc3-time-input cc3-hours',
+      maxLength: 2,
+      placeholder: '00',
+      value: initialHours.padStart(2, '0')
+    });
+
+    const separator = createEl('span', { className: 'cc3-time-separator' }, [':']);
+
+    const minutesInput = createEl('input', {
+      type: 'text',
+      className: 'cc3-time-input cc3-minutes',
+      maxLength: 2,
+      placeholder: '00',
+      value: initialMinutes.padStart(2, '0')
+    });
+
+    // Validation functions
+    const validateHours = (value) => {
+      const num = parseInt(value, 10);
+      if (isNaN(num) || num < 0) return '00';
+      if (num > 23) return '23';
+      return num.toString().padStart(2, '0');
+    };
+
+    const validateMinutes = (value) => {
+      const num = parseInt(value, 10);
+      if (isNaN(num) || num < 0) return '00';
+      if (num > 59) return '59';
+      return num.toString().padStart(2, '0');
+    };
+
+    const getTimeValue = () => {
+      const hours = validateHours(hoursInput.value);
+      const minutes = validateMinutes(minutesInput.value);
+      return `${hours}:${minutes}`;
+    };
+
+    const notifyChange = () => {
+      const time = getTimeValue();
+      hoursInput.value = time.split(':')[0];
+      minutesInput.value = time.split(':')[1];
+      if (onTimeChange) onTimeChange(time);
+    };
+
+    // Block all keyboard events from reaching Google Calendar
+    [hoursInput, minutesInput].forEach(input => {
+      input.addEventListener('keydown', (e) => {
+        blockCalendarHotkeys(e);
+
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          notifyChange();
+          if (input === hoursInput) {
+            minutesInput.focus();
+            minutesInput.select();
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (input === hoursInput) {
+            const current = parseInt(hoursInput.value) || 0;
+            hoursInput.value = Math.min(23, current + 1).toString().padStart(2, '0');
+          } else {
+            const current = parseInt(minutesInput.value) || 0;
+            minutesInput.value = Math.min(59, current + 1).toString().padStart(2, '0');
+          }
+          notifyChange();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (input === hoursInput) {
+            const current = parseInt(hoursInput.value) || 0;
+            hoursInput.value = Math.max(0, current - 1).toString().padStart(2, '0');
+          } else {
+            const current = parseInt(minutesInput.value) || 0;
+            minutesInput.value = Math.max(0, current - 1).toString().padStart(2, '0');
+          }
+          notifyChange();
+        } else if (e.key === 'Tab') {
+          // Allow Tab but prevent Google Calendar from intercepting
+        }
+      });
+
+      input.addEventListener('keyup', blockCalendarHotkeys);
+      input.addEventListener('keypress', blockCalendarHotkeys);
+
+      input.addEventListener('input', (e) => {
+        // Only allow numbers
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+
+        // Auto-advance from hours to minutes
+        if (input === hoursInput && e.target.value.length === 2) {
+          minutesInput.focus();
+          minutesInput.select();
+        }
+      });
+
+      input.addEventListener('blur', notifyChange);
+      input.addEventListener('focus', () => input.select());
+    });
+
+    pickerWrapper.appendChild(hoursInput);
+    pickerWrapper.appendChild(separator);
+    pickerWrapper.appendChild(minutesInput);
+    container.appendChild(pickerWrapper);
+
+    return container;
   }
 
   function handleClickOutside(e) {
@@ -123,9 +271,13 @@
     colors.forEach(color => {
       const swatch = createEl('button', { className: `cc3-palette-swatch ${selectedColor === color ? 'cc3-selected' : ''}` });
       swatch.style.backgroundColor = color;
+      swatch.dataset.color = color; // Store for comparison
       if (color === '#ffffff') swatch.style.border = '1px solid #ccc';
       swatch.addEventListener('click', (e) => {
         e.stopPropagation();
+        // Update selection visually without re-render
+        grid.querySelectorAll('.cc3-palette-swatch').forEach(s => s.classList.remove('cc3-selected'));
+        swatch.classList.add('cc3-selected');
         onColorSelect(color);
       });
       grid.appendChild(swatch);
@@ -216,10 +368,21 @@
       className: 'cc3-date-input',
       value: selectedDate || formatDateForInput(new Date())
     });
+
+    // Block all keyboard events to prevent Google Calendar hotkeys
+    input.addEventListener('keydown', blockCalendarHotkeys);
+    input.addEventListener('keyup', blockCalendarHotkeys);
+    input.addEventListener('keypress', blockCalendarHotkeys);
+
     input.addEventListener('change', (e) => {
       e.stopPropagation();
       onDateChange(e.target.value);
     });
+
+    // Also prevent click events from reaching Google Calendar
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('mousedown', (e) => e.stopPropagation());
+
     container.appendChild(input);
     return container;
   }
@@ -227,6 +390,11 @@
   function renderColorPanel() {
     const panel = createEl('div', { className: 'cc3-flyout-panel cc3-color-panel' });
     const isPremium = window.cc3IsPremium;
+
+    // Block all keyboard events on the panel itself
+    panel.addEventListener('keydown', blockCalendarHotkeys);
+    panel.addEventListener('keyup', blockCalendarHotkeys);
+    panel.addEventListener('keypress', blockCalendarHotkeys);
 
     // Header
     const header = createEl('div', { className: 'cc3-panel-header' }, [
@@ -239,36 +407,36 @@
     });
     panel.appendChild(header);
 
-    // Mode selector
+    // Mode selector - use local updates where possible
     panel.appendChild(renderModeSelector(state.colorMode, (mode) => {
       state.colorMode = mode;
       if (mode === 'specific' && !state.colorSelectedDate) {
         state.colorSelectedDate = formatDateForInput(new Date());
       }
-      renderToolbar();
+      scheduleRender();
     }, isPremium));
 
     // Day/Date selector based on mode
     if (state.colorMode === 'recurring') {
       panel.appendChild(renderDaySelector(state.colorSelectedDay, (day) => {
         state.colorSelectedDay = day;
-        renderToolbar();
+        scheduleRender();
       }));
     } else {
       panel.appendChild(renderDatePicker(state.colorSelectedDate, (date) => {
         state.colorSelectedDate = date;
-        renderToolbar();
+        // Don't re-render for date changes - just update state
       }));
     }
 
     // Color tabs
     panel.appendChild(renderColorTabs(state.colorActiveTab, (tab) => {
       state.colorActiveTab = tab;
-      renderToolbar();
+      scheduleRender();
     }));
 
-    // Color palette based on active tab
-    const paletteContainer = createEl('div', { className: 'cc3-palette-container' });
+    // Color palette based on active tab - compact layout
+    const paletteContainer = createEl('div', { className: 'cc3-palette-container cc3-palette-compact' });
     let colors = VIBRANT_COLORS;
     if (state.colorActiveTab === 'pastel') colors = PASTEL_COLORS;
     else if (state.colorActiveTab === 'dark') colors = DARK_COLORS;
@@ -276,17 +444,18 @@
     if (state.colorActiveTab === 'custom') {
       paletteContainer.appendChild(renderCustomColorInput(state.selectedColor, (color) => {
         state.selectedColor = color;
-        renderToolbar();
+        updatePreviewSwatch();
       }));
     } else {
       paletteContainer.appendChild(renderColorPalette(colors, state.selectedColor, (color) => {
         state.selectedColor = color;
-        renderToolbar();
+        updatePreviewSwatch();
+        updatePaletteSelection(paletteContainer, color);
       }));
     }
     panel.appendChild(paletteContainer);
 
-    // Opacity section
+    // Opacity section with local updates
     const opacitySection = createEl('div', { className: 'cc3-opacity-section' });
     const opacityHeader = createEl('div', { className: 'cc3-opacity-header' });
     opacityHeader.appendChild(createEl('span', { className: 'cc3-section-label' }, ['Opacity:']));
@@ -302,7 +471,10 @@
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         state.selectedOpacity = val;
-        renderToolbar();
+        opacityValue.textContent = `${val}%`;
+        opacitySlider.value = val;
+        updatePreviewSwatch();
+        updateOpacitySelection(opacityPresets, val);
       });
       opacityPresets.appendChild(btn);
     });
@@ -315,15 +487,16 @@
     opacitySlider.addEventListener('input', (e) => {
       state.selectedOpacity = parseInt(e.target.value, 10);
       opacityValue.textContent = `${state.selectedOpacity}%`;
+      updatePreviewSwatch();
     });
-    opacitySlider.addEventListener('change', () => renderToolbar());
+    // No re-render needed on change
     opacitySection.appendChild(opacitySlider);
     panel.appendChild(opacitySection);
 
     // Preview
     const previewSection = createEl('div', { className: 'cc3-preview-section' });
     previewSection.appendChild(createEl('span', { className: 'cc3-section-label' }, ['Preview:']));
-    const previewSwatch = createEl('div', { className: 'cc3-preview-swatch' });
+    const previewSwatch = createEl('div', { className: 'cc3-preview-swatch', id: 'cc3-preview-swatch' });
     previewSwatch.style.backgroundColor = state.selectedColor || VIBRANT_COLORS[0];
     previewSwatch.style.opacity = state.selectedOpacity / 100;
     previewSection.appendChild(previewSwatch);
@@ -351,9 +524,43 @@
     return panel;
   }
 
+  // Helper to update preview without re-rendering
+  function updatePreviewSwatch() {
+    const swatch = document.getElementById('cc3-preview-swatch');
+    if (swatch) {
+      swatch.style.backgroundColor = state.selectedColor || VIBRANT_COLORS[0];
+      swatch.style.opacity = state.selectedOpacity / 100;
+    }
+  }
+
+  // Helper to update palette selection without re-rendering
+  function updatePaletteSelection(container, selectedColor) {
+    const swatches = container.querySelectorAll('.cc3-palette-swatch');
+    swatches.forEach(swatch => {
+      const color = swatch.style.backgroundColor;
+      // Convert rgb to hex for comparison
+      const isSelected = swatch.dataset.color === selectedColor;
+      swatch.classList.toggle('cc3-selected', isSelected);
+    });
+  }
+
+  // Helper to update opacity button selection without re-rendering
+  function updateOpacitySelection(container, selectedValue) {
+    const buttons = container.querySelectorAll('.cc3-opacity-btn');
+    buttons.forEach(btn => {
+      const val = parseInt(btn.textContent);
+      btn.classList.toggle('cc3-active', val === selectedValue);
+    });
+  }
+
   function renderBlockPanel() {
     const panel = createEl('div', { className: 'cc3-flyout-panel cc3-block-panel' });
     const isPremium = window.cc3IsPremium;
+
+    // Block all keyboard events on the panel itself
+    panel.addEventListener('keydown', blockCalendarHotkeys);
+    panel.addEventListener('keyup', blockCalendarHotkeys);
+    panel.addEventListener('keypress', blockCalendarHotkeys);
 
     // Header
     const header = createEl('div', { className: 'cc3-panel-header' }, [
@@ -372,56 +579,35 @@
       if (mode === 'specific' && !state.blockSelectedDate) {
         state.blockSelectedDate = formatDateForInput(new Date());
       }
-      renderToolbar();
+      scheduleRender();
     }, isPremium));
 
     // Day/Date selector based on mode
     if (state.blockMode === 'recurring') {
       panel.appendChild(renderDaySelector(state.blockSelectedDay, (day) => {
         state.blockSelectedDay = day;
-        renderToolbar();
+        scheduleRender();
       }));
     } else {
       panel.appendChild(renderDatePicker(state.blockSelectedDate, (date) => {
         state.blockSelectedDate = date;
-        renderToolbar();
+        // Don't re-render for date changes
       }));
     }
 
-    // Time selection
+    // Time selection - using new typeable time pickers
     const timeSection = createEl('div', { className: 'cc3-time-section' });
 
-    // Start time
-    const startRow = createEl('div', { className: 'cc3-form-row' });
-    startRow.appendChild(createEl('label', {}, ['Start:']));
-    const startSelect = createEl('select', { className: 'cc3-select' });
-    for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 30) {
-        const time = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        const option = createEl('option', { value: time }, [formatTime(time)]);
-        if (time === state.blockStartTime) option.selected = true;
-        startSelect.appendChild(option);
-      }
-    }
-    startSelect.addEventListener('change', (e) => { state.blockStartTime = e.target.value; });
-    startRow.appendChild(startSelect);
-    timeSection.appendChild(startRow);
+    // Start time - typeable input
+    timeSection.appendChild(createTimePicker(state.blockStartTime, (time) => {
+      state.blockStartTime = time;
+    }, 'Start:'));
 
-    // End time
-    const endRow = createEl('div', { className: 'cc3-form-row' });
-    endRow.appendChild(createEl('label', {}, ['End:']));
-    const endSelect = createEl('select', { className: 'cc3-select' });
-    for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 30) {
-        const time = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        const option = createEl('option', { value: time }, [formatTime(time)]);
-        if (time === state.blockEndTime) option.selected = true;
-        endSelect.appendChild(option);
-      }
-    }
-    endSelect.addEventListener('change', (e) => { state.blockEndTime = e.target.value; });
-    endRow.appendChild(endSelect);
-    timeSection.appendChild(endRow);
+    // End time - typeable input
+    timeSection.appendChild(createTimePicker(state.blockEndTime, (time) => {
+      state.blockEndTime = time;
+    }, 'End:'));
+
     panel.appendChild(timeSection);
 
     // Label input
@@ -431,6 +617,10 @@
       type: 'text', className: 'cc3-text-input',
       placeholder: 'e.g., Deep Work', value: state.blockLabel
     });
+    // Block keyboard events for label input
+    labelInput.addEventListener('keydown', blockCalendarHotkeys);
+    labelInput.addEventListener('keyup', blockCalendarHotkeys);
+    labelInput.addEventListener('keypress', blockCalendarHotkeys);
     labelInput.addEventListener('input', (e) => { state.blockLabel = e.target.value; });
     labelRow.appendChild(labelInput);
     panel.appendChild(labelRow);
@@ -445,17 +635,18 @@
       styleSelect.appendChild(option);
     });
     styleSelect.addEventListener('change', (e) => { state.blockShadingStyle = e.target.value; });
+    styleSelect.addEventListener('keydown', blockCalendarHotkeys);
     styleRow.appendChild(styleSelect);
     panel.appendChild(styleRow);
 
     // Color tabs
     panel.appendChild(renderColorTabs(state.blockActiveTab, (tab) => {
       state.blockActiveTab = tab;
-      renderToolbar();
+      scheduleRender();
     }));
 
-    // Color palette
-    const paletteContainer = createEl('div', { className: 'cc3-palette-container' });
+    // Color palette - compact layout
+    const paletteContainer = createEl('div', { className: 'cc3-palette-container cc3-palette-compact' });
     let colors = VIBRANT_COLORS;
     if (state.blockActiveTab === 'pastel') colors = PASTEL_COLORS;
     else if (state.blockActiveTab === 'dark') colors = DARK_COLORS;
@@ -463,12 +654,12 @@
     if (state.blockActiveTab === 'custom') {
       paletteContainer.appendChild(renderCustomColorInput(state.selectedBlockColor, (color) => {
         state.selectedBlockColor = color;
-        renderToolbar();
+        // No re-render needed
       }));
     } else {
       paletteContainer.appendChild(renderColorPalette(colors, state.selectedBlockColor, (color) => {
         state.selectedBlockColor = color;
-        renderToolbar();
+        // No re-render needed - selection handled in renderColorPalette
       }));
     }
     panel.appendChild(paletteContainer);
@@ -557,77 +748,103 @@
   }
 
   function renderToolbar() {
-    const existing = document.querySelector('.cc3-toolbar');
-    if (existing) existing.remove();
-
-    if (!state.settings) return;
-
-    const root = createEl('div', { className: `cc3-toolbar ${state.collapsed ? 'cc3-collapsed' : ''}` });
-
-    const collapseBtn = createEl('button', {
-      className: 'cc3-collapse-btn',
-      innerHTML: state.collapsed ? '&#9650;' : '&#9660;',
-      title: state.collapsed ? 'Expand toolbar' : 'Collapse toolbar',
-    });
-    collapseBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.collapsed = !state.collapsed;
-      if (state.collapsed) state.activePanel = null;
-      renderToolbar();
-    });
-
-    if (state.collapsed) {
-      root.appendChild(collapseBtn);
-      document.documentElement.appendChild(root);
+    // Anti-flicker guard
+    if (state.isRendering) {
+      state.pendingRender = true;
       return;
     }
+    state.isRendering = true;
 
-    const content = createEl('div', { className: 'cc3-toolbar-content' });
+    try {
+      const existing = document.querySelector('.cc3-toolbar');
+      if (existing) existing.remove();
 
-    if (state.activePanel === 'color') {
-      content.appendChild(renderColorPanel());
-    } else if (state.activePanel === 'block') {
-      content.appendChild(renderBlockPanel());
+      if (!state.settings) {
+        state.isRendering = false;
+        return;
+      }
+
+      const root = createEl('div', { className: `cc3-toolbar ${state.collapsed ? 'cc3-collapsed' : ''}` });
+
+      // Block keyboard events on the entire toolbar
+      root.addEventListener('keydown', blockCalendarHotkeys);
+      root.addEventListener('keyup', blockCalendarHotkeys);
+      root.addEventListener('keypress', blockCalendarHotkeys);
+
+      const collapseBtn = createEl('button', {
+        className: 'cc3-collapse-btn',
+        innerHTML: state.collapsed ? '&#9650;' : '&#9660;',
+        title: state.collapsed ? 'Expand toolbar' : 'Collapse toolbar',
+      });
+      collapseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.collapsed = !state.collapsed;
+        if (state.collapsed) state.activePanel = null;
+        scheduleRender();
+      });
+
+      if (state.collapsed) {
+        root.appendChild(collapseBtn);
+        document.documentElement.appendChild(root);
+        state.isRendering = false;
+        return;
+      }
+
+      const content = createEl('div', { className: 'cc3-toolbar-content' });
+
+      if (state.activePanel === 'color') {
+        content.appendChild(renderColorPanel());
+      } else if (state.activePanel === 'block') {
+        content.appendChild(renderBlockPanel());
+      }
+
+      const buttonRow = createEl('div', { className: 'cc3-button-row' });
+
+      const colorBtn = createEl('button', {
+        className: `cc3-action-btn ${state.activePanel === 'color' ? 'cc3-active' : ''}`,
+        title: 'Color day',
+      });
+      colorBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg><span>Color</span>';
+      colorBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.activePanel !== 'color') {
+          // Set default color if none selected
+          if (!state.selectedColor) state.selectedColor = VIBRANT_COLORS[0];
+        }
+        state.activePanel = state.activePanel === 'color' ? null : 'color';
+        scheduleRender();
+      });
+      buttonRow.appendChild(colorBtn);
+
+      const blockBtn = createEl('button', {
+        className: `cc3-action-btn ${state.activePanel === 'block' ? 'cc3-active' : ''}`,
+        title: 'Add time block',
+      });
+      blockBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Block</span>';
+      blockBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.activePanel !== 'block') {
+          // Set default block color if none selected
+          if (!state.selectedBlockColor) state.selectedBlockColor = VIBRANT_COLORS[6]; // Yellow
+        }
+        state.activePanel = state.activePanel === 'block' ? null : 'block';
+        scheduleRender();
+      });
+      buttonRow.appendChild(blockBtn);
+
+      buttonRow.appendChild(collapseBtn);
+      content.appendChild(buttonRow);
+      root.appendChild(content);
+      document.documentElement.appendChild(root);
+    } finally {
+      state.isRendering = false;
+
+      // Check if another render was requested while we were rendering
+      if (state.pendingRender) {
+        state.pendingRender = false;
+        requestAnimationFrame(() => renderToolbar());
+      }
     }
-
-    const buttonRow = createEl('div', { className: 'cc3-button-row' });
-
-    const colorBtn = createEl('button', {
-      className: `cc3-action-btn ${state.activePanel === 'color' ? 'cc3-active' : ''}`,
-      title: 'Color day',
-    });
-    colorBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg><span>Color</span>';
-    colorBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (state.activePanel !== 'color') {
-        // Set default color if none selected
-        if (!state.selectedColor) state.selectedColor = VIBRANT_COLORS[0];
-      }
-      state.activePanel = state.activePanel === 'color' ? null : 'color';
-      renderToolbar();
-    });
-    buttonRow.appendChild(colorBtn);
-
-    const blockBtn = createEl('button', {
-      className: `cc3-action-btn ${state.activePanel === 'block' ? 'cc3-active' : ''}`,
-      title: 'Add time block',
-    });
-    blockBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Block</span>';
-    blockBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (state.activePanel !== 'block') {
-        // Set default block color if none selected
-        if (!state.selectedBlockColor) state.selectedBlockColor = VIBRANT_COLORS[6]; // Yellow
-      }
-      state.activePanel = state.activePanel === 'block' ? null : 'block';
-      renderToolbar();
-    });
-    buttonRow.appendChild(blockBtn);
-
-    buttonRow.appendChild(collapseBtn);
-    content.appendChild(buttonRow);
-    root.appendChild(content);
-    document.documentElement.appendChild(root);
   }
 
   async function mount() {

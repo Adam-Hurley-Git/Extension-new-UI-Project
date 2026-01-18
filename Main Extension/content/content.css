@@ -237,6 +237,59 @@
   box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
 }
 
+/* Typeable time picker */
+.cc3-time-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.cc3-time-label {
+  font-size: 12px;
+  color: #6b7280;
+  min-width: 55px;
+}
+.cc3-time-picker-wrapper {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 4px 8px;
+  transition: all 0.15s ease;
+}
+.cc3-time-picker-wrapper:focus-within {
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
+}
+.cc3-time-input {
+  width: 24px;
+  height: 24px;
+  border: none;
+  outline: none;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  color: #374151;
+  background: transparent;
+  padding: 0;
+}
+.cc3-time-input:focus {
+  background: rgba(11, 87, 208, 0.08);
+  border-radius: 3px;
+}
+.cc3-time-input::placeholder {
+  color: #9ca3af;
+}
+.cc3-time-separator {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  margin: 0 2px;
+  user-select: none;
+}
+
 /* Block color section */
 .cc3-block-color-section {
   margin-bottom: 12px;
@@ -553,6 +606,12 @@
   border-color: #0b57d0;
   box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.2);
 }
+/* Ensure date picker calendar doesn't get keyboard events stolen */
+.cc3-date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  padding: 4px;
+  margin-left: 4px;
+}
 
 /* Color tabs */
 .cc3-color-tabs {
@@ -590,33 +649,59 @@
 }
 .cc3-color-palette {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  padding: 8px;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+  padding: 6px;
   background: #f8f9fa;
   border-radius: 6px;
   border: 1px solid #e8eaed;
-  max-height: 100px;
+  max-height: 120px;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+/* Compact palette for toolbar - more columns, smaller swatches */
+.cc3-palette-compact .cc3-color-palette {
+  grid-template-columns: repeat(12, 1fr);
+  gap: 2px;
+  padding: 4px;
+  max-height: 90px;
 }
 .cc3-palette-swatch {
   width: 100%;
   aspect-ratio: 1;
-  min-width: 18px;
-  border: 1px solid #e0e0e0;
-  border-radius: 3px;
+  min-width: 14px;
+  max-width: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: transform 0.1s ease, border-color 0.1s ease;
   padding: 0;
 }
 .cc3-palette-swatch:hover {
-  transform: scale(1.15);
+  transform: scale(1.2);
   border-color: #0b57d0;
-  z-index: 1;
+  z-index: 2;
+  position: relative;
 }
 .cc3-palette-swatch.cc3-selected {
   border-color: #0b57d0;
-  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.3);
+  border-width: 2px;
+  box-shadow: 0 0 0 1px rgba(11, 87, 208, 0.4);
+  z-index: 1;
+}
+/* Smooth scroll for palette */
+.cc3-color-palette::-webkit-scrollbar {
+  width: 4px;
+}
+.cc3-color-palette::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cc3-color-palette::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+.cc3-color-palette::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
 }
 
 /* Custom color input row */
