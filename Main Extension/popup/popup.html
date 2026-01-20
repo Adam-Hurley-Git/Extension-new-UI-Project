@@ -297,8 +297,8 @@
       }
 
       .section-icon {
-        width: 20px;
-        height: 20px;
+        width: 24px;
+        height: 24px;
         border-radius: 4px;
         display: flex;
         align-items: center;
@@ -306,6 +306,15 @@
         font-size: 12px;
         font-weight: 600;
         color: white;
+      }
+
+      /* Image icons for feature cards */
+      img.section-icon {
+        width: 24px;
+        height: 24px;
+        object-fit: contain;
+        border-radius: 6px;
+        background: none;
       }
 
       .section-content {
@@ -324,18 +333,8 @@
         border-bottom-right-radius: 12px;
       }
 
-      /* Feature-specific section styling */
-      .section.day-coloring .section-icon {
-        background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
-      }
-
-      .section.time-blocking .section-icon {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      }
-
-      .section.event-coloring-section .section-icon {
-        background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%);
-      }
+      /* Feature-specific section styling - emoji icons only */
+      /* Day Coloring, Time Blocking, and Event Coloring now use image icons */
 
       .section.reset-section .section-icon {
         background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
@@ -3255,7 +3254,7 @@
                 <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M9 18l6-6-6-6"/>
                 </svg>
-                <h3><span class="section-icon">🎨</span>Day Coloring</h3>
+                <h3><img src="icons/day-color-icon.png" class="section-icon" alt="Day Coloring">Day Coloring</h3>
               </div>
             </div>
             <div class="section-content">
@@ -4140,7 +4139,7 @@
                 <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M9 18l6-6-6-6"/>
                 </svg>
-                <h3><span class="section-icon">⏰</span>Time Blocking</h3>
+                <h3><img src="icons/time-block-icon.png" class="section-icon" alt="Time Blocking">Time Blocking</h3>
               </div>
             </div>
             <div class="section-content">
@@ -4526,7 +4525,7 @@
                 <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M9 18l6-6-6-6"/>
                 </svg>
-                <h3><span class="section-icon">🎨</span>Event Coloring</h3>
+                <h3><img src="icons/event-color-icon.png" class="section-icon" alt="Event Coloring">Event Coloring</h3>
               </div>
             </div>
             <div class="section-content">
