@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ColorKit for Google Calendar - See Your Week at a Glance</title>
+    <meta name="description" content="Transform your Google Calendar with custom colors for events, days, and time blocks. Privacy-first, no fake events, works instantly.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- ========== HEADER ========== -->
+    <header class="header">
+        <nav class="nav container">
+            <a href="#" class="logo">
+                <span class="logo-icon">C</span>
+                <span class="logo-text">ColorKit</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#how-it-works">How It Works</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="#faq">FAQ</a></li>
+                <li><a href="#about">About</a></li>
+            </ul>
+            <a href="#pricing" class="btn btn-primary">Download Free</a>
+            <button class="mobile-menu-btn" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- ========== HERO SECTION ========== -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-badge">Chrome Extension</div>
+                <h1 class="hero-title">See Your Week <span class="highlight">at a Glance</span></h1>
+                <p class="hero-subtitle">
+                    Stop squinting at your calendar. ColorKit adds visual clarity to Google Calendar
+                    with custom event colors, day shading, and time blocks — so you instantly know
+                    what's ahead.
+                </p>
+                <div class="hero-cta">
+                    <a href="#pricing" class="btn btn-primary btn-large">
+                        Add to Chrome — It's Free
+                    </a>
+                    <span class="hero-note">Free 7-day trial. No credit card required.</span>
+                </div>
+                <div class="hero-features">
+                    <div class="hero-feature">
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Custom Event Colors</span>
+                    </div>
+                    <div class="hero-feature">
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Day Coloring</span>
+                    </div>
+                    <div class="hero-feature">
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Visual Time Blocks</span>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-video">
+                <div class="video-placeholder">
+                    <div class="play-button">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                    </div>
+                    <span class="video-label">Hero Video: All 3 Features</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== TRUST BAR ========== -->
+    <section class="trust-bar">
+        <div class="container">
+            <div class="trust-items">
+                <div class="trust-item">
+                    <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span>Privacy-First</span>
+                </div>
+                <div class="trust-item">
+                    <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                    <span>Installs in Seconds</span>
+                </div>
+                <div class="trust-item">
+                    <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                        <path d="M22 4L12 14.01l-3-3"/>
+                    </svg>
+                    <span>No Fake Events</span>
+                </div>
+                <div class="trust-item">
+                    <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    <span>Works in Day/Week/Month</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== FEATURES SECTION ========== -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Three Ways to Own Your Calendar</h2>
+                <p class="section-subtitle">
+                    Google Calendar is powerful but visually flat. ColorKit adds the color-coding
+                    layer you've been missing.
+                </p>
+            </div>
+
+            <!-- Feature 1: Event Coloring -->
+            <div class="feature-block">
+                <div class="feature-content">
+                    <div class="feature-label">Feature 01</div>
+                    <h3 class="feature-title">Advanced Event Coloring</h3>
+                    <p class="feature-description">
+                        Go beyond Google's 11 default colors. Set any color you want for any event —
+                        perfect for color-coding by project, client, or priority level.
+                    </p>
+                    <ul class="feature-list">
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Unlimited custom colors</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Change text color for contrast</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Add borders for extra visibility</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Works with recurring events</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <div class="video-placeholder feature-video">
+                        <div class="play-button">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </div>
+                        <span class="video-label">Event Coloring Animation</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature 2: Day Coloring -->
+            <div class="feature-block feature-block-reverse">
+                <div class="feature-content">
+                    <div class="feature-label">Feature 02</div>
+                    <h3 class="feature-title">Day Coloring</h3>
+                    <p class="feature-description">
+                        Give every day its own identity. Color-code weekdays to create visual rhythm —
+                        or highlight important dates like deadlines, birthdays, and holidays.
+                    </p>
+                    <ul class="feature-list">
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Set colors for each weekday</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Highlight specific dates</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Adjustable opacity (subtle to bold)</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Sunday or Monday week start</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <div class="video-placeholder feature-video">
+                        <div class="play-button">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </div>
+                        <span class="video-label">Day Coloring Animation</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature 3: Time Blocks -->
+            <div class="feature-block">
+                <div class="feature-content">
+                    <div class="feature-label">Feature 03</div>
+                    <h3 class="feature-title">Visual Time Blocks</h3>
+                    <p class="feature-description">
+                        Block off focus time, lunch breaks, or "do not disturb" hours without creating
+                        fake events. Just visual shading — your calendar stays clean.
+                    </p>
+                    <ul class="feature-list">
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>No fake events cluttering your calendar</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Weekly recurring schedules</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Multiple shading styles (solid, striped, gradient)</span>
+                        </li>
+                        <li>
+                            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Date-specific one-time blocks</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <div class="video-placeholder feature-video">
+                        <div class="play-button">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </div>
+                        <span class="video-label">Time Blocks Animation</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== HOW IT WORKS ========== -->
+    <section id="how-it-works" class="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Up and Running in 60 Seconds</h2>
+                <p class="section-subtitle">
+                    No complicated setup. No account creation. Just install and start customizing.
+                </p>
+            </div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3 class="step-title">Install the Extension</h3>
+                    <p class="step-description">
+                        Add ColorKit to Chrome from the Web Store. One click, done.
+                    </p>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3 class="step-title">Open Google Calendar</h3>
+                    <p class="step-description">
+                        Navigate to calendar.google.com. ColorKit activates automatically.
+                    </p>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3 class="step-title">Start Coloring</h3>
+                    <p class="step-description">
+                        Click the extension icon to customize your colors, days, and time blocks.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== WHO'S THIS FOR ========== -->
+    <section class="audience">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Built for People Who Live in Their Calendar</h2>
+                <p class="section-subtitle">
+                    If your calendar is your command center, ColorKit helps you see everything faster.
+                </p>
+            </div>
+            <div class="audience-grid">
+                <div class="audience-card">
+                    <div class="audience-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                    </div>
+                    <h3 class="audience-title">Remote Workers</h3>
+                    <p class="audience-description">
+                        Juggling meetings across time zones? Color-code by team, project, or urgency to
+                        instantly see what needs attention.
+                    </p>
+                </div>
+                <div class="audience-card">
+                    <div class="audience-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <h3 class="audience-title">Freelancers & Consultants</h3>
+                    <p class="audience-description">
+                        Multiple clients, one calendar. Give each client their own color and never mix
+                        up commitments again.
+                    </p>
+                </div>
+                <div class="audience-card">
+                    <div class="audience-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                            <line x1="8" y1="21" x2="16" y2="21"/>
+                            <line x1="12" y1="17" x2="12" y2="21"/>
+                        </svg>
+                    </div>
+                    <h3 class="audience-title">Productivity Enthusiasts</h3>
+                    <p class="audience-description">
+                        Time blocking fan? Create visual focus zones without fake events cluttering your
+                        schedule.
+                    </p>
+                </div>
+                <div class="audience-card">
+                    <div class="audience-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 010 7.75"/>
+                        </svg>
+                    </div>
+                    <h3 class="audience-title">Team Leads & Managers</h3>
+                    <p class="audience-description">
+                        Visual rhythm helps you protect focus time, see back-to-back meeting days at a glance,
+                        and plan around your energy.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== WHY COLORKIT ========== -->
+    <section class="why-colorkit">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Why ColorKit?</h2>
+                <p class="section-subtitle">
+                    There are other calendar tools. Here's what makes ColorKit different.
+                </p>
+            </div>
+            <div class="why-grid">
+                <div class="why-card">
+                    <div class="why-icon privacy">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <h3 class="why-title">Privacy-First</h3>
+                    <p class="why-description">
+                        ColorKit runs entirely in your browser. Your calendar data never leaves your
+                        computer — we can't see your events, and we don't want to.
+                    </p>
+                </div>
+                <div class="why-card">
+                    <div class="why-icon visual">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                    </div>
+                    <h3 class="why-title">Visual Only</h3>
+                    <p class="why-description">
+                        All changes are visual overlays. ColorKit never modifies your actual calendar
+                        data — no fake events, no syncing issues, no surprises.
+                    </p>
+                </div>
+                <div class="why-card">
+                    <div class="why-icon lightweight">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                    </div>
+                    <h3 class="why-title">Lightweight</h3>
+                    <p class="why-description">
+                        No performance impact. ColorKit is optimized to work silently in the background
+                        without slowing down your calendar.
+                    </p>
+                </div>
+                <div class="why-card">
+                    <div class="why-icon community">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="why-title">Community-Led</h3>
+                    <p class="why-description">
+                        Built by a solo developer who uses it every day. Feature requests go straight to
+                        the roadmap — no corporate red tape.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== PRICING ========== -->
+    <section id="pricing" class="pricing">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Simple, Transparent Pricing</h2>
+                <p class="section-subtitle">
+                    Try ColorKit free for 7 days. If you love it, upgrade to unlock all features.
+                </p>
+            </div>
+            <div class="pricing-card">
+                <div class="pricing-header">
+                    <span class="pricing-badge">Most Popular</span>
+                    <div class="pricing-name">ColorKit Pro</div>
+                    <div class="pricing-price">
+                        <span class="price-amount">$34.99</span>
+                        <span class="price-period">/year</span>
+                    </div>
+                    <div class="pricing-note">Less than $3/month for visual clarity every day</div>
+                </div>
+                <ul class="pricing-features">
+                    <li>
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Advanced Event Coloring</span>
+                    </li>
+                    <li>
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Day Coloring</span>
+                    </li>
+                    <li>
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Visual Time Blocks</span>
+                    </li>
+                    <li>
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Unlimited Custom Colors</span>
+                    </li>
+                    <li>
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Feature Request Priority</span>
+                    </li>
+                    <li>
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Email Support</span>
+                    </li>
+                </ul>
+                <a href="#" class="btn btn-primary btn-large pricing-cta">Start 7-Day Free Trial</a>
+                <div class="pricing-guarantee">
+                    <svg class="guarantee-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span>7-day money-back guarantee. Cancel anytime.</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== FAQ ========== -->
+    <section id="faq" class="faq">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Questions? We've Got Answers</h2>
+            </div>
+            <div class="faq-list">
+                <details class="faq-item">
+                    <summary class="faq-question">
+                        What exactly is ColorKit?
+                        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </summary>
+                    <div class="faq-answer">
+                        ColorKit is a Chrome extension that adds visual customization to Google Calendar.
+                        It lets you color-code events with unlimited colors, shade entire days, and create
+                        visual time blocks — all without modifying your actual calendar data.
+                    </div>
+                </details>
+                <details class="faq-item">
+                    <summary class="faq-question">
+                        Do you collect or share my data?
+                        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </summary>
+                    <div class="faq-answer">
+                        No. ColorKit runs entirely in your browser. Your calendar data never leaves your
+                        computer, and we have zero access to your events. All color settings are stored
+                        locally on your device.
+                    </div>
+                </details>
+                <details class="faq-item">
+                    <summary class="faq-question">
+                        Is there a free trial?
+                        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </summary>
+                    <div class="faq-answer">
+                        Yes! You get a full 7-day free trial with access to all features. No credit card
+                        required to start. If you decide ColorKit isn't for you, just don't subscribe —
+                        no strings attached.
+                    </div>
+                </details>
+                <details class="faq-item">
+                    <summary class="faq-question">
+                        Which browsers and devices are supported?
+                        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </summary>
+                    <div class="faq-answer">
+                        ColorKit works on Chrome for desktop (Windows, Mac, Linux). We're focused on
+                        perfecting the Chrome experience first. Firefox and Edge support may come in the future
+                        based on community demand.
+                    </div>
+                </details>
+                <details class="faq-item">
+                    <summary class="faq-question">
+                        What are "time blocks" and how do they work?
+                        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </summary>
+                    <div class="faq-answer">
+                        Time blocks are visual shading that appears on your calendar to mark off time periods
+                        (like "deep work 9-12" or "lunch"). Unlike fake events, they don't clutter your calendar
+                        or sync to other devices — they're purely visual overlays that help you see your ideal
+                        schedule at a glance.
+                    </div>
+                </details>
+                <details class="faq-item">
+                    <summary class="faq-question">
+                        Can I request new features?
+                        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </summary>
+                    <div class="faq-answer">
+                        Absolutely! ColorKit is community-driven. Email your feature requests to
+                        <a href="mailto:adam@calendarextension.com">adam@calendarextension.com</a> or use
+                        the Requests page. Popular requests get prioritized on the roadmap.
+                    </div>
+                </details>
+                <details class="faq-item">
+                    <summary class="faq-question">
+                        Is ColorKit affiliated with Google?
+                        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </summary>
+                    <div class="faq-answer">
+                        No. ColorKit is an independent product built by a solo developer. It's not affiliated
+                        with, endorsed by, or connected to Google in any way. Google Calendar is a trademark
+                        of Google LLC.
+                    </div>
+                </details>
+                <details class="faq-item">
+                    <summary class="faq-question">
+                        What if I want a refund?
+                        <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </summary>
+                    <div class="faq-answer">
+                        We offer a 7-day money-back guarantee. If ColorKit doesn't work for you, email
+                        <a href="mailto:adam@calendarextension.com">adam@calendarextension.com</a> within
+                        7 days of purchase and we'll refund you — no questions asked.
+                    </div>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== ABOUT / FOUNDER ========== -->
+    <section id="about" class="about">
+        <div class="container">
+            <div class="about-content">
+                <div class="about-image">
+                    <div class="founder-placeholder">
+                        <span>Adam's Photo</span>
+                    </div>
+                </div>
+                <div class="about-text">
+                    <h2 class="about-title">Hey, I'm Adam</h2>
+                    <p class="about-description">
+                        I built ColorKit because I was frustrated with how visually flat Google Calendar is.
+                        I live in my calendar — managing projects, blocking focus time, juggling personal
+                        and work commitments. But everything looked the same, and I kept missing things.
+                    </p>
+                    <p class="about-description">
+                        So I built the tool I wanted. ColorKit started as a personal hack and grew into
+                        something others wanted too. Now I'm building it in public, shipping fast, and
+                        listening to every feature request.
+                    </p>
+                    <p class="about-description">
+                        This is a solo project built with care. Expect quick updates, honest communication,
+                        and a product that gets better every week.
+                    </p>
+                    <div class="about-signature">
+                        <span class="signature-name">— Adam</span>
+                        <span class="signature-title">Founder, ColorKit</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== NEWSLETTER ========== -->
+    <section class="newsletter">
+        <div class="container">
+            <div class="newsletter-content">
+                <div class="newsletter-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                    </svg>
+                </div>
+                <h2 class="newsletter-title">Stay in the Loop</h2>
+                <p class="newsletter-subtitle">
+                    Get notified about new features, tips for better calendar organization, and occasional updates.
+                    No spam — just useful stuff, once or twice a month.
+                </p>
+                <form class="newsletter-form">
+                    <input type="email" placeholder="you@example.com" class="newsletter-input" required>
+                    <button type="submit" class="btn btn-primary">Subscribe</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== FINAL CTA ========== -->
+    <section class="final-cta">
+        <div class="container">
+            <h2 class="final-cta-title">Ready to See Your Calendar Clearly?</h2>
+            <p class="final-cta-subtitle">
+                Join thousands of productivity-minded professionals who've upgraded their Google Calendar experience.
+            </p>
+            <a href="#pricing" class="btn btn-primary btn-large">Add ColorKit to Chrome — Free</a>
+        </div>
+    </section>
+
+    <!-- ========== FOOTER ========== -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-top">
+                <div class="footer-brand">
+                    <a href="#" class="logo">
+                        <span class="logo-icon">C</span>
+                        <span class="logo-text">ColorKit</span>
+                    </a>
+                    <p class="footer-tagline">Visual clarity for Google Calendar</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4 class="footer-heading">Product</h4>
+                        <ul>
+                            <li><a href="#features">Features</a></li>
+                            <li><a href="#pricing">Pricing</a></li>
+                            <li><a href="#faq">FAQ</a></li>
+                            <li><a href="#">Download</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-column">
+                        <h4 class="footer-heading">Company</h4>
+                        <ul>
+                            <li><a href="#about">About</a></li>
+                            <li><a href="#">Requests</a></li>
+                            <li><a href="#">Help</a></li>
+                            <li><a href="mailto:adam@calendarextension.com">Contact</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-column">
+                        <h4 class="footer-heading">Legal</h4>
+                        <ul>
+                            <li><a href="#">Terms of Service</a></li>
+                            <li><a href="#">Privacy Policy</a></li>
+                            <li><a href="#">Refund Policy</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <div class="footer-copyright">
+                    &copy; 2025 CalendarExtension. Made with care by Adam.
+                </div>
+                <div class="footer-social">
+                    <a href="#" aria-label="Twitter">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                    </a>
+                    <a href="#" aria-label="Instagram">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                        </svg>
+                    </a>
+                    <a href="#" aria-label="Facebook">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
