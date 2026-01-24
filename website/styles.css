@@ -1033,6 +1033,448 @@ ul, ol {
     height: 18px;
 }
 
+/* ========== CALENDAR MOCKUPS ========== */
+.calendar-mockup {
+    background: #ffffff;
+    border-radius: var(--radius-xl);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    font-size: 13px;
+}
+
+.mockup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.mockup-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mockup-arrow {
+    color: #64748b;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.mockup-month {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.mockup-views {
+    display: flex;
+    gap: 4px;
+    background: #e2e8f0;
+    padding: 4px;
+    border-radius: 6px;
+}
+
+.mockup-views span {
+    padding: 6px 12px;
+    border-radius: 4px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.mockup-views span.active {
+    background: white;
+    color: #1e293b;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Event Coloring Mockup */
+.mockup-week-header {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    padding: 12px 20px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.mockup-week-header span {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.events-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(5, 48px);
+    gap: 8px;
+    padding: 16px 20px;
+    min-height: 280px;
+}
+
+.mockup-event {
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mockup-event:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.event-title {
+    font-weight: 600;
+    font-size: 11px;
+    line-height: 1.3;
+    margin-bottom: 2px;
+}
+
+.event-time {
+    font-size: 10px;
+    opacity: 0.85;
+}
+
+.event-coral {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a5a);
+    color: white;
+}
+
+.event-purple {
+    background: linear-gradient(135deg, #9b59b6, #8e44ad);
+    color: white;
+}
+
+.event-teal {
+    background: linear-gradient(135deg, #1abc9c, #16a085);
+    color: white;
+}
+
+.event-gold {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+    color: white;
+}
+
+.event-pink {
+    background: linear-gradient(135deg, #e91e63, #c2185b);
+    color: white;
+}
+
+.event-blue {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+}
+
+.event-green {
+    background: linear-gradient(135deg, #27ae60, #229954);
+    color: white;
+}
+
+.mockup-color-picker {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+}
+
+.picker-dot {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    border: 2px solid transparent;
+}
+
+.picker-dot:hover {
+    transform: scale(1.15);
+}
+
+.picker-dot.active {
+    border-color: #1e293b;
+    transform: scale(1.15);
+}
+
+/* Day Coloring Mockup */
+.mockup-month-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.mockup-month-header span {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.mockup-month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    padding: 8px;
+}
+
+.day-cell {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 6px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.day-cell span {
+    font-size: 12px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.day-cell:hover {
+    transform: scale(1.05);
+}
+
+.day-sunday {
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.day-monday {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+.day-tuesday {
+    background: rgba(16, 185, 129, 0.12);
+}
+
+.day-wednesday {
+    background: rgba(245, 158, 11, 0.15);
+}
+
+.day-thursday {
+    background: rgba(139, 92, 246, 0.12);
+}
+
+.day-friday {
+    background: rgba(236, 72, 153, 0.15);
+}
+
+.day-saturday {
+    background: rgba(20, 184, 166, 0.12);
+}
+
+.mockup-day-legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    padding: 14px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.legend-dot.day-monday {
+    background: rgba(59, 130, 246, 0.6);
+}
+
+.legend-dot.day-wednesday {
+    background: rgba(245, 158, 11, 0.6);
+}
+
+.legend-dot.day-friday {
+    background: rgba(236, 72, 153, 0.6);
+}
+
+/* Time Blocks Mockup */
+.mockup-day-view {
+    padding: 12px 16px;
+}
+
+.time-row {
+    display: flex;
+    align-items: stretch;
+    min-height: 44px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.time-row:last-child {
+    border-bottom: none;
+}
+
+.time-label {
+    width: 60px;
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+    padding-top: 4px;
+    flex-shrink: 0;
+}
+
+.time-slot {
+    flex: 1;
+    position: relative;
+    min-height: 40px;
+    border-radius: 4px;
+    margin: 2px 0;
+}
+
+.time-block-focus {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(59, 130, 246, 0.15),
+        rgba(59, 130, 246, 0.15) 4px,
+        rgba(59, 130, 246, 0.08) 4px,
+        rgba(59, 130, 246, 0.08) 8px
+    );
+    border-left: 3px solid #3b82f6;
+}
+
+.time-block-lunch {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(16, 185, 129, 0.15),
+        rgba(16, 185, 129, 0.15) 4px,
+        rgba(16, 185, 129, 0.08) 4px,
+        rgba(16, 185, 129, 0.08) 8px
+    );
+    border-left: 3px solid #10b981;
+}
+
+.time-block-review {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(245, 158, 11, 0.15),
+        rgba(245, 158, 11, 0.15) 4px,
+        rgba(245, 158, 11, 0.08) 4px,
+        rgba(245, 158, 11, 0.08) 8px
+    );
+    border-left: 3px solid #f59e0b;
+}
+
+.block-label {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.mini-event {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.mockup-block-legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    padding: 14px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+}
+
+.legend-block {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+}
+
+.legend-block.block-focus {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(59, 130, 246, 0.4),
+        rgba(59, 130, 246, 0.4) 2px,
+        rgba(59, 130, 246, 0.2) 2px,
+        rgba(59, 130, 246, 0.2) 4px
+    );
+    border-left: 2px solid #3b82f6;
+}
+
+.legend-block.block-lunch {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(16, 185, 129, 0.4),
+        rgba(16, 185, 129, 0.4) 2px,
+        rgba(16, 185, 129, 0.2) 2px,
+        rgba(16, 185, 129, 0.2) 4px
+    );
+    border-left: 2px solid #10b981;
+}
+
+.legend-block.block-review {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(245, 158, 11, 0.4),
+        rgba(245, 158, 11, 0.4) 2px,
+        rgba(245, 158, 11, 0.2) 2px,
+        rgba(245, 158, 11, 0.2) 4px
+    );
+    border-left: 2px solid #f59e0b;
+}
+
+/* Mockup Responsive */
+@media (max-width: 768px) {
+    .calendar-mockup {
+        font-size: 11px;
+    }
+
+    .mockup-header {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .mockup-views {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .events-grid {
+        grid-template-rows: repeat(5, 40px);
+        min-height: 220px;
+    }
+
+    .mockup-color-picker,
+    .mockup-day-legend,
+    .mockup-block-legend {
+        flex-wrap: wrap;
+    }
+}
+
 /* ========== RESPONSIVE ========== */
 @media (max-width: 1024px) {
     .hero .container {
