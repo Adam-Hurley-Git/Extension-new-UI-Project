@@ -628,17 +628,39 @@ ul, ol {
 /* ========== PRICING ========== */
 .pricing {
     padding: var(--space-4xl) 0;
+    background-color: var(--color-bg-alt);
+}
+
+.pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-xl);
+    max-width: 900px;
+    margin: 0 auto;
 }
 
 .pricing-card {
-    max-width: 480px;
-    margin: 0 auto;
     padding: var(--space-2xl);
     background-color: var(--color-bg);
-    border: 2px solid var(--color-primary);
+    border: 2px solid var(--color-border);
     border-radius: var(--radius-2xl);
     text-align: center;
+    transition: all var(--transition-base);
+}
+
+.pricing-card:hover {
+    transform: translateY(-4px);
     box-shadow: var(--shadow-xl);
+}
+
+.pricing-free {
+    border-color: var(--color-border);
+}
+
+.pricing-pro {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-lg);
+    position: relative;
 }
 
 .pricing-header {
@@ -678,6 +700,10 @@ ul, ol {
     letter-spacing: -0.02em;
 }
 
+.pricing-free .price-amount {
+    font-size: var(--font-size-4xl);
+}
+
 .price-period {
     font-size: var(--font-size-lg);
     color: var(--color-text-secondary);
@@ -694,18 +720,51 @@ ul, ol {
     padding: var(--space-xl) 0;
     border-top: 1px solid var(--color-border);
     border-bottom: 1px solid var(--color-border);
+    min-height: 280px;
 }
 
 .pricing-features li {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-sm);
     padding: var(--space-sm) 0;
     font-size: var(--font-size-base);
 }
 
+.pricing-features li strong {
+    font-weight: 600;
+}
+
 .pricing-features .check-icon {
     color: var(--color-secondary);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.pricing-features .x-icon {
+    color: var(--color-text-light);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.feature-disabled {
+    color: var(--color-text-light);
+}
+
+.feature-disabled span {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.btn-secondary {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
+}
+
+.btn-secondary:hover {
+    background-color: var(--color-bg-alt);
+    border-color: var(--color-text-light);
 }
 
 .pricing-cta {
@@ -1636,6 +1695,15 @@ ul, ol {
 
     .nav-links {
         display: none;
+    }
+
+    .pricing-grid {
+        grid-template-columns: 1fr;
+        max-width: 420px;
+    }
+
+    .pricing-features {
+        min-height: auto;
     }
 
     .mobile-menu-btn {
