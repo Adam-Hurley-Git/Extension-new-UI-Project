@@ -1365,14 +1365,73 @@ ul, ol {
     background: rgba(128, 222, 234, 0.3);
 }
 
-/* Time Blocks - Overlay rectangles */
-.time-block-overlay {
+/* Time Blocks - Clean prominent zones */
+.timeblocks-clean {
+    min-height: 320px;
+}
+
+.timeblock-zone {
     position: absolute;
-    left: 0;
-    right: 0;
-    background: rgba(121, 134, 203, 0.35);
-    border-radius: 2px;
+    left: 2px;
+    right: 2px;
+    background: rgba(99, 132, 255, 0.22);
+    border-radius: 4px;
     z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 8px;
+}
+
+.morning-block {
+    top: 8%;
+    height: 38%;
+    background: rgba(99, 132, 255, 0.25);
+}
+
+.afternoon-block {
+    top: 58%;
+    height: 32%;
+    background: rgba(99, 132, 255, 0.25);
+}
+
+.block-text {
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(55, 71, 133, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* Smaller events for time blocks view */
+.event-small {
+    z-index: 3;
+    padding: 3px 5px;
+    font-size: 9px;
+}
+
+.event-small .ev-title {
+    font-size: 9px;
+    font-weight: 600;
+}
+
+.event-small .ev-time {
+    display: none;
+}
+
+.event-purple-sm {
+    background: #9575cd;
+    color: white;
+}
+
+.event-blue-sm {
+    background: #42a5f5;
+    color: white;
+}
+
+.event-cyan-sm {
+    background: #26c6da;
+    color: white;
 }
 
 /* Toggle Bar at Bottom */
